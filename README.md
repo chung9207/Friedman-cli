@@ -20,17 +20,20 @@ julia --project bin/friedman [command] [subcommand] [args...] [options...]
 
 ### Commands
 
-| Command | Description |
-|---------|-------------|
-| `var`    | Vector Autoregression |
-| `bvar`   | Bayesian VAR |
-| `irf`    | Impulse Response Functions |
-| `fevd`   | Forecast Error Variance Decomposition |
-| `hd`     | Historical Decomposition |
-| `lp`     | Local Projections |
-| `factor` | Factor Models |
-| `test`   | Unit Root & Cointegration Tests |
-| `gmm`    | Generalized Method of Moments |
+| Command | Subcommands | Description |
+|---------|-------------|-------------|
+| `var`    | `estimate` `lagselect` `stability` | Vector Autoregression |
+| `bvar`   | `estimate` `posterior` | Bayesian VAR |
+| `irf`    | `compute` | Impulse Response Functions |
+| `fevd`   | `compute` | Forecast Error Variance Decomposition |
+| `hd`     | `compute` | Historical Decomposition |
+| `lp`     | `estimate` `iv` `smooth` `state` `propensity` | Local Projections |
+| `factor` | `static` `dynamic` `gdfm` | Factor Models |
+| `test`   | `adf` `kpss` `pp` `za` `np` `johansen` | Unit Root & Cointegration Tests |
+| `gmm`    | `estimate` | Generalized Method of Moments |
+| `arima`  | `estimate` `auto` `forecast` | ARIMA Models |
+
+All commands support `--format` (`table`|`csv`|`json`) and `--output` (file path) options.
 
 ### VAR
 
@@ -38,10 +41,10 @@ julia --project bin/friedman [command] [subcommand] [args...] [options...]
 # Estimate VAR(2)
 friedman var estimate data.csv --lags=2
 
-# Automatic lag selection
+# Automatic lag selection (AIC/BIC/HQC)
 friedman var lagselect data.csv --max-lags=12 --criterion=aic
 
-# Stationarity check
+# Stationarity check (companion matrix eigenvalues)
 friedman var stability data.csv --lags=2
 ```
 
@@ -54,8 +57,9 @@ friedman bvar estimate data.csv --lags=4 --draws=2000 --sampler=nuts
 # With Minnesota prior config
 friedman bvar estimate data.csv --config=prior.toml
 
-# Posterior summary
-friedman bvar posterior data.csv --method=mean
+# Posterior summary (mean or median)
+friedman bvar posterior data.csv --lags=4 --method=mean
+friedman bvar posterior data.csv --method=median --sampler=hmc
 ```
 
 ### Impulse Response Functions
@@ -67,15 +71,35 @@ friedman irf compute data.csv --shock=1 --horizons=20 --id=cholesky
 # Sign restrictions (requires config)
 friedman irf compute data.csv --id=sign --config=sign_restrictions.toml
 
+# Narrative sign restrictions
+friedman irf compute data.csv --id=narrative --config=narrative.toml
+
+# Long-run (Blanchard-Quah) identification
+friedman irf compute data.csv --id=longrun --horizons=40
+
+# Arias et al. (2018) zero/sign restrictions
+friedman irf compute data.csv --id=arias --config=arias_restrictions.toml
+
 # With bootstrap confidence intervals
 friedman irf compute data.csv --shock=1 --ci=bootstrap --replications=1000
+
+# Theoretical CIs or no CIs
+friedman irf compute data.csv --ci=theoretical
+friedman irf compute data.csv --ci=none
 ```
 
 ### FEVD & Historical Decomposition
 
 ```bash
+# FEVD with Cholesky identification
 friedman fevd compute data.csv --horizons=20 --id=cholesky
+
+# FEVD with sign restrictions
+friedman fevd compute data.csv --id=sign --config=sign_restrictions.toml
+
+# Historical decomposition
 friedman hd compute data.csv --id=cholesky
+friedman hd compute data.csv --id=longrun --lags=4
 ```
 
 ### Local Projections
@@ -87,44 +111,80 @@ friedman lp estimate data.csv --shock=1 --horizons=20 --vcov=newey_west
 # LP-IV (Stock & Watson 2018)
 friedman lp iv data.csv --shock=1 --instruments=instruments.csv
 
-# Smooth LP (Barnichon & Brownlees 2019)
-friedman lp smooth data.csv --shock=1 --knots=3
+# Smooth LP (Barnichon & Brownlees 2019) — auto-selects lambda via CV
+friedman lp smooth data.csv --shock=1 --horizons=20 --knots=3
+friedman lp smooth data.csv --shock=1 --lambda=0.5
 
 # State-dependent LP (Auerbach & Gorodnichenko 2013)
 friedman lp state data.csv --shock=1 --state-var=2 --gamma=1.5
+friedman lp state data.csv --shock=1 --state-var=3 --method=exponential
 
 # Propensity score LP (Angrist et al. 2018)
-friedman lp propensity data.csv --treatment=1
+friedman lp propensity data.csv --treatment=1 --score-method=logit
 ```
 
 ### Factor Models
 
 ```bash
-# Static (PCA)
-friedman factor static data.csv --nfactors=3
+# Static (PCA) — auto-selects factors via Bai-Ng IC
+friedman factor static data.csv
+friedman factor static data.csv --nfactors=3 --criterion=ic2
 
 # Dynamic factor model
 friedman factor dynamic data.csv --nfactors=2 --factor-lags=1 --method=twostep
 
-# Generalized DFM
+# Generalized DFM (spectral)
 friedman factor gdfm data.csv --dynamic-rank=2
 ```
 
 ### Unit Root & Cointegration Tests
 
 ```bash
+# Augmented Dickey-Fuller (auto lag via AIC)
 friedman test adf data.csv --column=1 --trend=constant
-friedman test kpss data.csv --column=1
+
+# KPSS stationarity test (reversed null: H0 = stationary)
+friedman test kpss data.csv --column=1 --trend=constant
+
+# Phillips-Perron
 friedman test pp data.csv --column=1
-friedman test za data.csv --column=1        # Zivot-Andrews (structural break)
-friedman test np data.csv --column=1        # Ng-Perron
-friedman test johansen data.csv --lags=2    # Cointegration
+
+# Zivot-Andrews (structural break)
+friedman test za data.csv --column=1 --trend=both --trim=0.15
+
+# Ng-Perron (MZa, MZt, MSB, MPT)
+friedman test np data.csv --column=1
+
+# Johansen cointegration (trace + max eigenvalue)
+friedman test johansen data.csv --lags=2 --trend=constant
 ```
 
 ### GMM
 
 ```bash
 friedman gmm estimate data.csv --config=gmm_spec.toml --weighting=twostep
+friedman gmm estimate data.csv --config=gmm_spec.toml --weighting=iterated
+```
+
+### ARIMA
+
+```bash
+# Estimate ARIMA(p,d,q) — dispatches to AR/MA/ARMA/ARIMA as needed
+friedman arima estimate data.csv --p=1 --d=1 --q=1
+friedman arima estimate data.csv --p=2                   # AR(2)
+friedman arima estimate data.csv --p=0 --q=3             # MA(3)
+friedman arima estimate data.csv --p=2 --q=1             # ARMA(2,1)
+friedman arima estimate data.csv --p=1 --d=1 --q=1 --method=mle --column=2
+
+# Automatic order selection (searches over p, d, q grids)
+friedman arima auto data.csv --criterion=bic
+friedman arima auto data.csv --max-p=5 --max-d=2 --max-q=5 --criterion=aic
+
+# Forecast (auto model selection + h-step forecast with confidence intervals)
+friedman arima forecast data.csv --horizons=12 --confidence=0.95
+
+# Forecast with explicit model
+friedman arima forecast data.csv --p=2 --d=1 --q=1 --horizons=24
 ```
 
 ## Output Formats
@@ -146,21 +206,6 @@ friedman var estimate data.csv --format=json --output=results.json
 
 Complex model specs use TOML config files.
 
-**Sign restrictions:**
-
-```toml
-[identification]
-method = "sign"
-
-[identification.sign_matrix]
-matrix = [
-  [1, -1, 1],
-  [0, 1, -1],
-  [0, 0, 1]
-]
-horizons = [0, 1, 2, 3]
-```
-
 **Minnesota prior:**
 
 ```toml
@@ -177,11 +222,51 @@ lambda4 = 100000.0
 enabled = true
 ```
 
+**Sign restrictions:**
+
+```toml
+[identification]
+method = "sign"
+
+[identification.sign_matrix]
+matrix = [
+  [1, -1, 1],
+  [0, 1, -1],
+  [0, 0, 1]
+]
+horizons = [0, 1, 2, 3]
+```
+
+**Narrative restrictions:**
+
+```toml
+[identification.narrative]
+shock_index = 1
+periods = [10, 15, 20]
+signs = [1, -1, 1]
+```
+
+**Arias identification (zero + sign):**
+
+```toml
+[[identification.zero_restrictions]]
+var = 1
+shock = 1
+horizon = 0
+
+[[identification.sign_restrictions]]
+var = 2
+shock = 1
+sign = "positive"
+horizon = 0
+```
+
 **GMM specification:**
 
 ```toml
 [gmm]
 moment_conditions = ["output", "inflation"]
+instruments = ["lag_output", "lag_inflation"]
 weighting = "twostep"
 ```
 
