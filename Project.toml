@@ -1,6 +1,6 @@
 name = "Friedman"
 uuid = "f7a1e3d0-2b4c-4e8f-9a6d-1c3b5e7f9a2d"
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"

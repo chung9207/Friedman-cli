@@ -26,7 +26,7 @@ include("commands/factor.jl")
 include("commands/test_cmd.jl")
 include("commands/gmm.jl")
 
-const FRIEDMAN_VERSION = v"0.1.0"
+const FRIEDMAN_VERSION = v"0.1.1"
 
 """
     build_app() → Entry
