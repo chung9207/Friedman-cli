@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+
+jobs:
+  test:
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - '1.10'
+          - '1'      # Latest stable
+        os:
+          - ubuntu-latest
+        arch:
+          - x64
+        include:
+          - version: '1'
+            os: macos-latest
+            arch: arm64
+          - version: '1'
+            os: windows-latest
+            arch: x64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+          arch: ${{ matrix.arch }}
+
+      - uses: julia-actions/cache@v2
+
+      - name: Install dependencies
+        run: |
+          julia --project -e '
+            using Pkg
+            Pkg.rm("MacroEconometricModels")
+            Pkg.add(url="https://github.com/chung9207/MacroEconometricModels.jl.git")
+            Pkg.instantiate()
+          '
+
+      - name: Run tests
+        run: julia --project test/runtests.jl

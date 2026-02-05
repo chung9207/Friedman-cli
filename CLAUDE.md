@@ -7,16 +7,23 @@ Friedman-cli (v0.1.1) is a Julia CLI for macroeconometric analysis, wrapping [Ma
 ## Quick Reference
 
 ```bash
-# Install
+# Install (uses MacroEconometricModels.jl from GitHub by default)
 git clone https://github.com/chung9207/Friedman-cli.git
 cd Friedman-cli
-julia --project -e 'using Pkg; Pkg.instantiate()'
+julia --project -e '
+using Pkg
+Pkg.rm("MacroEconometricModels")
+Pkg.add(url="https://github.com/chung9207/MacroEconometricModels.jl.git")
+'
+
+# Or, to use a specific registry version instead:
+# julia --project -e 'using Pkg; Pkg.instantiate()'
 
 # Run
 julia --project bin/friedman [command] [subcommand] [args] [options]
 
-# Test (CLI engine only, no MacroEconometricModels needed)
-julia --project -e 'using Pkg; Pkg.test()'
+# Test (CLI engine + IO + config; no MacroEconometricModels needed)
+julia --project test/runtests.jl
 ```
 
 ## Project Structure
@@ -57,6 +64,8 @@ README.md                 # Usage documentation with examples
 Direct: `CSV`, `DataFrames`, `JSON3`, `MacroEconometricModels`, `PrettyTables`
 Stdlib (imported in Friedman.jl): `TOML`, `LinearAlgebra` (eigvals), `Statistics` (mean)
 Julia compat: `≥ 1.10`
+
+**Note:** Always install `MacroEconometricModels` from GitHub (`https://github.com/chung9207/MacroEconometricModels.jl.git`) unless a specific registry version is requested. The Project.toml UUID (`5b366557`) is a local/dev UUID that differs from the registry UUID (`14a6ec33`), so `Pkg.instantiate()` alone will fail — use `Pkg.rm` + `Pkg.add(url=...)` as shown in Quick Reference.
 
 ## Command Hierarchy
 
