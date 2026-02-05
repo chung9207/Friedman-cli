@@ -96,7 +96,7 @@ function _factor_dynamic(; data::String, nfactors=nothing, factor_lags::Int=1,
 
     r = if isnothing(nfactors)
         println("Selecting number of factors...")
-        ic = ic_criteria_dynamic(X; r_max=min(10, size(X, 2)), p_max=4)
+        ic = ic_criteria_dynamic(X, min(10, size(X, 2)), 4; method=:twostep)
         optimal_r = ic.r_opt
         println("  Auto-selected $optimal_r factors")
         optimal_r
@@ -140,26 +140,30 @@ function _factor_gdfm(; data::String, nfactors=nothing, dynamic_rank=nothing,
     X = df_to_matrix(df)
     varnames = variable_names(df)
 
-    r = if isnothing(nfactors)
-        println("Selecting static rank...")
-        ic = ic_criteria_gdfm(X; r_max=min(10, size(X, 2)), q_max=min(5, size(X, 2)))
-        ic.r_opt
-    else
-        nfactors
-    end
-
     q = if isnothing(dynamic_rank)
         println("Selecting dynamic rank...")
-        ic = ic_criteria_gdfm(X; r_max=r, q_max=min(r, 5))
-        ic.q_opt
+        ic = ic_criteria_gdfm(X, min(5, size(X, 2)))
+        q_opt = ic.q_opt
+        println("  Auto-selected $q_opt dynamic factors")
+        q_opt
     else
         dynamic_rank
+    end
+
+    r = if isnothing(nfactors)
+        println("Selecting static rank...")
+        ic = ic_criteria_gdfm(X, q)
+        r_opt = haskey(ic, :r_opt) ? ic.r_opt : 0
+        println("  Auto-selected $r_opt static factors")
+        r_opt
+    else
+        nfactors
     end
 
     println("Estimating GDFM: static rank=$r, dynamic rank=$q")
     println()
 
-    model = estimate_gdfm(X, r, q)
+    model = estimate_gdfm(X, q; r=r)
 
     # Variance shares
     var_shares = common_variance_share(model)

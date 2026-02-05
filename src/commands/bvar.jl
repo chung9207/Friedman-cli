@@ -65,7 +65,7 @@ function _build_prior(config_path::String, Y::AbstractMatrix, p::Int)
                 tau=prior_cfg["lambda1"],
                 decay=prior_cfg["lambda3"],
                 lambda=prior_cfg["lambda2"],
-                sigma=sigma_ar
+                omega=sigma_ar
             )
         end
     end
@@ -87,10 +87,12 @@ function _bvar_estimate(; data::String, lags::Int=4, prior::String="minnesota",
 
     prior_obj = _build_prior(config, Y, p)
 
+    prior_sym = isnothing(prior_obj) ? Symbol(prior) : :minnesota
     chain = estimate_bvar(Y, p;
         sampler=Symbol(sampler),
-        nsamples=draws,
-        prior=prior_obj)
+        n_samples=draws,
+        prior=prior_sym,
+        hyper=prior_obj)
 
     # Extract posterior mean model
     mean_model = posterior_mean_model(chain, p, n; data=Y)
@@ -129,10 +131,12 @@ function _bvar_posterior(; data::String, lags::Int=4, draws::Int=2000,
 
     prior_obj = _build_prior(config, Y, p)
 
+    prior_sym = isnothing(prior_obj) ? :normal : :minnesota
     chain = estimate_bvar(Y, p;
         sampler=Symbol(sampler),
-        nsamples=draws,
-        prior=prior_obj)
+        n_samples=draws,
+        prior=prior_sym,
+        hyper=prior_obj)
 
     model = if method == "median"
         posterior_median_model(chain, p, n; data=Y)

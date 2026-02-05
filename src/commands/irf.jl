@@ -170,10 +170,11 @@ function _irf_arias(model::VARModel, config::String, horizons::Int,
     zeros_list = get(id_cfg, "zero_restrictions", [])
     signs_list = get(id_cfg, "sign_restrictions", [])
 
-    zero_restrs = [zero_restriction(r["shock"], r["var"], r["horizon"]) for r in zeros_list]
-    sign_restrs = [sign_restriction(r["shock"], r["var"], r["horizon"], Symbol(r["sign"])) for r in signs_list]
+    n = nvars(model)
+    zero_restrs = [zero_restriction(r["var"], r["shock"]; horizon=r["horizon"]) for r in zeros_list]
+    sign_restrs = [sign_restriction(r["var"], r["shock"], Symbol(r["sign"]); horizon=r["horizon"]) for r in signs_list]
 
-    restrictions = SVARRestrictions(zero_restrs, sign_restrs)
+    restrictions = SVARRestrictions(n; zeros=zero_restrs, signs=sign_restrs)
     result = identify_arias(model, restrictions, horizons)
 
     # Extract IRF from Arias result

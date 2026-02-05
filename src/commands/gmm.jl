@@ -41,28 +41,9 @@ function _gmm_estimate(; data::String, config::String="",
 
     println("Estimating GMM: weighting=$weighting")
     println("  Moment conditions: $(length(gmm_cfg["moment_conditions"]))")
-    println("  Instruments: $(length(gmm_cfg["instruments"]))")
     println()
 
-    # Build instrument matrix from column names or indices
-    instrument_cols = gmm_cfg["instruments"]
-    Z = if !isempty(instrument_cols)
-        inst_indices = Int[]
-        for inst in instrument_cols
-            idx = findfirst(==(inst), varnames)
-            if isnothing(idx)
-                # Try parsing as integer
-                idx = tryparse(Int, string(inst))
-                isnothing(idx) && error("instrument '$inst' not found in data columns")
-            end
-            push!(inst_indices, idx)
-        end
-        Y[:, inst_indices]
-    else
-        Y  # use all variables as instruments
-    end
-
-    # Determine endogenous/moment variables
+    # Determine shock variable from config
     moment_cols = gmm_cfg["moment_conditions"]
     shock_var = if !isempty(moment_cols)
         idx = findfirst(==(moment_cols[1]), varnames)
@@ -71,19 +52,20 @@ function _gmm_estimate(; data::String, config::String="",
         1
     end
 
-    # Use LP-GMM as default estimation strategy
-    gw = GMMWeighting(w)
-    models = estimate_lp_gmm(Y, shock_var, 0; instruments=Z)
+    # Use LP-GMM estimation
+    models = estimate_lp_gmm(Y, shock_var, 0; lags=4, weighting=w)
 
     if !isempty(models)
         model = models[1]
-        gmm_summary(model)
+
+        # gmm_summary now returns a NamedTuple
+        summ = gmm_summary(model)
 
         # J-test
         jtest = j_test(model)
         println()
         println("Hansen's J-test for overidentification:")
-        println("  J-statistic: $(round(jtest.J; digits=4))")
+        println("  J-statistic: $(round(jtest.J_stat; digits=4))")
         println("  p-value: $(round(jtest.p_value; digits=4))")
         println("  Degrees of freedom: $(jtest.df)")
 
@@ -95,10 +77,11 @@ function _gmm_estimate(; data::String, config::String="",
 
         # Export parameters
         if !isempty(output)
+            se = stderror(model)
             param_df = DataFrame(
                 parameter=["θ$i" for i in 1:length(model.theta)],
                 estimate=model.theta,
-                std_error=model.se
+                std_error=se
             )
             output_result(param_df; format=Symbol(format), output=output, title="GMM Estimates")
         end
