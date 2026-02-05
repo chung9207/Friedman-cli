@@ -1,4 +1,4 @@
-# Local Projection commands: estimate, iv, smooth, state, propensity
+# Local Projection commands: estimate, iv, smooth, state, propensity, multi, robust
 
 function register_lp_commands!()
     lp_estimate = LeafCommand("estimate", _lp_estimate;
@@ -72,12 +72,41 @@ function register_lp_commands!()
         ],
         description="Estimate propensity score LP (Angrist et al. 2018)")
 
+    lp_multi = LeafCommand("multi", _lp_multi;
+        args=[
+            Argument("data"; description="Path to CSV data file"),
+        ],
+        options=[
+            Option("shocks"; type=String, default="", description="Comma-separated shock variable indices (e.g. 1,2,3)"),
+            Option("horizons"; short="h", type=Int, default=20, description="IRF horizon"),
+            Option("control-lags"; type=Int, default=4, description="Number of control lags"),
+            Option("vcov"; type=String, default="newey_west", description="newey_west|white|driscoll_kraay"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        description="Estimate multi-shock local projections")
+
+    lp_robust = LeafCommand("robust", _lp_robust;
+        args=[
+            Argument("data"; description="Path to CSV data file"),
+        ],
+        options=[
+            Option("treatment"; type=Int, default=1, description="Treatment variable index"),
+            Option("horizons"; short="h", type=Int, default=20, description="IRF horizon"),
+            Option("score-method"; type=String, default="logit", description="logit|probit"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        description="Estimate doubly robust local projections")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "estimate"   => lp_estimate,
         "iv"         => lp_iv,
         "smooth"     => lp_smooth,
         "state"      => lp_state,
         "propensity" => lp_propensity,
+        "multi"      => lp_multi,
+        "robust"     => lp_robust,
     )
     return NodeCommand("lp", subcmds, "Local Projections (LP)")
 end
@@ -277,4 +306,87 @@ function _lp_propensity(; data::String, treatment::Int=1, horizons::Int=20,
     treat_name = treatment <= length(varnames) ? varnames[treatment] : "treatment_$treatment"
     output_result(irf_df; format=Symbol(format), output=output,
                   title="Propensity Score LP: ATE of $treat_name")
+end
+
+function _lp_multi(; data::String, shocks::String="", horizons::Int=20,
+                    control_lags::Int=4, vcov::String="newey_west",
+                    output::String="", format::String="table")
+    isempty(shocks) && error("multi-shock LP requires --shocks=<indices> (e.g. --shocks=1,2,3)")
+
+    df = load_data(data)
+    Y = df_to_matrix(df)
+    varnames = variable_names(df)
+
+    shock_indices = parse.(Int, split(shocks, ","))
+    for s in shock_indices
+        (s < 1 || s > size(Y, 2)) && error("shock index $s out of range (data has $(size(Y, 2)) variables)")
+    end
+
+    println("Estimating Multi-Shock LP: shocks=$(shock_indices), horizons=$horizons, vcov=$vcov")
+    println()
+
+    models = estimate_lp_multi(Y, shock_indices, horizons;
+        lags=control_lags, cov_type=Symbol(vcov))
+
+    for (mi, model) in enumerate(models)
+        shock_idx = shock_indices[mi]
+        shock_name = shock_idx <= length(varnames) ? varnames[shock_idx] : "shock_$shock_idx"
+
+        irf_result = lp_irf(model)
+
+        irf_df = DataFrame()
+        irf_df.horizon = 0:horizons
+        n_resp = size(irf_result.values, 2)
+        for vi in 1:n_resp
+            vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
+            irf_df[!, vname] = irf_result.values[:, vi]
+            irf_df[!, "$(vname)_lower"] = irf_result.ci_lower[:, vi]
+            irf_df[!, "$(vname)_upper"] = irf_result.ci_upper[:, vi]
+        end
+
+        output_result(irf_df; format=Symbol(format),
+                      output=isempty(output) ? "" : replace(output, "." => "_$(shock_name)."),
+                      title="Multi-Shock LP IRF to $shock_name")
+        println()
+    end
+end
+
+function _lp_robust(; data::String, treatment::Int=1, horizons::Int=20,
+                     score_method::String="logit",
+                     output::String="", format::String="table")
+    df = load_data(data)
+    Y = df_to_matrix(df)
+    varnames = variable_names(df)
+
+    println("Estimating Doubly Robust LP: treatment=$treatment, horizons=$horizons, method=$score_method")
+    println()
+
+    treatment_vec = Y[:, treatment]
+    covariates = Y[:, setdiff(1:size(Y,2), [treatment])]
+
+    model = doubly_robust_lp(Y, treatment_vec, covariates, horizons;
+        ps_method=Symbol(score_method))
+
+    irf_result = propensity_irf(model)
+
+    # Diagnostics
+    diag = propensity_diagnostics(model)
+    println("Doubly Robust Diagnostics:")
+    println("  Mean score: $(round(diag.mean_score; digits=4))")
+    println("  Effective sample size: $(round(diag.effective_n; digits=1))")
+    println()
+
+    irf_df = DataFrame()
+    irf_df.horizon = 0:horizons
+    n_resp = size(irf_result.values, 2)
+    for vi in 1:n_resp
+        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
+        irf_df[!, vname] = irf_result.values[:, vi]
+        irf_df[!, "$(vname)_lower"] = irf_result.ci_lower[:, vi]
+        irf_df[!, "$(vname)_upper"] = irf_result.ci_upper[:, vi]
+    end
+
+    treat_name = treatment <= length(varnames) ? varnames[treatment] : "treatment_$treatment"
+    output_result(irf_df; format=Symbol(format), output=output,
+                  title="Doubly Robust LP: ATE of $treat_name")
 end

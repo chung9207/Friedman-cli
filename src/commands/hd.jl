@@ -8,9 +8,14 @@ function register_hd_commands!()
         options=[
             Option("lags"; short="p", type=Int, default=nothing, description="Lag order (default: auto)"),
             Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun"),
-            Option("config"; type=String, default="", description="TOML config for identification"),
+            Option("config"; type=String, default="", description="TOML config for identification/prior"),
+            Option("draws"; type=Int, default=2000, description="MCMC draws (Bayesian mode)"),
+            Option("sampler"; type=String, default="nuts", description="nuts|hmc|smc (Bayesian mode)"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        flags=[
+            Flag("bayesian"; short="b", description="Use Bayesian estimation (BVAR + posterior HD)"),
         ],
         description="Compute historical decomposition of shocks")
 
@@ -21,7 +26,8 @@ function register_hd_commands!()
 end
 
 function _hd_compute(; data::String, lags=nothing, id::String="cholesky",
-                      config::String="", output::String="", format::String="table")
+                      config::String="", draws::Int=2000, sampler::String="nuts",
+                      bayesian::Bool=false, output::String="", format::String="table")
     df = load_data(data)
     Y = df_to_matrix(df)
     varnames = variable_names(df)
@@ -31,6 +37,14 @@ function _hd_compute(; data::String, lags=nothing, id::String="cholesky",
         select_lag_order(Y, min(12, size(Y,1) ÷ (3*n)); criterion=:aic)
     else
         lags
+    end
+
+    # Bayesian HD via BVAR
+    if bayesian
+        _hd_bayesian(Y, p, n, varnames;
+            id=id, config=config, draws=draws, sampler=sampler,
+            format=format, output=output)
+        return
     end
 
     id_method = Dict(
@@ -91,6 +105,64 @@ function _hd_compute(; data::String, lags=nothing, id::String="cholesky",
         output_result(hd_df; format=Symbol(format),
                       output=isempty(output) ? "" : replace(output, "." => "_$(vname)."),
                       title="Historical Decomposition: $vname ($id identification)")
+        println()
+    end
+end
+
+function _hd_bayesian(Y::Matrix{Float64}, p::Int, n::Int, varnames::Vector{String};
+                      id::String="cholesky", config::String="",
+                      draws::Int=2000, sampler::String="nuts",
+                      format::String="table", output::String="")
+    id_method = Dict(
+        "cholesky" => :cholesky,
+        "sign" => :sign,
+        "narrative" => :narrative,
+        "longrun" => :long_run,
+    )
+    method = get(id_method, id, :cholesky)
+
+    println("Computing Bayesian Historical Decomposition: BVAR($p), id=$id")
+    println("  Sampler: $sampler, Draws: $draws")
+    println()
+
+    prior_obj = _build_prior(config, Y, p)
+    prior_sym = isnothing(prior_obj) ? :normal : :minnesota
+
+    chain = estimate_bvar(Y, p;
+        sampler=Symbol(sampler), n_samples=draws,
+        prior=prior_sym, hyper=prior_obj)
+
+    horizon = size(Y, 1) - p
+
+    bhd = historical_decomposition(chain, p, n, horizon;
+        data=Y, method=method, quantiles=[0.16, 0.5, 0.84])
+
+    summary(bhd)
+
+    # Output posterior mean contributions for each variable
+    # bhd.mean: contributions (T_eff x n_vars x n_shocks)
+    # bhd.initial_mean: initial conditions (T_eff x n_vars)
+    mean_contrib = bhd.mean
+    initial_mean = bhd.initial_mean
+    T_eff = size(mean_contrib, 1)
+
+    for vi in 1:n
+        hd_df = DataFrame()
+        hd_df.period = 1:T_eff
+
+        # Initial conditions (posterior mean)
+        hd_df.initial = initial_mean[:, vi]
+
+        # Shock contributions (posterior mean)
+        for si in 1:n
+            shock_name = si <= length(varnames) ? varnames[si] : "shock_$si"
+            hd_df[!, "contrib_$shock_name"] = mean_contrib[:, vi, si]
+        end
+
+        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
+        output_result(hd_df; format=Symbol(format),
+                      output=isempty(output) ? "" : replace(output, "." => "_$(vname)."),
+                      title="Bayesian HD: $vname ($id, posterior mean)")
         println()
     end
 end

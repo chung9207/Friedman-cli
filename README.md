@@ -24,10 +24,10 @@ julia --project bin/friedman [command] [subcommand] [args...] [options...]
 |---------|-------------|-------------|
 | `var`    | `estimate` `lagselect` `stability` | Vector Autoregression |
 | `bvar`   | `estimate` `posterior` | Bayesian VAR |
-| `irf`    | `compute` | Impulse Response Functions |
-| `fevd`   | `compute` | Forecast Error Variance Decomposition |
-| `hd`     | `compute` | Historical Decomposition |
-| `lp`     | `estimate` `iv` `smooth` `state` `propensity` | Local Projections |
+| `irf`    | `compute` | Impulse Response Functions (frequentist + Bayesian) |
+| `fevd`   | `compute` | Forecast Error Variance Decomposition (frequentist + Bayesian) |
+| `hd`     | `compute` | Historical Decomposition (frequentist + Bayesian) |
+| `lp`     | `estimate` `iv` `smooth` `state` `propensity` `multi` `robust` | Local Projections |
 | `factor` | `static` `dynamic` `gdfm` | Factor Models |
 | `test`   | `adf` `kpss` `pp` `za` `np` `johansen` | Unit Root & Cointegration Tests |
 | `gmm`    | `estimate` | Generalized Method of Moments |
@@ -86,6 +86,10 @@ friedman irf compute data.csv --shock=1 --ci=bootstrap --replications=1000
 # Theoretical CIs or no CIs
 friedman irf compute data.csv --ci=theoretical
 friedman irf compute data.csv --ci=none
+
+# Bayesian IRFs (BVAR + posterior credible intervals)
+friedman irf compute data.csv --bayesian --shock=1 --horizons=20
+friedman irf compute data.csv --bayesian --draws=5000 --sampler=hmc --config=prior.toml
 ```
 
 ### FEVD & Historical Decomposition
@@ -97,9 +101,15 @@ friedman fevd compute data.csv --horizons=20 --id=cholesky
 # FEVD with sign restrictions
 friedman fevd compute data.csv --id=sign --config=sign_restrictions.toml
 
+# Bayesian FEVD
+friedman fevd compute data.csv --bayesian --horizons=20
+
 # Historical decomposition
 friedman hd compute data.csv --id=cholesky
 friedman hd compute data.csv --id=longrun --lags=4
+
+# Bayesian historical decomposition
+friedman hd compute data.csv --bayesian --draws=2000
 ```
 
 ### Local Projections
@@ -121,6 +131,12 @@ friedman lp state data.csv --shock=1 --state-var=3 --method=exponential
 
 # Propensity score LP (Angrist et al. 2018)
 friedman lp propensity data.csv --treatment=1 --score-method=logit
+
+# Multi-shock LP (simultaneous shocks)
+friedman lp multi data.csv --shocks=1,2,3 --horizons=20
+
+# Doubly robust LP (propensity score + outcome regression)
+friedman lp robust data.csv --treatment=1 --score-method=logit
 ```
 
 ### Factor Models
