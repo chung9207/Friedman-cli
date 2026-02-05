@@ -1,0 +1,15 @@
+#!/usr/bin/env julia
+#
+# friedman — macroeconometric analysis from the terminal
+#
+# Usage: julia --project=/path/to/Friedman-cli bin/friedman [command] [args...]
+#    or: ./bin/friedman [command] [args...]  (if Julia is in PATH)
+
+# Activate project
+using Pkg
+script_dir = @__DIR__
+project_dir = dirname(script_dir)
+Pkg.activate(project_dir; io=devnull)
+
+using Friedman
+Friedman.main(ARGS)
