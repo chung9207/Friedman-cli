@@ -26,8 +26,9 @@ include("commands/factor.jl")
 include("commands/test_cmd.jl")
 include("commands/gmm.jl")
 include("commands/arima.jl")
+include("commands/nongaussian.jl")
 
-const FRIEDMAN_VERSION = v"0.1.1"
+const FRIEDMAN_VERSION = v"0.1.2"
 
 """
     build_app() → Entry
@@ -45,7 +46,8 @@ function build_app()
         "factor" => register_factor_commands!(),
         "test"   => register_test_commands!(),
         "gmm"    => register_gmm_commands!(),
-        "arima"  => register_arima_commands!(),
+        "arima"       => register_arima_commands!(),
+        "nongaussian" => register_nongaussian_commands!(),
     )
 
     root = NodeCommand("friedman", root_cmds,

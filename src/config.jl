@@ -83,6 +83,25 @@ function get_gmm(config::Dict)
     return result
 end
 
+"""
+    get_nongaussian(config) → Dict
+
+Extract non-Gaussian SVAR settings from a config dict.
+"""
+function get_nongaussian(config::Dict)
+    ng = get(config, "nongaussian", Dict())
+    result = Dict{String,Any}()
+
+    result["method"] = get(ng, "method", "fastica")
+    result["contrast"] = get(ng, "contrast", "logcosh")
+    result["distribution"] = get(ng, "distribution", "student_t")
+    result["n_regimes"] = get(ng, "n_regimes", 2)
+    result["transition_variable"] = get(ng, "transition_variable", "")
+    result["regime_variable"] = get(ng, "regime_variable", "")
+
+    return result
+end
+
 # Internal helpers
 
 function _parse_matrix(rows::Vector)

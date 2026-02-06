@@ -38,12 +38,27 @@ function register_factor_commands!()
         ],
         description="Estimate generalized dynamic factor model")
 
+    factor_forecast = LeafCommand("forecast", _factor_forecast;
+        args=[
+            Argument("data"; description="Path to CSV data file"),
+        ],
+        options=[
+            Option("nfactors"; short="r", type=Int, default=nothing, description="Number of factors (default: auto via IC)"),
+            Option("horizon"; short="h", type=Int, default=12, description="Forecast horizon"),
+            Option("ci-method"; type=String, default="none", description="none|bootstrap|parametric"),
+            Option("conf-level"; type=Float64, default=0.95, description="Confidence level for intervals"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        description="Forecast observables using static factor model")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
-        "static"  => factor_static,
-        "dynamic" => factor_dynamic,
-        "gdfm"    => factor_gdfm,
+        "static"   => factor_static,
+        "dynamic"  => factor_dynamic,
+        "gdfm"     => factor_gdfm,
+        "forecast" => factor_forecast,
     )
-    return NodeCommand("factor", subcmds, "Factor Models (static, dynamic, GDFM)")
+    return NodeCommand("factor", subcmds, "Factor Models (static, dynamic, GDFM, forecast)")
 end
 
 function _factor_static(; data::String, nfactors=nothing, criterion::String="ic1",
@@ -173,4 +188,57 @@ function _factor_gdfm(; data::String, nfactors=nothing, dynamic_rank=nothing,
 
     println()
     println("Average common variance share: $(round(mean(var_shares); digits=4))")
+end
+
+function _factor_forecast(; data::String, nfactors=nothing, horizon::Int=12,
+                            ci_method::String="none", conf_level::Float64=0.95,
+                            output::String="", format::String="table")
+    df = load_data(data)
+    X = df_to_matrix(df)
+    varnames = variable_names(df)
+
+    r = if isnothing(nfactors)
+        println("Selecting number of factors via Bai-Ng information criteria...")
+        ic = ic_criteria(X, min(20, size(X, 2)))
+        optimal_r = ic.ic1
+        println("  IC1 suggests $optimal_r factors")
+        optimal_r
+    else
+        nfactors
+    end
+
+    println("Forecasting with static factor model: $r factors, horizon=$horizon, CI=$ci_method")
+    println()
+
+    model = estimate_factors(X, r)
+    fc = forecast(model, horizon; ci_method=Symbol(ci_method), conf_level=conf_level)
+
+    # Build forecast table for observables
+    fc_df = DataFrame()
+    fc_df.horizon = 1:horizon
+
+    for (vi, vname) in enumerate(varnames)
+        fc_df[!, vname] = fc.observables[:, vi]
+    end
+
+    # Add confidence intervals if available
+    if ci_method != "none" && !isnothing(fc.observables_lower)
+        for (vi, vname) in enumerate(varnames)
+            fc_df[!, "$(vname)_lower"] = fc.observables_lower[:, vi]
+            fc_df[!, "$(vname)_upper"] = fc.observables_upper[:, vi]
+        end
+    end
+
+    output_result(fc_df; format=Symbol(format), output=output,
+                  title="Factor Model Forecast (h=$horizon, $(length(varnames)) variables)")
+
+    # Standard errors if available
+    if !isnothing(fc.observables_se)
+        println()
+        avg_se = round.(mean(fc.observables_se; dims=1)[1, :]; digits=4)
+        println("Average forecast standard errors:")
+        for (vi, vname) in enumerate(varnames)
+            println("  $vname: $(avg_se[vi])")
+        end
+    end
 end

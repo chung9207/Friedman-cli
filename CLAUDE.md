@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Friedman-cli (v0.1.1) is a Julia CLI for macroeconometric analysis, wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl) (v0.1.1, 144 exports, 27 source files). It provides terminal-based VAR/BVAR estimation, impulse response analysis, factor models, local projections, unit root/cointegration tests, GMM estimation, and ARIMA modeling/forecasting. MIT licensed. ~2,500 lines across 23 source files.
+Friedman-cli (v0.1.2) is a Julia CLI for macroeconometric analysis, wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl) (v0.1.2, 144+ exports, 27+ source files). It provides terminal-based VAR/BVAR estimation, impulse response analysis, factor models, local projections, unit root/cointegration tests, GMM estimation, ARIMA modeling/forecasting, and non-Gaussian SVAR identification. MIT licensed. ~3,100 lines across 24 source files.
 
 ## Quick Reference
 
@@ -46,11 +46,12 @@ src/
     fevd.jl               # FEVD: compute (--bayesian)
     hd.jl                 # Historical Decomposition: compute (--bayesian)
     lp.jl                 # Local Projections: estimate, iv, smooth, state, propensity, multi, robust
-    factor.jl             # Factor Models: static, dynamic, gdfm
+    factor.jl             # Factor Models: static, dynamic, gdfm, forecast
     test_cmd.jl           # Unit Root/Cointegration: adf, kpss, pp, za, np, johansen
     gmm.jl                # GMM: estimate
     arima.jl              # ARIMA: estimate, auto, forecast
-  config.jl               # TOML loader: load_config, get_prior, get_identification, get_gmm
+    nongaussian.jl        # Non-Gaussian SVAR: fastica, ml, heteroskedasticity, normality, identifiability
+  config.jl               # TOML loader: load_config, get_prior, get_identification, get_gmm, get_nongaussian
   io.jl                   # Data I/O: load_data, df_to_matrix, variable_names, output_result, output_kv
 test/
   runtests.jl             # Tests CLI engine: types, tokenizer, arg binding, help, dispatch
@@ -71,19 +72,20 @@ Julia compat: `≥ 1.10`
 
 ```
 friedman
-├── var       estimate | lagselect | stability
-├── bvar      estimate | posterior
-├── irf       compute [--bayesian]
-├── fevd      compute [--bayesian]
-├── hd        compute [--bayesian]
-├── lp        estimate | iv | smooth | state | propensity | multi | robust
-├── factor    static | dynamic | gdfm
-├── test      adf | kpss | pp | za | np | johansen
-├── gmm       estimate
-└── arima     estimate | auto | forecast
+├── var          estimate | lagselect | stability
+├── bvar         estimate | posterior
+├── irf          compute [--bayesian]
+├── fevd         compute [--bayesian]
+├── hd           compute [--bayesian]
+├── lp           estimate | iv | smooth | state | propensity | multi | robust
+├── factor       static | dynamic | gdfm | forecast
+├── test         adf | kpss | pp | za | np | johansen
+├── gmm          estimate
+├── arima        estimate | auto | forecast
+└── nongaussian  fastica | ml | heteroskedasticity | normality | identifiability
 ```
 
-Total: 10 top-level commands, 29 subcommands (+ 3 Bayesian flags).
+Total: 11 top-level commands, 35 subcommands (+ 3 Bayesian flags).
 
 ## Architecture
 
@@ -96,7 +98,7 @@ bin/friedman ARGS
     → build_app()                          # constructs Entry with full command tree
       → register_var_commands!()           # each returns NodeCommand with LeafCommand children
       → register_bvar_commands!()
-      → ... (10 register functions)
+      → ... (11 register functions)
     → dispatch(entry, ARGS)
       → dispatch_node()                    # walks NodeCommand tree by matching arg tokens
       → dispatch_leaf()                    # tokenize → bind_args → leaf.handler(; bound...)
@@ -181,10 +183,11 @@ Parser features: `--opt=val`, `--opt val`, `-o val`, bundled `-abc`, `--` stops 
 - **multi** — multi-shock LP via `estimate_lp_multi()`, comma-separated shock indices, outputs per-shock IRF tables
 - **robust** — doubly robust LP via `doubly_robust_lp()`, combines propensity score + outcome regression
 
-### factor (factor.jl, 177 lines)
+### factor (factor.jl, ~250 lines)
 - **static** — PCA factor model, Bai-Ng IC (ic1/ic2/ic3) for factor count, scree data + loadings
 - **dynamic** — dynamic factor model with factor VAR, stationarity check, companion eigenvalues
 - **gdfm** — generalized dynamic factor model, common variance shares
+- **forecast** — forecast observables using static factor model, optional bootstrap/parametric CIs
 
 ### test (test_cmd.jl, 267 lines)
 - **adf** — Augmented Dickey-Fuller (auto lag via AIC, trend options)
@@ -206,6 +209,14 @@ Parser features: `--opt=val`, `--opt val`, `-o val`, bundled `-abc`, `--` stops 
 - **forecast** — Estimate + forecast in one step; uses `auto_arima` if `--p` omitted, outputs horizon/forecast/CI/SE table
 - Helpers: `_estimate_arima_model()`, `_model_label()`, `_arima_coef_table()`
 - Reuses `_extract_series()` from test_cmd.jl for single-column extraction
+
+### nongaussian (nongaussian.jl, ~280 lines)
+- **fastica** — ICA-based SVAR identification (FastICA/Infomax/JADE), outputs B0 matrix + structural shocks
+- **ml** — Maximum likelihood non-Gaussian SVAR (Student-t/skew-t/GHD), outputs B0 + log-likelihood + AIC/BIC
+- **heteroskedasticity** — Heteroskedasticity-based identification (Markov-switching/GARCH/smooth-transition/external volatility)
+- **normality** — Normality test suite for VAR residuals, reports which tests reject Gaussianity
+- **identifiability** — Tests for identification strength, shock Gaussianity, independence, Gaussian vs non-Gaussian comparison
+- Helper: `_ng_estimate_var()` — shared VAR estimation with auto lag selection
 
 ## TOML Configuration
 
@@ -245,6 +256,15 @@ shock = 1
 sign = "positive"
 horizon = 0
 
+# Non-Gaussian SVAR (for nongaussian)
+[nongaussian]
+method = "fastica"          # fastica/infomax/jade/ml/markov/garch/smooth_transition/external
+contrast = "logcosh"        # for ICA methods: logcosh/exp/kurtosis
+distribution = "student_t"  # for ML method: student_t/skew_t/ghd
+n_regimes = 2               # for markov-switching/external
+transition_variable = "spread"  # column name for smooth-transition
+regime_variable = "nber"        # column name for external volatility
+
 # GMM specification
 [gmm]
 moment_conditions = ["output", "inflation"]
@@ -254,12 +274,16 @@ weighting = "twostep"
 
 ## Testing
 
-Tests (`test/runtests.jl`, 195 lines) cover the CLI engine only — no MacroEconometricModels dependency needed:
+Tests (`test/runtests.jl`) cover CLI engine, IO, and config — no MacroEconometricModels dependency needed:
 - **Types** — construction of Argument, Option, Flag, LeafCommand, NodeCommand, Entry
 - **Tokenizer** — positional args, `--long=val`, `--long val`, `-s val`, flags, bundled `-abc`, `--` separator
 - **Argument binding** — type conversion, defaults, short aliases, required arg validation, excess arg rejection
 - **Help generation** — output contains expected command names, argument labels, option flags
 - **Dispatch** — walks node→leaf correctly, passes bound args to handler, help flags don't error
+- **Non-Gaussian SVAR structure** — 5 subcommands with correct options, help text, dispatch
+- **Factor forecast structure** — leaf with correct options, arg binding
+- **IO utilities** — load_data, df_to_matrix, variable_names, output_result (CSV/JSON/table), output_kv
+- **Config parsing** — load_config, get_identification, get_prior, get_gmm, get_nongaussian
 
 Run: `julia --project -e 'using Pkg; Pkg.test()'`
 
@@ -288,7 +312,7 @@ Run: `julia --project -e 'using Pkg; Pkg.test()'`
 
 ## MacroEconometricModels.jl API Reference
 
-Upstream library (v0.1.1): 144 exports, 27 source files, 24 test files.
+Upstream library (v0.1.2): 144+ exports, 27+ source files, 24+ test files.
 Dependencies: DataFrames, Distributions, FFTW, LinearAlgebra, Optim, MCMCChains, PrettyTables, Random, SpecialFunctions, Statistics, StatsAPI, Turing.
 
 ### Key Types
@@ -319,6 +343,15 @@ GMMWeighting{T}          # method, max_iter, tol
 ARModel{T}, MAModel{T}, ARMAModel{T}, ARIMAModel{T}  # ARIMA family
 ARIMAForecast{T}         # forecast, ci_lower, ci_upper, se, horizon
 NeweyWestEstimator, WhiteEstimator, DriscollKraayEstimator  # HAC covariance
+ICASVARResult{T}         # B0, W, Q, shocks, method, converged, iterations, objective
+NonGaussianMLResult{T}   # B0, Q, shocks, distribution, loglik, loglik_gaussian, dist_params, vcov, se, aic, bic
+MarkovSwitchingSVARResult{T}  # B0, regime info
+GARCHSVARResult{T}       # B0, GARCH parameters
+SmoothTransitionSVARResult{T}  # B0, transition parameters
+ExternalVolatilitySVARResult{T}  # B0, regime indicator
+NormalityTestSuite{T}    # results::Vector{NormalityTestResult{T}}
+NormalityTestResult{T}   # test_name, statistic, pvalue, df
+FactorForecast{T}        # factors, observables, *_lower, *_upper, observables_se, horizon, conf_level, ci_method
 ```
 
 ### VAR Estimation
@@ -376,6 +409,31 @@ irf_percentiles(result; probs=[0.16, 0.5, 0.84]) → Array
 irf_mean(result) → Array
 ```
 
+### Non-Gaussian SVAR Identification (v0.1.2)
+
+```julia
+# ICA methods
+identify_fastica(model::VARModel{T}; contrast=:logcosh, max_iter=200, tol=1e-6) → ICASVARResult{T}
+identify_infomax(model::VARModel{T}; max_iter=200, tol=1e-6, learning_rate=0.01) → ICASVARResult{T}
+identify_jade(model::VARModel{T}) → ICASVARResult{T}
+
+# ML method
+identify_nongaussian_ml(model::VARModel{T}; distribution=:student_t, max_iter=500, tol=1e-6) → NonGaussianMLResult{T}
+
+# Heteroskedasticity-based
+identify_markov_switching(model::VARModel{T}; n_regimes=2, max_iter=200, tol=1e-6) → MarkovSwitchingSVARResult{T}
+identify_garch(model::VARModel{T}; max_iter=200, tol=1e-6) → GARCHSVARResult{T}
+identify_smooth_transition(model::VARModel{T}, transition_var::AbstractVector; gamma=1.0, c=0.0) → SmoothTransitionSVARResult{T}
+identify_external_volatility(model::VARModel{T}, regime_indicator::AbstractVector; regimes=2) → ExternalVolatilitySVARResult{T}
+
+# Tests
+normality_test_suite(model::VARModel) → NormalityTestSuite{T}
+test_identification_strength(model::VARModel) → NamedTuple
+test_shock_gaussianity(result::ICASVARResult) → NamedTuple
+test_gaussian_vs_nongaussian(model::VARModel) → NamedTuple
+test_shock_independence(result::ICASVARResult) → NamedTuple
+```
+
 ### Impulse Response Functions
 
 ```julia
@@ -431,6 +489,7 @@ ic_criteria_dynamic(X, max_r, max_p; method=:twostep) → NamedTuple  # .r_opt
 companion_matrix_factors(model) → Matrix
 is_stationary(model::DynamicFactorModel) → Bool
 forecast(model::DynamicFactorModel, h; ci=false) → ...
+forecast(model::FactorModel, h; ci_method=:none, conf_level=0.95) → FactorForecast{T}
 
 # Generalized Dynamic (spectral)
 estimate_gdfm(X, q; standardize=true, bandwidth=0, kernel=:bartlett, r=0) → GeneralizedDynamicFactorModel
@@ -565,6 +624,12 @@ point_estimate(result), has_uncertainty(result), uncertainty_bounds(result)
 | Johansen cointegration | `test johansen` | Wrapped |
 | GMM | `gmm estimate` | Wrapped |
 | ARIMA (AR/MA/ARMA/ARIMA/auto) | `arima estimate/auto/forecast` | Wrapped |
+| Factor model forecasting | `factor forecast` | Wrapped |
+| ICA SVAR (FastICA/Infomax/JADE) | `nongaussian fastica` | Wrapped |
+| Non-Gaussian ML SVAR | `nongaussian ml` | Wrapped |
+| Heteroskedasticity SVAR | `nongaussian heteroskedasticity` | Wrapped |
+| Normality test suite | `nongaussian normality` | Wrapped |
+| Identifiability tests | `nongaussian identifiability` | Wrapped |
 | VAR-LP comparison | — | Not wrapped (convenience utility) |
 | unit_root_summary / test_all_variables | — | Not wrapped (convenience utility) |
 
@@ -659,6 +724,10 @@ api_functions.md          # Function docs with @autodocs directives by domain
 - Rubio-Ramírez, Waggoner & Zha (2010). Structural VARs. *RESTUD*.
 - Stock & Watson (2002). Forecasting using principal components. *JASA*.
 - Stock & Watson (2018). Identification and estimation of dynamic causal effects. *EJ*.
+- Hyvärinen, Karhunen & Oja (2001). *Independent Component Analysis*. Wiley.
+- Lanne, Meitz & Saikkonen (2017). Identification and estimation of non-Gaussian SVARs. *JBES*.
+- Gouriéroux, Monfort & Renne (2017). Statistical inference for independent component analysis. *JoE*.
+- Lütkepohl & Netšunajev (2017). Structural vector autoregressions with heteroskedasticity. *JoE*.
 
 ### CI/CD
 

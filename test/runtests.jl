@@ -361,11 +361,11 @@ using Test
         @test contains(help_text, "friedman var")
 
         # Entry help includes version number
-        entry = Entry("friedman", node; version=v"0.1.1")
+        entry = Entry("friedman", node; version=v"0.1.2")
         buf = IOBuffer()
         print_help(buf, entry)
         help_text = String(take!(buf))
-        @test contains(help_text, "0.1.1")
+        @test contains(help_text, "0.1.2")
 
         # Leaf with optional argument shows [arg] not <arg>
         leaf_opt_arg = LeafCommand("test", handler;
@@ -480,9 +480,9 @@ using Test
         @test called_with[][:data] == "test.csv"
 
         # dispatch() with ["--version"] prints version
-        entry = Entry("friedman", outer_node; version=v"0.1.1")
+        entry = Entry("friedman", outer_node; version=v"0.1.2")
         version_output = strip(capture_stdout(() -> dispatch(entry, ["--version"])))
-        @test contains(version_output, "0.1.1")
+        @test contains(version_output, "0.1.2")
 
         # dispatch() with [] shows help (no error)
         help_output = capture_stdout(() -> dispatch(entry, String[]))
@@ -530,7 +530,197 @@ using Test
 
         # -V short flag triggers version
         v_output = strip(capture_stdout(() -> dispatch(entry, ["-V"])))
-        @test contains(v_output, "0.1.1")
+        @test contains(v_output, "0.1.2")
+    end
+
+    @testset "Non-Gaussian SVAR command structure" begin
+        handler = (; kwargs...) -> kwargs
+
+        # Simulate the structure that register_nongaussian_commands!() creates
+        ng_fastica = LeafCommand("fastica", handler;
+            args=[Argument("data"; description="Path to CSV data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=nothing, description="Lag order"),
+                Option("method"; type=String, default="fastica", description="fastica|infomax|jade"),
+                Option("contrast"; type=String, default="logcosh", description="logcosh|exp|kurtosis"),
+                Option("output"; short="o", type=String, default="", description="Export results to file"),
+                Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            ],
+            description="ICA-based non-Gaussian SVAR identification")
+
+        ng_ml = LeafCommand("ml", handler;
+            args=[Argument("data"; description="Path to CSV data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=nothing, description="Lag order"),
+                Option("distribution"; short="d", type=String, default="student_t", description="student_t|skew_t|ghd"),
+                Option("output"; short="o", type=String, default="", description="Export results to file"),
+                Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            ],
+            description="Maximum likelihood non-Gaussian SVAR identification")
+
+        ng_heteroskedasticity = LeafCommand("heteroskedasticity", handler;
+            args=[Argument("data"; description="Path to CSV data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=nothing, description="Lag order"),
+                Option("method"; type=String, default="markov", description="markov|garch|smooth_transition|external"),
+                Option("config"; type=String, default="", description="TOML config"),
+                Option("regimes"; type=Int, default=2, description="Number of regimes"),
+                Option("output"; short="o", type=String, default="", description="Export results to file"),
+                Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            ],
+            description="Heteroskedasticity-based SVAR identification")
+
+        ng_normality = LeafCommand("normality", handler;
+            args=[Argument("data"; description="Path to CSV data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=nothing, description="Lag order"),
+                Option("output"; short="o", type=String, default="", description="Export results to file"),
+                Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            ],
+            description="Normality test suite for VAR residuals")
+
+        ng_identifiability = LeafCommand("identifiability", handler;
+            args=[Argument("data"; description="Path to CSV data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=nothing, description="Lag order"),
+                Option("test"; short="t", type=String, default="all", description="strength|gaussianity|independence|all"),
+                Option("method"; type=String, default="fastica", description="fastica|infomax|jade"),
+                Option("contrast"; type=String, default="logcosh", description="logcosh|exp|kurtosis"),
+                Option("output"; short="o", type=String, default="", description="Export results to file"),
+                Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            ],
+            description="Test identifiability conditions")
+
+        subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
+            "fastica" => ng_fastica,
+            "ml" => ng_ml,
+            "heteroskedasticity" => ng_heteroskedasticity,
+            "normality" => ng_normality,
+            "identifiability" => ng_identifiability,
+        )
+        node = NodeCommand("nongaussian", subcmds,
+            "Non-Gaussian SVAR Identification")
+
+        # Verify structure
+        @test node.name == "nongaussian"
+        @test length(node.subcmds) == 5
+        @test haskey(node.subcmds, "fastica")
+        @test haskey(node.subcmds, "ml")
+        @test haskey(node.subcmds, "heteroskedasticity")
+        @test haskey(node.subcmds, "normality")
+        @test haskey(node.subcmds, "identifiability")
+
+        # Verify leaf details
+        @test node.subcmds["fastica"].name == "fastica"
+        @test length(node.subcmds["fastica"].args) == 1
+        @test length(node.subcmds["fastica"].options) == 5
+
+        @test node.subcmds["ml"].name == "ml"
+        @test length(node.subcmds["ml"].options) == 4
+
+        @test node.subcmds["heteroskedasticity"].name == "heteroskedasticity"
+        @test length(node.subcmds["heteroskedasticity"].options) == 6
+
+        @test node.subcmds["normality"].name == "normality"
+        @test length(node.subcmds["normality"].options) == 3
+
+        @test node.subcmds["identifiability"].name == "identifiability"
+        @test length(node.subcmds["identifiability"].options) == 6
+
+        # Help text
+        buf = IOBuffer()
+        print_help(buf, node; prog="friedman nongaussian")
+        help_text = String(take!(buf))
+        @test contains(help_text, "fastica")
+        @test contains(help_text, "ml")
+        @test contains(help_text, "heteroskedasticity")
+        @test contains(help_text, "normality")
+        @test contains(help_text, "identifiability")
+
+        # Leaf help text
+        buf = IOBuffer()
+        print_help(buf, ng_fastica; prog="friedman nongaussian fastica")
+        help_text = String(take!(buf))
+        @test contains(help_text, "--method")
+        @test contains(help_text, "--contrast")
+        @test contains(help_text, "logcosh")
+
+        buf = IOBuffer()
+        print_help(buf, ng_ml; prog="friedman nongaussian ml")
+        help_text = String(take!(buf))
+        @test contains(help_text, "--distribution")
+        @test contains(help_text, "student_t")
+
+        # Dispatch to handler via node
+        called_with = Ref{Any}(nothing)
+        dispatch_handler = (; kwargs...) -> begin called_with[] = Dict(kwargs) end
+        test_leaf = LeafCommand("fastica", dispatch_handler;
+            args=[Argument("data"; description="Data file")],
+            options=[Option("method"; type=String, default="fastica", description="Method")],
+            description="Test fastica")
+        dispatch_leaf(test_leaf, ["test.csv", "--method=jade"]; prog="friedman nongaussian fastica")
+        @test called_with[][:data] == "test.csv"
+        @test called_with[][:method] == "jade"
+    end
+
+    @testset "Factor forecast command structure" begin
+        handler = (; kwargs...) -> kwargs
+
+        factor_forecast = LeafCommand("forecast", handler;
+            args=[Argument("data"; description="Path to CSV data file")],
+            options=[
+                Option("nfactors"; short="r", type=Int, default=nothing, description="Number of factors"),
+                Option("horizon"; short="h", type=Int, default=12, description="Forecast horizon"),
+                Option("ci-method"; type=String, default="none", description="none|bootstrap|parametric"),
+                Option("conf-level"; type=Float64, default=0.95, description="Confidence level"),
+                Option("output"; short="o", type=String, default="", description="Export results to file"),
+                Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            ],
+            description="Forecast observables using static factor model")
+
+        # Verify structure
+        @test factor_forecast.name == "forecast"
+        @test length(factor_forecast.args) == 1
+        @test length(factor_forecast.options) == 6
+
+        # Include in a factor node with 4 subcommands
+        factor_static = LeafCommand("static", handler; description="Static factors")
+        factor_dynamic = LeafCommand("dynamic", handler; description="Dynamic factors")
+        factor_gdfm = LeafCommand("gdfm", handler; description="GDFM")
+
+        subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
+            "static" => factor_static, "dynamic" => factor_dynamic,
+            "gdfm" => factor_gdfm, "forecast" => factor_forecast)
+        factor_node = NodeCommand("factor", subcmds, "Factor Models")
+
+        @test length(factor_node.subcmds) == 4
+        @test haskey(factor_node.subcmds, "forecast")
+
+        # Help text
+        buf = IOBuffer()
+        print_help(buf, factor_node; prog="friedman factor")
+        help_text = String(take!(buf))
+        @test contains(help_text, "forecast")
+        @test contains(help_text, "static")
+
+        # Leaf help
+        buf = IOBuffer()
+        print_help(buf, factor_forecast; prog="friedman factor forecast")
+        help_text = String(take!(buf))
+        @test contains(help_text, "--horizon")
+        @test contains(help_text, "--ci-method")
+        @test contains(help_text, "--conf-level")
+        @test contains(help_text, "default: 12")
+        @test contains(help_text, "default: 0.95")
+
+        # Arg binding
+        parsed = tokenize(["mydata.csv", "--horizon=24", "--ci-method=bootstrap"])
+        bound = bind_args(parsed, factor_forecast)
+        @test bound.data == "mydata.csv"
+        @test bound.horizon == 24
+        @test bound.ci_method == "bootstrap"
+        @test bound.conf_level == 0.95
+        @test isnothing(bound.nfactors)
     end
 end
 
@@ -897,6 +1087,59 @@ using TOML
             @test gmm["moment_conditions"] == ["y1", "y2", "y3"]
             @test gmm["instruments"] == ["z1", "z2"]
             @test gmm["weighting"] == "iterated"
+        end
+    end
+
+    @testset "get_nongaussian" begin
+        # Full non-Gaussian specification
+        cfg = Dict("nongaussian" => Dict(
+            "method" => "fastica",
+            "contrast" => "exp",
+            "distribution" => "skew_t",
+            "n_regimes" => 3,
+            "transition_variable" => "spread",
+            "regime_variable" => "nber"
+        ))
+        ng = get_nongaussian(cfg)
+        @test ng["method"] == "fastica"
+        @test ng["contrast"] == "exp"
+        @test ng["distribution"] == "skew_t"
+        @test ng["n_regimes"] == 3
+        @test ng["transition_variable"] == "spread"
+        @test ng["regime_variable"] == "nber"
+
+        # Empty config → defaults
+        ng_empty = get_nongaussian(Dict())
+        @test ng_empty["method"] == "fastica"
+        @test ng_empty["contrast"] == "logcosh"
+        @test ng_empty["distribution"] == "student_t"
+        @test ng_empty["n_regimes"] == 2
+        @test ng_empty["transition_variable"] == ""
+        @test ng_empty["regime_variable"] == ""
+
+        # Partial config
+        ng_partial = get_nongaussian(Dict("nongaussian" => Dict("method" => "jade")))
+        @test ng_partial["method"] == "jade"
+        @test ng_partial["contrast"] == "logcosh"  # default
+    end
+
+    @testset "get_nongaussian from TOML file" begin
+        mktempdir() do dir
+            cfg_path = joinpath(dir, "nongaussian.toml")
+            open(cfg_path, "w") do io
+                write(io, """
+                [nongaussian]
+                method = "smooth_transition"
+                transition_variable = "yield_spread"
+                n_regimes = 2
+                """)
+            end
+            cfg = load_config(cfg_path)
+            ng = get_nongaussian(cfg)
+            @test ng["method"] == "smooth_transition"
+            @test ng["transition_variable"] == "yield_spread"
+            @test ng["n_regimes"] == 2
+            @test ng["distribution"] == "student_t"  # default
         end
     end
 end
