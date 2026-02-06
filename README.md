@@ -22,16 +22,13 @@ julia --project bin/friedman [command] [subcommand] [args...] [options...]
 
 | Command | Subcommands | Description |
 |---------|-------------|-------------|
-| `var`    | `estimate` `lagselect` `stability` | Vector Autoregression |
-| `bvar`   | `estimate` `posterior` | Bayesian VAR |
-| `irf`    | `compute` | Impulse Response Functions (frequentist + Bayesian) |
-| `fevd`   | `compute` | Forecast Error Variance Decomposition (frequentist + Bayesian) |
-| `hd`     | `compute` | Historical Decomposition (frequentist + Bayesian) |
-| `lp`     | `estimate` `iv` `smooth` `state` `propensity` `multi` `robust` | Local Projections |
-| `factor` | `static` `dynamic` `gdfm` `forecast` | Factor Models |
+| `var`    | `estimate` `lagselect` `stability` `irf` `fevd` `hd` `forecast` | Vector Autoregression (frequentist) |
+| `bvar`   | `estimate` `posterior` `irf` `fevd` `hd` `forecast` | Bayesian VAR |
+| `lp`     | `estimate` `irf` `fevd` `hd` `forecast` | Local Projections |
+| `factor` | `estimate` (`static` `dynamic` `gdfm`) `forecast` | Factor Models |
 | `test`   | `adf` `kpss` `pp` `za` `np` `johansen` | Unit Root & Cointegration Tests |
 | `gmm`    | `estimate` | Generalized Method of Moments |
-| `arima`  | `estimate` `auto` `forecast` | ARIMA Models |
+| `arima`  | `estimate` `forecast` | ARIMA Models |
 | `nongaussian` | `fastica` `ml` `heteroskedasticity` `normality` `identifiability` | Non-Gaussian SVAR |
 
 All commands support `--format` (`table`|`csv`|`json`) and `--output` (file path) options.
@@ -47,6 +44,42 @@ friedman var lagselect data.csv --max-lags=12 --criterion=aic
 
 # Stationarity check (companion matrix eigenvalues)
 friedman var stability data.csv --lags=2
+
+# Frequentist IRF (Cholesky identification)
+friedman var irf data.csv --shock=1 --horizons=20 --id=cholesky
+
+# Sign restrictions (requires config)
+friedman var irf data.csv --id=sign --config=sign_restrictions.toml
+
+# Narrative sign restrictions
+friedman var irf data.csv --id=narrative --config=narrative.toml
+
+# Long-run (Blanchard-Quah) identification
+friedman var irf data.csv --id=longrun --horizons=40
+
+# Arias et al. (2018) zero/sign restrictions
+friedman var irf data.csv --id=arias --config=arias_restrictions.toml
+
+# With bootstrap confidence intervals
+friedman var irf data.csv --shock=1 --ci=bootstrap --replications=1000
+
+# Theoretical CIs or no CIs
+friedman var irf data.csv --ci=theoretical
+friedman var irf data.csv --ci=none
+
+# FEVD with Cholesky identification
+friedman var fevd data.csv --horizons=20 --id=cholesky
+
+# FEVD with sign restrictions
+friedman var fevd data.csv --id=sign --config=sign_restrictions.toml
+
+# Historical decomposition
+friedman var hd data.csv --id=cholesky
+friedman var hd data.csv --id=longrun --lags=4
+
+# h-step ahead forecast with confidence intervals
+friedman var forecast data.csv --horizons=12 --confidence=0.95
+friedman var forecast data.csv --lags=4 --horizons=24
 ```
 
 ### Bayesian VAR
@@ -61,56 +94,20 @@ friedman bvar estimate data.csv --config=prior.toml
 # Posterior summary (mean or median)
 friedman bvar posterior data.csv --lags=4 --method=mean
 friedman bvar posterior data.csv --method=median --sampler=hmc
-```
 
-### Impulse Response Functions
-
-```bash
-# Cholesky identification
-friedman irf compute data.csv --shock=1 --horizons=20 --id=cholesky
-
-# Sign restrictions (requires config)
-friedman irf compute data.csv --id=sign --config=sign_restrictions.toml
-
-# Narrative sign restrictions
-friedman irf compute data.csv --id=narrative --config=narrative.toml
-
-# Long-run (Blanchard-Quah) identification
-friedman irf compute data.csv --id=longrun --horizons=40
-
-# Arias et al. (2018) zero/sign restrictions
-friedman irf compute data.csv --id=arias --config=arias_restrictions.toml
-
-# With bootstrap confidence intervals
-friedman irf compute data.csv --shock=1 --ci=bootstrap --replications=1000
-
-# Theoretical CIs or no CIs
-friedman irf compute data.csv --ci=theoretical
-friedman irf compute data.csv --ci=none
-
-# Bayesian IRFs (BVAR + posterior credible intervals)
-friedman irf compute data.csv --bayesian --shock=1 --horizons=20
-friedman irf compute data.csv --bayesian --draws=5000 --sampler=hmc --config=prior.toml
-```
-
-### FEVD & Historical Decomposition
-
-```bash
-# FEVD with Cholesky identification
-friedman fevd compute data.csv --horizons=20 --id=cholesky
-
-# FEVD with sign restrictions
-friedman fevd compute data.csv --id=sign --config=sign_restrictions.toml
+# Bayesian IRFs (posterior credible intervals)
+friedman bvar irf data.csv --shock=1 --horizons=20
+friedman bvar irf data.csv --draws=5000 --sampler=hmc --config=prior.toml
 
 # Bayesian FEVD
-friedman fevd compute data.csv --bayesian --horizons=20
-
-# Historical decomposition
-friedman hd compute data.csv --id=cholesky
-friedman hd compute data.csv --id=longrun --lags=4
+friedman bvar fevd data.csv --horizons=20
 
 # Bayesian historical decomposition
-friedman hd compute data.csv --bayesian --draws=2000
+friedman bvar hd data.csv --draws=2000
+
+# Bayesian forecast (posterior credible intervals)
+friedman bvar forecast data.csv --horizons=12 --draws=2000
+friedman bvar forecast data.csv --horizons=24 --sampler=hmc --config=prior.toml
 ```
 
 ### Local Projections
@@ -120,43 +117,56 @@ friedman hd compute data.csv --bayesian --draws=2000
 friedman lp estimate data.csv --shock=1 --horizons=20 --vcov=newey_west
 
 # LP-IV (Stock & Watson 2018)
-friedman lp iv data.csv --shock=1 --instruments=instruments.csv
+friedman lp estimate data.csv --method=iv --shock=1 --instruments=instruments.csv
 
 # Smooth LP (Barnichon & Brownlees 2019) — auto-selects lambda via CV
-friedman lp smooth data.csv --shock=1 --horizons=20 --knots=3
-friedman lp smooth data.csv --shock=1 --lambda=0.5
+friedman lp estimate data.csv --method=smooth --shock=1 --horizons=20 --knots=3
+friedman lp estimate data.csv --method=smooth --shock=1 --lambda=0.5
 
 # State-dependent LP (Auerbach & Gorodnichenko 2013)
-friedman lp state data.csv --shock=1 --state-var=2 --gamma=1.5
-friedman lp state data.csv --shock=1 --state-var=3 --method=exponential
+friedman lp estimate data.csv --method=state --shock=1 --state-var=2 --gamma=1.5
+friedman lp estimate data.csv --method=state --shock=1 --state-var=3 --transition=exponential
 
 # Propensity score LP (Angrist et al. 2018)
-friedman lp propensity data.csv --treatment=1 --score-method=logit
-
-# Multi-shock LP (simultaneous shocks)
-friedman lp multi data.csv --shocks=1,2,3 --horizons=20
+friedman lp estimate data.csv --method=propensity --treatment=1 --score-method=logit
 
 # Doubly robust LP (propensity score + outcome regression)
-friedman lp robust data.csv --treatment=1 --score-method=logit
+friedman lp estimate data.csv --method=robust --treatment=1 --score-method=logit
+
+# Structural LP IRFs (with identification)
+friedman lp irf data.csv --id=cholesky --shock=1 --horizons=20
+friedman lp irf data.csv --id=sign --config=sign_restrictions.toml
+friedman lp irf data.csv --shocks=1,2,3 --id=cholesky --horizons=30
+
+# LP FEVD (via structural LP's VAR model)
+friedman lp fevd data.csv --horizons=20 --id=cholesky
+
+# LP Historical Decomposition
+friedman lp hd data.csv --id=cholesky
+
+# Direct LP forecast
+friedman lp forecast data.csv --shock=1 --horizons=12 --shock-size=1.0
+friedman lp forecast data.csv --shock=1 --horizons=24 --ci-method=bootstrap --n-boot=500
 ```
 
 ### Factor Models
 
 ```bash
 # Static (PCA) — auto-selects factors via Bai-Ng IC
-friedman factor static data.csv
-friedman factor static data.csv --nfactors=3 --criterion=ic2
+friedman factor estimate static data.csv
+friedman factor estimate static data.csv --nfactors=3 --criterion=ic2
 
 # Dynamic factor model
-friedman factor dynamic data.csv --nfactors=2 --factor-lags=1 --method=twostep
+friedman factor estimate dynamic data.csv --nfactors=2 --factor-lags=1 --method=twostep
 
 # Generalized DFM (spectral)
-friedman factor gdfm data.csv --dynamic-rank=2
+friedman factor estimate gdfm data.csv --dynamic-rank=2
 
-# Factor model forecasting
+# Factor model forecasting (static, dynamic, or GDFM)
 friedman factor forecast data.csv --horizon=12
-friedman factor forecast data.csv --nfactors=3 --horizon=24 --ci-method=bootstrap
-friedman factor forecast data.csv --ci-method=parametric --conf-level=0.90
+friedman factor forecast data.csv --model=static --nfactors=3 --horizon=24 --ci-method=bootstrap
+friedman factor forecast data.csv --model=dynamic --nfactors=2 --factor-lags=1 --horizon=12
+friedman factor forecast data.csv --model=gdfm --dynamic-rank=2 --horizon=12
 ```
 
 ### Unit Root & Cointegration Tests
@@ -198,9 +208,9 @@ friedman arima estimate data.csv --p=0 --q=3             # MA(3)
 friedman arima estimate data.csv --p=2 --q=1             # ARMA(2,1)
 friedman arima estimate data.csv --p=1 --d=1 --q=1 --method=mle --column=2
 
-# Automatic order selection (searches over p, d, q grids)
-friedman arima auto data.csv --criterion=bic
-friedman arima auto data.csv --max-p=5 --max-d=2 --max-q=5 --criterion=aic
+# Automatic order selection (omit --p to auto-select)
+friedman arima estimate data.csv --criterion=bic
+friedman arima estimate data.csv --max-p=5 --max-d=2 --max-q=5 --criterion=aic
 
 # Forecast (auto model selection + h-step forecast with confidence intervals)
 friedman arima forecast data.csv --horizons=12 --confidence=0.95
@@ -212,14 +222,20 @@ friedman arima forecast data.csv --p=2 --d=1 --q=1 --horizons=24
 ### Non-Gaussian SVAR
 
 ```bash
-# ICA-based identification (FastICA, Infomax, JADE)
+# ICA-based identification (FastICA, Infomax, JADE, SOBI, dCov, HSIC)
 friedman nongaussian fastica data.csv --method=fastica --contrast=logcosh
 friedman nongaussian fastica data.csv --method=infomax --lags=4
 friedman nongaussian fastica data.csv --method=jade
+friedman nongaussian fastica data.csv --method=sobi
+friedman nongaussian fastica data.csv --method=dcov
+friedman nongaussian fastica data.csv --method=hsic
 
-# Maximum likelihood (Student-t, skew-t, GHD)
+# Maximum likelihood (Student-t, skew-t, GHD, mixture-normal, PML, skew-normal)
 friedman nongaussian ml data.csv --distribution=student_t
 friedman nongaussian ml data.csv --distribution=skew_t --lags=2
+friedman nongaussian ml data.csv --distribution=mixture_normal
+friedman nongaussian ml data.csv --distribution=pml
+friedman nongaussian ml data.csv --distribution=skew_normal
 
 # Heteroskedasticity-based identification
 friedman nongaussian heteroskedasticity data.csv --method=markov --regimes=2
@@ -234,6 +250,7 @@ friedman nongaussian normality data.csv --lags=4
 friedman nongaussian identifiability data.csv --test=all
 friedman nongaussian identifiability data.csv --test=strength
 friedman nongaussian identifiability data.csv --test=gaussianity --method=fastica
+friedman nongaussian identifiability data.csv --test=overidentification --method=sobi
 ```
 
 ## Output Formats

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Friedman-cli (v0.1.2) is a Julia CLI for macroeconometric analysis, wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl) (v0.1.2, 144+ exports, 27+ source files). It provides terminal-based VAR/BVAR estimation, impulse response analysis, factor models, local projections, unit root/cointegration tests, GMM estimation, ARIMA modeling/forecasting, and non-Gaussian SVAR identification. MIT licensed. ~3,100 lines across 24 source files.
+Friedman-cli (v0.1.3) is a Julia CLI for macroeconometric analysis, wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl) (v0.1.3, 160+ exports, 30+ source files). It provides terminal-based VAR/BVAR estimation, impulse response analysis, factor models, local projections, unit root/cointegration tests, GMM estimation, ARIMA modeling/forecasting, and non-Gaussian SVAR identification. Pipeline-based CLI: post-estimation commands (irf, fevd, hd, forecast) nest under their model type (var, bvar, or lp). MIT licensed. ~3,100 lines across 22 source files.
 
 ## Quick Reference
 
@@ -40,16 +40,14 @@ src/
     help.jl               # print_help() generates colored, column-aligned help text
     COMONICON_LICENSE      # License for adapted Comonicon.jl code
   commands/
-    var.jl                # VAR: estimate, lagselect, stability
-    bvar.jl               # BVAR: estimate, posterior
-    irf.jl                # IRF: compute (cholesky/sign/narrative/longrun/arias, --bayesian)
-    fevd.jl               # FEVD: compute (--bayesian)
-    hd.jl                 # Historical Decomposition: compute (--bayesian)
-    lp.jl                 # Local Projections: estimate, iv, smooth, state, propensity, multi, robust
-    factor.jl             # Factor Models: static, dynamic, gdfm, forecast
+    shared.jl             # Shared utilities: ID_METHOD_MAP, _load_and_estimate_var/bvar, _load_and_structural_lp, _build_prior, _build_check_func
+    var.jl                # VAR pipeline: estimate, lagselect, stability, irf, fevd, hd, forecast
+    bvar.jl               # BVAR pipeline: estimate, posterior, irf, fevd, hd, forecast
+    lp.jl                 # LP pipeline: estimate (standard|iv|smooth|state|propensity|robust), irf, fevd, hd, forecast
+    factor.jl             # Factor Models: estimate (static|dynamic|gdfm), forecast
     test_cmd.jl           # Unit Root/Cointegration: adf, kpss, pp, za, np, johansen
     gmm.jl                # GMM: estimate
-    arima.jl              # ARIMA: estimate, auto, forecast
+    arima.jl              # ARIMA: estimate (explicit or auto), forecast
     nongaussian.jl        # Non-Gaussian SVAR: fastica, ml, heteroskedasticity, normality, identifiability
   config.jl               # TOML loader: load_config, get_prior, get_identification, get_gmm, get_nongaussian
   io.jl                   # Data I/O: load_data, df_to_matrix, variable_names, output_result, output_kv
@@ -72,20 +70,17 @@ Julia compat: `≥ 1.10`
 
 ```
 friedman
-├── var          estimate | lagselect | stability
-├── bvar         estimate | posterior
-├── irf          compute [--bayesian]
-├── fevd         compute [--bayesian]
-├── hd           compute [--bayesian]
-├── lp           estimate | iv | smooth | state | propensity | multi | robust
-├── factor       static | dynamic | gdfm | forecast
+├── var          estimate | lagselect | stability | irf | fevd | hd | forecast
+├── bvar         estimate | posterior | irf | fevd | hd | forecast
+├── lp           estimate | irf | fevd | hd | forecast
+├── factor       estimate (static | dynamic | gdfm) | forecast
 ├── test         adf | kpss | pp | za | np | johansen
 ├── gmm          estimate
-├── arima        estimate | auto | forecast
+├── arima        estimate | forecast
 └── nongaussian  fastica | ml | heteroskedasticity | normality | identifiability
 ```
 
-Total: 11 top-level commands, 35 subcommands (+ 3 Bayesian flags).
+Total: 8 top-level commands, 37 subcommands. Post-estimation (irf/fevd/hd/forecast) nests under model type (var, bvar, lp) — no `--bayesian` flags.
 
 ## Architecture
 
@@ -98,7 +93,7 @@ bin/friedman ARGS
     → build_app()                          # constructs Entry with full command tree
       → register_var_commands!()           # each returns NodeCommand with LeafCommand children
       → register_bvar_commands!()
-      → ... (11 register functions)
+      → ... (8 register functions)
     → dispatch(entry, ARGS)
       → dispatch_node()                    # walks NodeCommand tree by matching arg tokens
       → dispatch_leaf()                    # tokenize → bind_args → leaf.handler(; bound...)
@@ -146,48 +141,58 @@ Parser features: `--opt=val`, `--opt val`, `-o val`, bundled `-abc`, `--` stops 
 
 ## Command Details
 
-### var (var.jl, 169 lines)
+### shared (shared.jl, ~255 lines)
+- `ID_METHOD_MAP` — maps CLI id strings ("cholesky"/"sign"/"narrative"/"longrun") to library symbols
+- `_load_and_estimate_var(data, lags)` — load CSV, auto lag selection, estimate frequentist VAR
+- `_load_and_estimate_bvar(data, lags, config, draws, sampler)` — load CSV, build prior, estimate Bayesian VAR via MCMC
+- `_load_and_structural_lp(data, horizons, lags, var_lags, id, vcov, config)` — load CSV, build identification, call `structural_lp()`, returns `(slp, Y, varnames)`
+- `_build_prior(config, Y, p)` — builds `MinnesotaHyperparameters` from TOML or auto-estimates AR(1) residual σ
+- `_build_check_func(config)` — constructs sign_matrix and narrative check closures from TOML
+- `_build_identification_kwargs(id, config)` — assembles kwargs dict (method, check_func, narrative_check)
+- `_var_forecast_point(B, Y, p, horizons)` — iterates VAR equation h steps ahead for point forecasts
+
+### var (var.jl, 447 lines)
 - **estimate** — OLS VAR(p), auto lag selection, outputs coefficients + AIC/BIC/HQC/loglik
 - **lagselect** — estimates VAR for each p=1..max, prints IC table, reports optimal
 - **stability** — companion matrix eigenvalues, stationarity check (all |λ| < 1)
+- **irf** — frequentist IRFs with 5 identification schemes: cholesky, sign, narrative, longrun, arias. Bootstrap/theoretical CIs
+- **fevd** — FEVD proportions (n_vars × n_shocks × horizons), per-variable output tables
+- **hd** — historical decomposition: actual values, initial conditions, shock contributions. Calls `verify_decomposition()` for validation
+- **forecast** — h-step ahead VAR point forecasts with analytical confidence intervals (MA(∞) MSE)
+- Helper: `_var_irf_arias()` — Arias identification via `identify_arias()` with zero/sign `SVARRestrictions`
+- Helper: `quantile_normal()` — normal quantile without Distributions.jl dependency
+- Uses shared: `_load_and_estimate_var()`, `_build_identification_kwargs()`, `_var_forecast_point()`
 
-### bvar (bvar.jl, 173 lines)
+### bvar (bvar.jl, 386 lines)
 - **estimate** — Bayesian VAR with MCMC (nuts/hmc/smc), Minnesota prior (optional TOML config with hyperparameter optimization)
 - **posterior** — posterior mean or median extraction, outputs coefficients + IC
-- Helper: `_build_prior()` — builds `MinnesotaHyperparameters` from TOML or auto-estimates AR(1) residual σ
+- **irf** — Bayesian IRFs with 68% credible intervals (16th/50th/84th percentiles), sign/narrative identification
+- **fevd** — Bayesian FEVD, posterior mean proportions per variable
+- **hd** — Bayesian historical decomposition, posterior mean contributions + initial conditions
+- **forecast** — Bayesian h-step ahead forecasts with 68% credible intervals from posterior draws; uses `MacroEconometricModels.extract_chain_parameters`/`parameters_to_model` (internal, not exported in v0.1.3)
+- Uses shared: `_load_and_estimate_bvar()`, `_build_prior()`, `_build_check_func()`, `ID_METHOD_MAP`, `_var_forecast_point()`
 
-### irf (irf.jl, ~280 lines)
-- **compute** — IRFs with 5 identification schemes: cholesky, sign, narrative, longrun, arias
-- Bootstrap/theoretical CIs, sign restriction checker from TOML config
-- Arias identification handled separately via `identify_arias()` with zero/sign `SVARRestrictions`
-- `--bayesian` flag: estimates BVAR, computes posterior IRFs with 68% credible intervals (16th/50th/84th percentiles)
-- Helper: `_build_check_func()` — constructs sign_matrix and narrative check closures from TOML
-- Helper: `_irf_bayesian()` — BVAR estimation + Bayesian IRF with quantile output
+### lp (lp.jl, ~550 lines)
+- **estimate** — unified estimation with `--method=standard|iv|smooth|state|propensity|robust`; dispatches to internal helpers per method
+  - standard: Jorda (2005) LP with Newey-West/White/Driscoll-Kraay HAC
+  - iv: LP-IV (Stock & Watson 2018) with external instruments, weak instrument F-test
+  - smooth: Barnichon & Brownlees (2019) B-spline smoothed LP, auto λ via cross-validation
+  - state: Auerbach & Gorodnichenko (2013) state-dependent LP with logistic/exponential/indicator transition, Wald test
+  - propensity: Angrist et al. (2018) propensity score LP with logit/probit, reports ATE + diagnostics
+  - robust: doubly robust LP, combines propensity score + outcome regression
+- **irf** — structural LP IRFs via `structural_lp()`, supports cholesky/sign/narrative/longrun identification, multi-shock via `--shocks=1,2,3`
+- **fevd** — native LP-FEVD via `lp_fevd(slp, horizons)` with bias-corrected proportions (Gorodnichenko & Lee 2019)
+- **hd** — native LP HD via `historical_decomposition(slp, T_hd)`, verify decomposition
+- **forecast** — direct LP forecast via `forecast(LPModel, shock_path)`, unit impulse with `--shock-size`, analytical/bootstrap CIs
+- Helpers: `_lp_estimate_standard()`, `_lp_estimate_iv()`, `_lp_estimate_smooth()`, `_lp_estimate_state()`, `_lp_estimate_propensity()`, `_lp_estimate_robust()`
+- Uses shared: `_load_and_structural_lp()`, `_build_check_func()`, `ID_METHOD_MAP`
 
-### fevd (fevd.jl, ~135 lines)
-- **compute** — FEVD proportions (n_vars × n_shocks × horizons), per-variable output tables
-- Reuses `_build_check_func()` from irf.jl for sign/narrative identification
-- `--bayesian` flag: estimates BVAR, computes posterior mean FEVD proportions
-
-### hd (hd.jl, ~170 lines)
-- **compute** — historical decomposition: actual values, initial conditions, shock contributions
-- Calls `verify_decomposition()` for validation, `contribution()` per variable per shock
-- `--bayesian` flag: estimates BVAR, computes posterior mean contributions + initial conditions
-
-### lp (lp.jl, ~380 lines)
-- **estimate** — Jorda (2005) local projections with Newey-West/White/Driscoll-Kraay HAC
-- **iv** — LP-IV (Stock & Watson 2018) with external instruments, weak instrument F-test
-- **smooth** — Barnichon & Brownlees (2019) B-spline smoothed LP, auto λ via cross-validation
-- **state** — Auerbach & Gorodnichenko (2013) state-dependent LP with logistic/exponential/indicator transition, Wald test for regime differences
-- **propensity** — Angrist et al. (2018) propensity score LP with logit/probit, reports ATE + diagnostics
-- **multi** — multi-shock LP via `estimate_lp_multi()`, comma-separated shock indices, outputs per-shock IRF tables
-- **robust** — doubly robust LP via `doubly_robust_lp()`, combines propensity score + outcome regression
-
-### factor (factor.jl, ~250 lines)
-- **static** — PCA factor model, Bai-Ng IC (ic1/ic2/ic3) for factor count, scree data + loadings
-- **dynamic** — dynamic factor model with factor VAR, stationarity check, companion eigenvalues
-- **gdfm** — generalized dynamic factor model, common variance shares
-- **forecast** — forecast observables using static factor model, optional bootstrap/parametric CIs
+### factor (factor.jl, ~330 lines)
+- **estimate static** — PCA factor model, Bai-Ng IC (ic1/ic2/ic3) for factor count, scree data + loadings
+- **estimate dynamic** — dynamic factor model with factor VAR, stationarity check, companion eigenvalues
+- **estimate gdfm** — generalized dynamic factor model, common variance shares
+- **forecast** — forecast observables using factor model; `--model=static|dynamic|gdfm` selects model type (default: static); static supports bootstrap/parametric CIs, dynamic uses factor VAR extrapolation, GDFM uses common component AR(1) projection
+- Helpers: `_factor_forecast_static()`, `_factor_forecast_dynamic()`, `_factor_forecast_gdfm()`
 
 ### test (test_cmd.jl, 267 lines)
 - **adf** — Augmented Dickey-Fuller (auto lag via AIC, trend options)
@@ -203,19 +208,18 @@ Parser features: `--opt=val`, `--opt val`, `-o val`, bundled `-abc`, `--` stops 
 - Hansen's J-test for overidentification, parameter estimates with standard errors
 - Requires TOML config specifying moment conditions
 
-### arima (arima.jl, ~170 lines)
-- **estimate** — Estimate ARIMA(p,d,q) with explicit orders; auto-dispatches to `estimate_ar`/`estimate_ma`/`estimate_arma`/`estimate_arima` based on (p,d,q)
-- **auto** — Automatic order selection via `auto_arima()`, reports selected (p,d,q) + coefficients + IC
+### arima (arima.jl, ~185 lines)
+- **estimate** — Estimate ARIMA(p,d,q): explicit orders when `--p` given, auto-selects via `auto_arima()` when `--p` omitted; auto-dispatches to `estimate_ar`/`estimate_ma`/`estimate_arma`/`estimate_arima` based on (p,d,q); reports coefficients + AIC/BIC/loglik
 - **forecast** — Estimate + forecast in one step; uses `auto_arima` if `--p` omitted, outputs horizon/forecast/CI/SE table
 - Helpers: `_estimate_arima_model()`, `_model_label()`, `_arima_coef_table()`
 - Reuses `_extract_series()` from test_cmd.jl for single-column extraction
 
-### nongaussian (nongaussian.jl, ~280 lines)
-- **fastica** — ICA-based SVAR identification (FastICA/Infomax/JADE), outputs B0 matrix + structural shocks
-- **ml** — Maximum likelihood non-Gaussian SVAR (Student-t/skew-t/GHD), outputs B0 + log-likelihood + AIC/BIC
+### nongaussian (nongaussian.jl, ~310 lines)
+- **fastica** — ICA-based SVAR identification (FastICA/Infomax/JADE/SOBI/dCov/HSIC), outputs B0 matrix + structural shocks
+- **ml** — Maximum likelihood non-Gaussian SVAR (Student-t/skew-t/GHD/mixture-normal/PML/skew-normal), outputs B0 + log-likelihood + AIC/BIC
 - **heteroskedasticity** — Heteroskedasticity-based identification (Markov-switching/GARCH/smooth-transition/external volatility)
 - **normality** — Normality test suite for VAR residuals, reports which tests reject Gaussianity
-- **identifiability** — Tests for identification strength, shock Gaussianity, independence, Gaussian vs non-Gaussian comparison
+- **identifiability** — Tests for identification strength, shock Gaussianity, independence, overidentification, Gaussian vs non-Gaussian comparison
 - Helper: `_ng_estimate_var()` — shared VAR estimation with auto lag selection
 
 ## TOML Configuration
@@ -232,7 +236,7 @@ lambda4 = 100000.0  # constant term variance
 [prior.optimization]
 enabled = true      # auto-optimize hyperparameters
 
-# Sign restrictions (for irf/fevd/hd)
+# Sign restrictions (for var irf/fevd/hd, bvar irf/fevd/hd)
 [identification]
 method = "sign"
 [identification.sign_matrix]
@@ -280,8 +284,12 @@ Tests (`test/runtests.jl`) cover CLI engine, IO, and config — no MacroEconomet
 - **Argument binding** — type conversion, defaults, short aliases, required arg validation, excess arg rejection
 - **Help generation** — output contains expected command names, argument labels, option flags
 - **Dispatch** — walks node→leaf correctly, passes bound args to handler, help flags don't error
+- **VAR pipeline structure** — var node has irf/fevd/hd/forecast as LeafCommands, dispatch, help text, arg binding
+- **BVAR pipeline structure** — bvar node has irf/fevd/hd/forecast as LeafCommands with draws/sampler options, no flags
+- **LP pipeline structure** — lp node has 5 subcmds (estimate/irf/fevd/hd/forecast), no old flat cmds (iv/smooth/state/propensity/multi/robust), option counts, help text, dispatch
+- **Pipeline cleanup** — verifies top-level root no longer has irf/fevd/hd commands
 - **Non-Gaussian SVAR structure** — 5 subcommands with correct options, help text, dispatch
-- **Factor forecast structure** — leaf with correct options, arg binding
+- **Factor command structure** — estimate NodeCommand (static/dynamic/gdfm) + forecast LeafCommand, dispatch through 3 levels
 - **IO utilities** — load_data, df_to_matrix, variable_names, output_result (CSV/JSON/table), output_kv
 - **Config parsing** — load_config, get_identification, get_prior, get_gmm, get_nongaussian
 
@@ -351,6 +359,9 @@ SmoothTransitionSVARResult{T}  # B0, transition parameters
 ExternalVolatilitySVARResult{T}  # B0, regime indicator
 NormalityTestSuite{T}    # results::Vector{NormalityTestResult{T}}
 NormalityTestResult{T}   # test_name, statistic, pvalue, df
+StructuralLP{T}          # irf, var_model, Q, method, se, lp_models
+LPForecast{T}            # forecasts, ci_lower, ci_upper, se, horizon, response_vars, shock_var, shock_path
+LPFEVD{T}                # R2, lp_a, lp_b, bias_corrected, bootstrap_se, horizons, variables, shocks
 FactorForecast{T}        # factors, observables, *_lower, *_upper, observables_se, horizon, conf_level, ci_method
 ```
 
@@ -409,16 +420,23 @@ irf_percentiles(result; probs=[0.16, 0.5, 0.84]) → Array
 irf_mean(result) → Array
 ```
 
-### Non-Gaussian SVAR Identification (v0.1.2)
+### Non-Gaussian SVAR Identification (v0.1.3)
 
 ```julia
 # ICA methods
 identify_fastica(model::VARModel{T}; contrast=:logcosh, max_iter=200, tol=1e-6) → ICASVARResult{T}
 identify_infomax(model::VARModel{T}; max_iter=200, tol=1e-6, learning_rate=0.01) → ICASVARResult{T}
 identify_jade(model::VARModel{T}) → ICASVARResult{T}
+identify_sobi(model::VARModel{T}) → ICASVARResult{T}
+identify_dcov(model::VARModel{T}) → ICASVARResult{T}
+identify_hsic(model::VARModel{T}) → ICASVARResult{T}
 
-# ML method
+# ML methods
 identify_nongaussian_ml(model::VARModel{T}; distribution=:student_t, max_iter=500, tol=1e-6) → NonGaussianMLResult{T}
+identify_student_t(model::VARModel{T}) → NonGaussianMLResult{T}
+identify_mixture_normal(model::VARModel{T}) → NonGaussianMLResult{T}
+identify_pml(model::VARModel{T}) → NonGaussianMLResult{T}
+identify_skew_normal(model::VARModel{T}) → NonGaussianMLResult{T}
 
 # Heteroskedasticity-based
 identify_markov_switching(model::VARModel{T}; n_regimes=2, max_iter=200, tol=1e-6) → MarkovSwitchingSVARResult{T}
@@ -432,6 +450,7 @@ test_identification_strength(model::VARModel) → NamedTuple
 test_shock_gaussianity(result::ICASVARResult) → NamedTuple
 test_gaussian_vs_nongaussian(model::VARModel) → NamedTuple
 test_shock_independence(result::ICASVARResult) → NamedTuple
+test_overidentification(result::ICASVARResult) → NamedTuple
 ```
 
 ### Impulse Response Functions
@@ -507,6 +526,21 @@ estimate_lp_multi(Y, shock_vars, horizon; ...) → Vector{LPModel}
 estimate_lp_cholesky(Y, horizon; lags=4) → ...
 lp_irf(model; conf_level=0.95) → LPImpulseResponse
 compare_var_lp(Y, horizon; lags=4) → NamedTuple
+
+# Structural LP (v0.1.3)
+structural_lp(Y, horizon; method, lags, var_lags, cov_type, ci_type, reps,
+    conf_level, check_func, narrative_check, max_draws) → StructuralLP{T}
+# Fields: irf::ImpulseResponse{T}, var_model::VARModel{T}, Q::Matrix{T},
+#         method::Symbol, se::Array{T,3}, lp_models::Vector{LPModel{T}}
+irf(slp::StructuralLP) → ImpulseResponse{T}
+lp_fevd(slp::StructuralLP, horizons; estimator=:R2, n_boot=200, conf_level=0.95) → LPFEVD{T}
+# LPFEVD fields: R2, lp_a, lp_b, bias_corrected, bootstrap_se (Gorodnichenko & Lee 2019)
+historical_decomposition(slp::StructuralLP, T_hd) → HistoricalDecomposition{T}
+
+# LP Forecast (v0.1.3)
+forecast(model::LPModel, shock_path; ci_method=:analytical, conf_level=0.95, n_boot=500) → LPForecast{T}
+forecast(slp::StructuralLP, shock_idx, shock_path; ...) → LPForecast{T}
+# LPForecast fields: forecasts, ci_lower, ci_upper, se, horizon, response_vars, shock_var, shock_path
 
 # LP-IV (Stock & Watson 2018)
 estimate_lp_iv(Y, shock_var, instruments, horizon; lags=4, cov_type=:newey_west) → LPIVModel
@@ -606,27 +640,31 @@ point_estimate(result), has_uncertainty(result), uncertainty_bounds(result)
 | VAR estimation | `var estimate` | Wrapped |
 | Lag selection | `var lagselect` | Wrapped |
 | Stationarity check | `var stability` | Wrapped |
+| Frequentist IRF (5 methods) | `var irf` | Wrapped |
+| Frequentist FEVD | `var fevd` | Wrapped |
+| Frequentist HD | `var hd` | Wrapped |
+| VAR forecast | `var forecast` | Wrapped |
 | Bayesian VAR | `bvar estimate/posterior` | Wrapped |
 | Minnesota prior | `bvar --config` | Wrapped |
-| IRF (5 methods) | `irf compute` | Wrapped |
-| Bayesian IRF | `irf compute --bayesian` | Wrapped |
-| FEVD | `fevd compute` | Wrapped |
-| Bayesian FEVD | `fevd compute --bayesian` | Wrapped |
-| Historical decomposition | `hd compute` | Wrapped |
-| Bayesian HD | `hd compute --bayesian` | Wrapped |
-| Local projections (5 variants) | `lp estimate/iv/smooth/state/propensity` | Wrapped |
-| Multi-shock LP | `lp multi` | Wrapped |
-| Doubly robust LP | `lp robust` | Wrapped |
-| Static factor model | `factor static` | Wrapped |
-| Dynamic factor model | `factor dynamic` | Wrapped |
-| Generalized DFM | `factor gdfm` | Wrapped |
+| Bayesian IRF | `bvar irf` | Wrapped |
+| Bayesian FEVD | `bvar fevd` | Wrapped |
+| Bayesian HD | `bvar hd` | Wrapped |
+| Bayesian forecast | `bvar forecast` | Wrapped |
+| Local projections (6 methods) | `lp estimate --method=standard\|iv\|smooth\|state\|propensity\|robust` | Wrapped |
+| Structural LP IRFs | `lp irf` | Wrapped |
+| LP FEVD (native, bias-corrected) | `lp fevd` | Wrapped |
+| LP HD (native, structural LP) | `lp hd` | Wrapped |
+| LP forecast | `lp forecast` | Wrapped |
+| Static factor model | `factor estimate static` | Wrapped |
+| Dynamic factor model | `factor estimate dynamic` | Wrapped |
+| Generalized DFM | `factor estimate gdfm` | Wrapped |
 | Unit root tests (5 types) | `test adf/kpss/pp/za/np` | Wrapped |
 | Johansen cointegration | `test johansen` | Wrapped |
 | GMM | `gmm estimate` | Wrapped |
-| ARIMA (AR/MA/ARMA/ARIMA/auto) | `arima estimate/auto/forecast` | Wrapped |
+| ARIMA (AR/MA/ARMA/ARIMA/auto) | `arima estimate/forecast` | Wrapped |
 | Factor model forecasting | `factor forecast` | Wrapped |
-| ICA SVAR (FastICA/Infomax/JADE) | `nongaussian fastica` | Wrapped |
-| Non-Gaussian ML SVAR | `nongaussian ml` | Wrapped |
+| ICA SVAR (FastICA/Infomax/JADE/SOBI/dCov/HSIC) | `nongaussian fastica` | Wrapped |
+| Non-Gaussian ML SVAR (+ mixture normal/PML/skew-normal) | `nongaussian ml` | Wrapped |
 | Heteroskedasticity SVAR | `nongaussian heteroskedasticity` | Wrapped |
 | Normality test suite | `nongaussian normality` | Wrapped |
 | Identifiability tests | `nongaussian identifiability` | Wrapped |

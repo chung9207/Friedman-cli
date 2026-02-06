@@ -7,7 +7,7 @@ function register_nongaussian_commands!()
         ],
         options=[
             Option("lags"; short="p", type=Int, default=nothing, description="Lag order (default: auto via AIC)"),
-            Option("method"; type=String, default="fastica", description="fastica|infomax|jade"),
+            Option("method"; type=String, default="fastica", description="fastica|infomax|jade|sobi|dcov|hsic"),
             Option("contrast"; type=String, default="logcosh", description="logcosh|exp|kurtosis (for FastICA)"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
@@ -20,7 +20,7 @@ function register_nongaussian_commands!()
         ],
         options=[
             Option("lags"; short="p", type=Int, default=nothing, description="Lag order (default: auto via AIC)"),
-            Option("distribution"; short="d", type=String, default="student_t", description="student_t|skew_t|ghd"),
+            Option("distribution"; short="d", type=String, default="student_t", description="student_t|skew_t|ghd|mixture_normal|pml|skew_normal"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
         ],
@@ -57,8 +57,8 @@ function register_nongaussian_commands!()
         ],
         options=[
             Option("lags"; short="p", type=Int, default=nothing, description="Lag order (default: auto via AIC)"),
-            Option("test"; short="t", type=String, default="all", description="strength|gaussianity|independence|all"),
-            Option("method"; type=String, default="fastica", description="fastica|infomax|jade (for gaussianity/independence tests)"),
+            Option("test"; short="t", type=String, default="all", description="strength|gaussianity|independence|overidentification|all"),
+            Option("method"; type=String, default="fastica", description="fastica|infomax|jade|sobi|dcov|hsic (for gaussianity/independence/overidentification tests)"),
             Option("contrast"; type=String, default="logcosh", description="logcosh|exp|kurtosis (for FastICA)"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
@@ -108,15 +108,23 @@ function _nongaussian_fastica(; data::String, lags=nothing, method::String="fast
         identify_infomax(model)
     elseif method == "jade"
         identify_jade(model)
+    elseif method == "sobi"
+        identify_sobi(model)
+    elseif method == "dcov"
+        identify_dcov(model)
+    elseif method == "hsic"
+        identify_hsic(model)
     else
         identify_fastica(model; contrast=Symbol(contrast))
     end
 
     # Convergence info
-    if result.converged
-        printstyled("Converged in $(result.iterations) iterations\n"; color=:green)
-    else
-        printstyled("Did not converge after $(result.iterations) iterations\n"; color=:yellow)
+    if hasproperty(result, :converged)
+        if result.converged
+            printstyled("Converged in $(result.iterations) iterations\n"; color=:green)
+        else
+            printstyled("Did not converge after $(result.iterations) iterations\n"; color=:yellow)
+        end
     end
     println()
 
@@ -144,7 +152,15 @@ function _nongaussian_ml(; data::String, lags=nothing, distribution::String="stu
     println("Non-Gaussian ML SVAR: distribution=$distribution, VAR($p), $n variables")
     println()
 
-    result = identify_nongaussian_ml(model; distribution=Symbol(distribution))
+    result = if distribution == "mixture_normal"
+        identify_mixture_normal(model)
+    elseif distribution == "pml"
+        identify_pml(model)
+    elseif distribution == "skew_normal"
+        identify_skew_normal(model)
+    else
+        identify_nongaussian_ml(model; distribution=Symbol(distribution))
+    end
 
     # B0 matrix
     b0_df = DataFrame(result.B0, varnames)
@@ -291,6 +307,7 @@ function _nongaussian_identifiability(; data::String, lags=nothing, test::String
     run_strength = test == "all" || test == "strength"
     run_gaussianity = test == "all" || test == "gaussianity"
     run_independence = test == "all" || test == "independence"
+    run_overid = test == "all" || test == "overidentification"
     run_comparison = test == "all"
 
     if run_strength
@@ -303,13 +320,19 @@ function _nongaussian_identifiability(; data::String, lags=nothing, test::String
         ))
     end
 
-    # For gaussianity and independence tests, we need an ICA result
+    # For gaussianity, independence, and overidentification tests, we need an ICA result
     ica_result = nothing
-    if run_gaussianity || run_independence
+    if run_gaussianity || run_independence || run_overid
         ica_result = if method == "infomax"
             identify_infomax(model)
         elseif method == "jade"
             identify_jade(model)
+        elseif method == "sobi"
+            identify_sobi(model)
+        elseif method == "dcov"
+            identify_dcov(model)
+        elseif method == "hsic"
+            identify_hsic(model)
         else
             identify_fastica(model; contrast=Symbol(contrast))
         end
@@ -332,6 +355,16 @@ function _nongaussian_identifiability(; data::String, lags=nothing, test::String
             statistic=round(indep_result.statistic; digits=4),
             p_value=round(indep_result.pvalue; digits=4),
             conclusion=indep_result.pvalue < 0.05 ? "Reject independence" : "Cannot reject independence"
+        ))
+    end
+
+    if run_overid && !isnothing(ica_result)
+        overid_result = test_overidentification(ica_result)
+        push!(results_df, (
+            test="Overidentification",
+            statistic=round(overid_result.statistic; digits=4),
+            p_value=round(overid_result.pvalue; digits=4),
+            conclusion=overid_result.pvalue < 0.05 ? "Reject overidentification" : "Cannot reject overidentification"
         ))
     end
 

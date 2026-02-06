@@ -361,11 +361,11 @@ using Test
         @test contains(help_text, "friedman var")
 
         # Entry help includes version number
-        entry = Entry("friedman", node; version=v"0.1.2")
+        entry = Entry("friedman", node; version=v"0.1.3")
         buf = IOBuffer()
         print_help(buf, entry)
         help_text = String(take!(buf))
-        @test contains(help_text, "0.1.2")
+        @test contains(help_text, "0.1.3")
 
         # Leaf with optional argument shows [arg] not <arg>
         leaf_opt_arg = LeafCommand("test", handler;
@@ -480,9 +480,9 @@ using Test
         @test called_with[][:data] == "test.csv"
 
         # dispatch() with ["--version"] prints version
-        entry = Entry("friedman", outer_node; version=v"0.1.2")
+        entry = Entry("friedman", outer_node; version=v"0.1.3")
         version_output = strip(capture_stdout(() -> dispatch(entry, ["--version"])))
-        @test contains(version_output, "0.1.2")
+        @test contains(version_output, "0.1.3")
 
         # dispatch() with [] shows help (no error)
         help_output = capture_stdout(() -> dispatch(entry, String[]))
@@ -530,7 +530,316 @@ using Test
 
         # -V short flag triggers version
         v_output = strip(capture_stdout(() -> dispatch(entry, ["-V"])))
-        @test contains(v_output, "0.1.2")
+        @test contains(v_output, "0.1.3")
+    end
+
+    @testset "VAR pipeline structure (pipeline)" begin
+        handler = (; kwargs...) -> kwargs
+
+        # Simulate the var node structure with irf/fevd/hd as direct leaf commands
+        var_estimate = LeafCommand("estimate", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[Option("lags"; short="p", type=Int, default=nothing, description="Lag order")],
+            description="Estimate VAR(p)")
+
+        var_irf = LeafCommand("irf", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=nothing, description="Lag order"),
+                Option("shock"; type=Int, default=1, description="Shock index"),
+                Option("horizons"; short="h", type=Int, default=20, description="IRF horizon"),
+                Option("id"; type=String, default="cholesky", description="Identification method"),
+                Option("ci"; type=String, default="bootstrap", description="CI type"),
+                Option("replications"; type=Int, default=1000, description="Bootstrap reps"),
+                Option("config"; type=String, default="", description="TOML config"),
+            ],
+            description="Compute frequentist IRFs")
+
+        var_fevd = LeafCommand("fevd", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=nothing, description="Lag order"),
+                Option("horizons"; short="h", type=Int, default=20, description="Horizon"),
+                Option("id"; type=String, default="cholesky", description="Identification"),
+            ],
+            description="Compute FEVD")
+
+        var_hd = LeafCommand("hd", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=nothing, description="Lag order"),
+                Option("id"; type=String, default="cholesky", description="Identification"),
+            ],
+            description="Compute HD")
+
+        var_forecast = LeafCommand("forecast", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=nothing, description="Lag order"),
+                Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
+                Option("confidence"; type=Float64, default=0.95, description="Confidence level"),
+            ],
+            description="Compute VAR forecasts")
+
+        var_node = NodeCommand("var",
+            Dict{String,Union{NodeCommand,LeafCommand}}(
+                "estimate" => var_estimate, "irf" => var_irf,
+                "fevd" => var_fevd, "hd" => var_hd,
+                "forecast" => var_forecast),
+            "VAR pipeline")
+
+        # Structure tests
+        @test var_node.name == "var"
+        @test length(var_node.subcmds) == 5
+        @test haskey(var_node.subcmds, "estimate")
+        @test haskey(var_node.subcmds, "irf")
+        @test haskey(var_node.subcmds, "fevd")
+        @test haskey(var_node.subcmds, "hd")
+        @test haskey(var_node.subcmds, "forecast")
+
+        # irf/fevd/hd are direct leaf commands (not NodeCommands)
+        @test var_node.subcmds["irf"] isa LeafCommand
+        @test var_node.subcmds["fevd"] isa LeafCommand
+        @test var_node.subcmds["hd"] isa LeafCommand
+
+        # Dispatch: friedman var irf data.csv --id=sign
+        called_with = Ref{Any}(nothing)
+        dispatch_handler = (; kwargs...) -> begin called_with[] = Dict(kwargs) end
+
+        var_irf_dispatch = LeafCommand("irf", dispatch_handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("id"; type=String, default="cholesky", description="Method"),
+                Option("shock"; type=Int, default=1, description="Shock"),
+            ],
+            description="IRF")
+        var_dispatch = NodeCommand("var",
+            Dict{String,Union{NodeCommand,LeafCommand}}("irf" => var_irf_dispatch),
+            "VAR")
+
+        dispatch_node(var_dispatch, ["irf", "test.csv", "--id=sign", "--shock=2"]; prog="friedman var")
+        @test called_with[][:data] == "test.csv"
+        @test called_with[][:id] == "sign"
+        @test called_with[][:shock] == 2
+
+        # Help text shows irf/fevd/hd as subcommands
+        buf = IOBuffer()
+        print_help(buf, var_node; prog="friedman var")
+        help_text = String(take!(buf))
+        @test contains(help_text, "irf")
+        @test contains(help_text, "fevd")
+        @test contains(help_text, "hd")
+        @test contains(help_text, "estimate")
+
+        # Leaf help for var irf
+        buf = IOBuffer()
+        print_help(buf, var_irf; prog="friedman var irf")
+        help_text = String(take!(buf))
+        @test contains(help_text, "--shock")
+        @test contains(help_text, "--horizons")
+        @test contains(help_text, "--id")
+        @test contains(help_text, "--ci")
+        @test contains(help_text, "--replications")
+
+        # Arg binding for var irf
+        parsed = tokenize(["data.csv", "--id=longrun", "--shock=3", "--horizons=40"])
+        bound = bind_args(parsed, var_irf)
+        @test bound.data == "data.csv"
+        @test bound.id == "longrun"
+        @test bound.shock == 3
+        @test bound.horizons == 40
+        @test bound.ci == "bootstrap"  # default
+
+        # var forecast is a direct LeafCommand
+        @test var_node.subcmds["forecast"] isa LeafCommand
+
+        # Help text shows forecast
+        buf = IOBuffer()
+        print_help(buf, var_node; prog="friedman var")
+        help_text = String(take!(buf))
+        @test contains(help_text, "forecast")
+
+        # Arg binding for var forecast
+        parsed = tokenize(["data.csv", "--horizons=24", "--confidence=0.90"])
+        bound = bind_args(parsed, var_forecast)
+        @test bound.data == "data.csv"
+        @test bound.horizons == 24
+        @test bound.confidence == 0.90
+
+        # Dispatch: friedman var forecast data.csv --horizons=12
+        called_with2 = Ref{Any}(nothing)
+        dispatch_handler2 = (; kwargs...) -> begin called_with2[] = Dict(kwargs) end
+        var_fc_dispatch = LeafCommand("forecast", dispatch_handler2;
+            args=[Argument("data"; description="Data file")],
+            options=[Option("horizons"; short="h", type=Int, default=12, description="Horizon")],
+            description="Forecast")
+        var_dispatch2 = NodeCommand("var",
+            Dict{String,Union{NodeCommand,LeafCommand}}("forecast" => var_fc_dispatch),
+            "VAR")
+        dispatch_node(var_dispatch2, ["forecast", "test.csv", "--horizons=24"]; prog="friedman var")
+        @test called_with2[][:data] == "test.csv"
+        @test called_with2[][:horizons] == 24
+    end
+
+    @testset "BVAR pipeline structure (pipeline)" begin
+        handler = (; kwargs...) -> kwargs
+
+        # Simulate bvar node with irf/fevd/hd as direct leaf commands
+        bvar_estimate = LeafCommand("estimate", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=4, description="Lag order"),
+                Option("draws"; short="n", type=Int, default=2000, description="MCMC draws"),
+                Option("sampler"; type=String, default="nuts", description="Sampler"),
+            ],
+            description="Estimate BVAR")
+
+        bvar_irf = LeafCommand("irf", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=4, description="Lag order"),
+                Option("shock"; type=Int, default=1, description="Shock index"),
+                Option("horizons"; short="h", type=Int, default=20, description="IRF horizon"),
+                Option("id"; type=String, default="cholesky", description="Identification"),
+                Option("draws"; short="n", type=Int, default=2000, description="MCMC draws"),
+                Option("sampler"; type=String, default="nuts", description="Sampler"),
+                Option("config"; type=String, default="", description="TOML config"),
+            ],
+            description="Bayesian IRF with credible intervals")
+
+        bvar_fevd = LeafCommand("fevd", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=4, description="Lag order"),
+                Option("horizons"; short="h", type=Int, default=20, description="Horizon"),
+                Option("draws"; short="n", type=Int, default=2000, description="MCMC draws"),
+                Option("sampler"; type=String, default="nuts", description="Sampler"),
+            ],
+            description="Bayesian FEVD")
+
+        bvar_hd = LeafCommand("hd", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=4, description="Lag order"),
+                Option("draws"; short="n", type=Int, default=2000, description="MCMC draws"),
+                Option("sampler"; type=String, default="nuts", description="Sampler"),
+            ],
+            description="Bayesian HD")
+
+        bvar_forecast = LeafCommand("forecast", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=4, description="Lag order"),
+                Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
+                Option("draws"; short="n", type=Int, default=2000, description="MCMC draws"),
+                Option("sampler"; type=String, default="nuts", description="Sampler"),
+            ],
+            description="Bayesian forecast with credible intervals")
+
+        bvar_node = NodeCommand("bvar",
+            Dict{String,Union{NodeCommand,LeafCommand}}(
+                "estimate" => bvar_estimate, "irf" => bvar_irf,
+                "fevd" => bvar_fevd, "hd" => bvar_hd,
+                "forecast" => bvar_forecast),
+            "BVAR pipeline")
+
+        # Structure tests
+        @test bvar_node.name == "bvar"
+        @test length(bvar_node.subcmds) == 5
+        @test haskey(bvar_node.subcmds, "estimate")
+        @test haskey(bvar_node.subcmds, "irf")
+        @test haskey(bvar_node.subcmds, "fevd")
+        @test haskey(bvar_node.subcmds, "hd")
+        @test haskey(bvar_node.subcmds, "forecast")
+
+        # No --bayesian flag needed: it's structural
+        @test bvar_node.subcmds["irf"] isa LeafCommand
+        @test isempty(bvar_node.subcmds["irf"].flags)
+
+        # Dispatch: friedman bvar irf data.csv --draws=5000
+        called_with = Ref{Any}(nothing)
+        dispatch_handler = (; kwargs...) -> begin called_with[] = Dict(kwargs) end
+
+        bvar_irf_dispatch = LeafCommand("irf", dispatch_handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("draws"; short="n", type=Int, default=2000, description="Draws"),
+                Option("sampler"; type=String, default="nuts", description="Sampler"),
+            ],
+            description="Bayesian IRF")
+        bvar_dispatch = NodeCommand("bvar",
+            Dict{String,Union{NodeCommand,LeafCommand}}("irf" => bvar_irf_dispatch),
+            "BVAR")
+
+        dispatch_node(bvar_dispatch, ["irf", "test.csv", "--draws=5000", "--sampler=hmc"]; prog="friedman bvar")
+        @test called_with[][:data] == "test.csv"
+        @test called_with[][:draws] == 5000
+        @test called_with[][:sampler] == "hmc"
+
+        # Help text
+        buf = IOBuffer()
+        print_help(buf, bvar_node; prog="friedman bvar")
+        help_text = String(take!(buf))
+        @test contains(help_text, "irf")
+        @test contains(help_text, "fevd")
+        @test contains(help_text, "hd")
+        @test contains(help_text, "estimate")
+
+        # Arg binding for bvar irf
+        parsed = tokenize(["data.csv", "--shock=2", "--draws=3000"])
+        bound = bind_args(parsed, bvar_irf)
+        @test bound.data == "data.csv"
+        @test bound.shock == 2
+        @test bound.draws == 3000
+        @test bound.sampler == "nuts"  # default
+
+        # bvar forecast is a direct LeafCommand
+        @test bvar_node.subcmds["forecast"] isa LeafCommand
+        @test isempty(bvar_node.subcmds["forecast"].flags)
+
+        # Help text shows forecast
+        buf = IOBuffer()
+        print_help(buf, bvar_node; prog="friedman bvar")
+        help_text = String(take!(buf))
+        @test contains(help_text, "forecast")
+
+        # Arg binding for bvar forecast
+        parsed = tokenize(["data.csv", "--horizons=24", "--draws=5000", "--sampler=hmc"])
+        bound = bind_args(parsed, bvar_forecast)
+        @test bound.data == "data.csv"
+        @test bound.horizons == 24
+        @test bound.draws == 5000
+        @test bound.sampler == "hmc"
+    end
+
+    @testset "Top-level no longer has irf/fevd/hd (pipeline)" begin
+        handler = (; kwargs...) -> nothing
+
+        # Build a minimal root that mirrors v0.2.0 structure
+        var_node = NodeCommand("var",
+            Dict{String,Union{NodeCommand,LeafCommand}}(
+                "estimate" => LeafCommand("estimate", handler; description="Est"),
+                "irf" => LeafCommand("irf", handler; description="IRF")),
+            "VAR")
+        bvar_node = NodeCommand("bvar",
+            Dict{String,Union{NodeCommand,LeafCommand}}(
+                "estimate" => LeafCommand("estimate", handler; description="Est"),
+                "irf" => LeafCommand("irf", handler; description="IRF")),
+            "BVAR")
+
+        root = NodeCommand("friedman",
+            Dict{String,Union{NodeCommand,LeafCommand}}("var" => var_node, "bvar" => bvar_node),
+            "Friedman CLI")
+        entry = Entry("friedman", root; version=v"0.1.3")
+
+        # Top level should NOT have irf, fevd, hd
+        @test !haskey(root.subcmds, "irf")
+        @test !haskey(root.subcmds, "fevd")
+        @test !haskey(root.subcmds, "hd")
+
+        # But var and bvar should
+        @test haskey(root.subcmds["var"].subcmds, "irf")
+        @test haskey(root.subcmds["bvar"].subcmds, "irf")
     end
 
     @testset "Non-Gaussian SVAR command structure" begin
@@ -663,8 +972,271 @@ using Test
         @test called_with[][:method] == "jade"
     end
 
-    @testset "Factor forecast command structure" begin
+    @testset "LP pipeline structure (pipeline)" begin
         handler = (; kwargs...) -> kwargs
+
+        # Simulate the LP pipeline with estimate, irf, fevd, hd, forecast
+        lp_estimate = LeafCommand("estimate", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("method"; type=String, default="standard", description="standard|iv|smooth|state|propensity|robust"),
+                Option("shock"; type=Int, default=1, description="Shock index"),
+                Option("horizons"; short="h", type=Int, default=20, description="IRF horizon"),
+                Option("control-lags"; type=Int, default=4, description="Control lags"),
+                Option("vcov"; type=String, default="newey_west", description="HAC estimator"),
+                Option("instruments"; type=String, default="", description="Instruments CSV"),
+                Option("knots"; type=Int, default=3, description="B-spline knots"),
+                Option("lambda"; type=Float64, default=0.0, description="Smoothing penalty"),
+                Option("state-var"; type=Int, default=nothing, description="State variable"),
+                Option("gamma"; type=Float64, default=1.5, description="Transition steepness"),
+                Option("transition"; type=String, default="logistic", description="Transition type"),
+                Option("treatment"; type=Int, default=1, description="Treatment variable"),
+                Option("score-method"; type=String, default="logit", description="Score method"),
+                Option("output"; short="o", type=String, default="", description="Output file"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="Estimate local projections")
+
+        lp_irf = LeafCommand("irf", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("shock"; type=Int, default=1, description="Shock index"),
+                Option("shocks"; type=String, default="", description="Multi-shock indices"),
+                Option("horizons"; short="h", type=Int, default=20, description="IRF horizon"),
+                Option("lags"; short="p", type=Int, default=4, description="LP control lags"),
+                Option("var-lags"; type=Int, default=nothing, description="VAR lags"),
+                Option("id"; type=String, default="cholesky", description="Identification"),
+                Option("ci"; type=String, default="none", description="CI type"),
+                Option("replications"; type=Int, default=200, description="Bootstrap reps"),
+                Option("conf-level"; type=Float64, default=0.95, description="Confidence level"),
+                Option("vcov"; type=String, default="newey_west", description="HAC estimator"),
+                Option("config"; type=String, default="", description="TOML config"),
+                Option("output"; short="o", type=String, default="", description="Output file"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="Structural LP IRFs")
+
+        lp_fevd = LeafCommand("fevd", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("horizons"; short="h", type=Int, default=20, description="Horizon"),
+                Option("lags"; short="p", type=Int, default=4, description="LP control lags"),
+                Option("var-lags"; type=Int, default=nothing, description="VAR lags"),
+                Option("id"; type=String, default="cholesky", description="Identification"),
+                Option("vcov"; type=String, default="newey_west", description="HAC estimator"),
+                Option("config"; type=String, default="", description="TOML config"),
+                Option("output"; short="o", type=String, default="", description="Output file"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="LP FEVD")
+
+        lp_hd = LeafCommand("hd", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=4, description="LP control lags"),
+                Option("var-lags"; type=Int, default=nothing, description="VAR lags"),
+                Option("id"; type=String, default="cholesky", description="Identification"),
+                Option("vcov"; type=String, default="newey_west", description="HAC estimator"),
+                Option("config"; type=String, default="", description="TOML config"),
+                Option("output"; short="o", type=String, default="", description="Output file"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="LP HD")
+
+        lp_forecast = LeafCommand("forecast", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("shock"; type=Int, default=1, description="Shock index"),
+                Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
+                Option("shock-size"; type=Float64, default=1.0, description="Shock size"),
+                Option("lags"; short="p", type=Int, default=4, description="LP control lags"),
+                Option("vcov"; type=String, default="newey_west", description="HAC estimator"),
+                Option("ci-method"; type=String, default="analytical", description="CI method"),
+                Option("conf-level"; type=Float64, default=0.95, description="Confidence level"),
+                Option("n-boot"; type=Int, default=500, description="Bootstrap reps"),
+                Option("output"; short="o", type=String, default="", description="Output file"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="LP forecast")
+
+        lp_node = NodeCommand("lp",
+            Dict{String,Union{NodeCommand,LeafCommand}}(
+                "estimate" => lp_estimate, "irf" => lp_irf,
+                "fevd" => lp_fevd, "hd" => lp_hd,
+                "forecast" => lp_forecast),
+            "LP pipeline")
+
+        # Structure: 5 subcommands
+        @test lp_node.name == "lp"
+        @test length(lp_node.subcmds) == 5
+        @test haskey(lp_node.subcmds, "estimate")
+        @test haskey(lp_node.subcmds, "irf")
+        @test haskey(lp_node.subcmds, "fevd")
+        @test haskey(lp_node.subcmds, "hd")
+        @test haskey(lp_node.subcmds, "forecast")
+
+        # All are LeafCommands (no old flat commands)
+        @test lp_node.subcmds["estimate"] isa LeafCommand
+        @test lp_node.subcmds["irf"] isa LeafCommand
+        @test lp_node.subcmds["fevd"] isa LeafCommand
+        @test lp_node.subcmds["hd"] isa LeafCommand
+        @test lp_node.subcmds["forecast"] isa LeafCommand
+
+        # No old flat commands
+        @test !haskey(lp_node.subcmds, "iv")
+        @test !haskey(lp_node.subcmds, "smooth")
+        @test !haskey(lp_node.subcmds, "state")
+        @test !haskey(lp_node.subcmds, "propensity")
+        @test !haskey(lp_node.subcmds, "multi")
+        @test !haskey(lp_node.subcmds, "robust")
+
+        # Option counts
+        @test length(lp_node.subcmds["estimate"].options) == 15
+        @test length(lp_node.subcmds["irf"].options) == 13
+        @test length(lp_node.subcmds["fevd"].options) == 8
+        @test length(lp_node.subcmds["hd"].options) == 7
+        @test length(lp_node.subcmds["forecast"].options) == 10
+
+        # Help text for lp node
+        buf = IOBuffer()
+        print_help(buf, lp_node; prog="friedman lp")
+        help_text = String(take!(buf))
+        @test contains(help_text, "estimate")
+        @test contains(help_text, "irf")
+        @test contains(help_text, "fevd")
+        @test contains(help_text, "hd")
+        @test contains(help_text, "forecast")
+        # Old commands should NOT appear
+        @test !contains(help_text, "propensity")
+        @test !contains(help_text, "multi")
+
+        # Leaf help for lp estimate
+        buf = IOBuffer()
+        print_help(buf, lp_estimate; prog="friedman lp estimate")
+        help_text = String(take!(buf))
+        @test contains(help_text, "--method")
+        @test contains(help_text, "--shock")
+        @test contains(help_text, "--instruments")
+        @test contains(help_text, "--knots")
+        @test contains(help_text, "--state-var")
+        @test contains(help_text, "--treatment")
+        @test contains(help_text, "--score-method")
+
+        # Leaf help for lp irf
+        buf = IOBuffer()
+        print_help(buf, lp_irf; prog="friedman lp irf")
+        help_text = String(take!(buf))
+        @test contains(help_text, "--shock")
+        @test contains(help_text, "--shocks")
+        @test contains(help_text, "--id")
+        @test contains(help_text, "--ci")
+        @test contains(help_text, "--var-lags")
+        @test contains(help_text, "--config")
+
+        # Leaf help for lp forecast
+        buf = IOBuffer()
+        print_help(buf, lp_forecast; prog="friedman lp forecast")
+        help_text = String(take!(buf))
+        @test contains(help_text, "--shock-size")
+        @test contains(help_text, "--ci-method")
+        @test contains(help_text, "--n-boot")
+        @test contains(help_text, "default: 12")
+        @test contains(help_text, "default: 0.95")
+
+        # Arg binding for lp estimate
+        parsed = tokenize(["data.csv", "--method=iv", "--instruments=inst.csv", "--shock=2"])
+        bound = bind_args(parsed, lp_estimate)
+        @test bound.data == "data.csv"
+        @test bound.method == "iv"
+        @test bound.instruments == "inst.csv"
+        @test bound.shock == 2
+        @test bound.horizons == 20  # default
+        @test bound.control_lags == 4  # default
+
+        # Arg binding for lp irf
+        parsed = tokenize(["data.csv", "--id=sign", "--shocks=1,2,3", "--horizons=30"])
+        bound = bind_args(parsed, lp_irf)
+        @test bound.data == "data.csv"
+        @test bound.id == "sign"
+        @test bound.shocks == "1,2,3"
+        @test bound.horizons == 30
+        @test bound.ci == "none"  # default
+        @test isnothing(bound.var_lags)  # default
+
+        # Arg binding for lp forecast
+        parsed = tokenize(["data.csv", "--horizons=24", "--shock-size=0.5", "--ci-method=bootstrap"])
+        bound = bind_args(parsed, lp_forecast)
+        @test bound.data == "data.csv"
+        @test bound.horizons == 24
+        @test bound.shock_size == 0.5
+        @test bound.ci_method == "bootstrap"
+        @test bound.conf_level == 0.95  # default
+        @test bound.n_boot == 500  # default
+
+        # Dispatch: friedman lp irf data.csv --id=sign
+        called_with = Ref{Any}(nothing)
+        dispatch_handler = (; kwargs...) -> begin called_with[] = Dict(kwargs) end
+
+        lp_irf_dispatch = LeafCommand("irf", dispatch_handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("id"; type=String, default="cholesky", description="Method"),
+                Option("shocks"; type=String, default="", description="Shocks"),
+            ],
+            description="IRF")
+        lp_dispatch = NodeCommand("lp",
+            Dict{String,Union{NodeCommand,LeafCommand}}("irf" => lp_irf_dispatch),
+            "LP")
+
+        dispatch_node(lp_dispatch, ["irf", "test.csv", "--id=sign", "--shocks=1,2"]; prog="friedman lp")
+        @test called_with[][:data] == "test.csv"
+        @test called_with[][:id] == "sign"
+        @test called_with[][:shocks] == "1,2"
+
+        # Dispatch: friedman lp estimate data.csv --method=smooth
+        lp_est_dispatch = LeafCommand("estimate", dispatch_handler;
+            args=[Argument("data"; description="Data file")],
+            options=[Option("method"; type=String, default="standard", description="Method")],
+            description="Estimate")
+        lp_dispatch2 = NodeCommand("lp",
+            Dict{String,Union{NodeCommand,LeafCommand}}("estimate" => lp_est_dispatch),
+            "LP")
+        dispatch_node(lp_dispatch2, ["estimate", "test.csv", "--method=smooth"]; prog="friedman lp")
+        @test called_with[][:data] == "test.csv"
+        @test called_with[][:method] == "smooth"
+
+        # Dispatch: friedman lp forecast data.csv --horizons=12
+        lp_fc_dispatch = LeafCommand("forecast", dispatch_handler;
+            args=[Argument("data"; description="Data file")],
+            options=[Option("horizons"; short="h", type=Int, default=12, description="Horizon")],
+            description="Forecast")
+        lp_dispatch3 = NodeCommand("lp",
+            Dict{String,Union{NodeCommand,LeafCommand}}("forecast" => lp_fc_dispatch),
+            "LP")
+        dispatch_node(lp_dispatch3, ["forecast", "test.csv", "--horizons=24"]; prog="friedman lp")
+        @test called_with[][:data] == "test.csv"
+        @test called_with[][:horizons] == 24
+    end
+
+    @testset "Factor command structure (estimate node + forecast leaf)" begin
+        handler = (; kwargs...) -> kwargs
+
+        # Estimation subcommands nest under estimate NodeCommand
+        factor_static = LeafCommand("static", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[Option("nfactors"; short="r", type=Int, default=nothing, description="Factors")],
+            description="Static factors (PCA)")
+        factor_dynamic = LeafCommand("dynamic", handler;
+            args=[Argument("data"; description="Data file")],
+            description="Dynamic factors")
+        factor_gdfm = LeafCommand("gdfm", handler;
+            args=[Argument("data"; description="Data file")],
+            description="GDFM")
+
+        estimate_node = NodeCommand("estimate",
+            Dict{String,Union{NodeCommand,LeafCommand}}(
+                "static" => factor_static, "dynamic" => factor_dynamic, "gdfm" => factor_gdfm),
+            "Estimate factor models")
 
         factor_forecast = LeafCommand("forecast", handler;
             args=[Argument("data"; description="Path to CSV data file")],
@@ -678,32 +1250,46 @@ using Test
             ],
             description="Forecast observables using static factor model")
 
-        # Verify structure
+        factor_node = NodeCommand("factor",
+            Dict{String,Union{NodeCommand,LeafCommand}}(
+                "estimate" => estimate_node, "forecast" => factor_forecast),
+            "Factor Models")
+
+        # Top-level factor has estimate (node) + forecast (leaf)
+        @test length(factor_node.subcmds) == 2
+        @test haskey(factor_node.subcmds, "estimate")
+        @test haskey(factor_node.subcmds, "forecast")
+        @test factor_node.subcmds["estimate"] isa NodeCommand
+        @test factor_node.subcmds["forecast"] isa LeafCommand
+
+        # estimate node has static/dynamic/gdfm
+        est = factor_node.subcmds["estimate"]
+        @test length(est.subcmds) == 3
+        @test haskey(est.subcmds, "static")
+        @test haskey(est.subcmds, "dynamic")
+        @test haskey(est.subcmds, "gdfm")
+
+        # Forecast leaf structure
         @test factor_forecast.name == "forecast"
         @test length(factor_forecast.args) == 1
         @test length(factor_forecast.options) == 6
 
-        # Include in a factor node with 4 subcommands
-        factor_static = LeafCommand("static", handler; description="Static factors")
-        factor_dynamic = LeafCommand("dynamic", handler; description="Dynamic factors")
-        factor_gdfm = LeafCommand("gdfm", handler; description="GDFM")
-
-        subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
-            "static" => factor_static, "dynamic" => factor_dynamic,
-            "gdfm" => factor_gdfm, "forecast" => factor_forecast)
-        factor_node = NodeCommand("factor", subcmds, "Factor Models")
-
-        @test length(factor_node.subcmds) == 4
-        @test haskey(factor_node.subcmds, "forecast")
-
-        # Help text
+        # Help text for factor node
         buf = IOBuffer()
         print_help(buf, factor_node; prog="friedman factor")
         help_text = String(take!(buf))
+        @test contains(help_text, "estimate")
         @test contains(help_text, "forecast")
-        @test contains(help_text, "static")
 
-        # Leaf help
+        # Help text for estimate node
+        buf = IOBuffer()
+        print_help(buf, estimate_node; prog="friedman factor estimate")
+        help_text = String(take!(buf))
+        @test contains(help_text, "static")
+        @test contains(help_text, "dynamic")
+        @test contains(help_text, "gdfm")
+
+        # Leaf help for factor forecast
         buf = IOBuffer()
         print_help(buf, factor_forecast; prog="friedman factor forecast")
         help_text = String(take!(buf))
@@ -713,7 +1299,7 @@ using Test
         @test contains(help_text, "default: 12")
         @test contains(help_text, "default: 0.95")
 
-        # Arg binding
+        # Arg binding for factor forecast
         parsed = tokenize(["mydata.csv", "--horizon=24", "--ci-method=bootstrap"])
         bound = bind_args(parsed, factor_forecast)
         @test bound.data == "mydata.csv"
@@ -721,6 +1307,21 @@ using Test
         @test bound.ci_method == "bootstrap"
         @test bound.conf_level == 0.95
         @test isnothing(bound.nfactors)
+
+        # Dispatch: friedman factor estimate static data.csv
+        called_with = Ref{Any}(nothing)
+        dispatch_handler = (; kwargs...) -> begin called_with[] = Dict(kwargs) end
+        static_dispatch = LeafCommand("static", dispatch_handler;
+            args=[Argument("data"; description="Data file")],
+            description="Static")
+        est_dispatch = NodeCommand("estimate",
+            Dict{String,Union{NodeCommand,LeafCommand}}("static" => static_dispatch),
+            "Estimate")
+        factor_dispatch = NodeCommand("factor",
+            Dict{String,Union{NodeCommand,LeafCommand}}("estimate" => est_dispatch),
+            "Factor")
+        dispatch_node(factor_dispatch, ["estimate", "static", "test.csv"]; prog="friedman factor")
+        @test called_with[][:data] == "test.csv"
     end
 end
 

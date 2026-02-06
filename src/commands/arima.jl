@@ -1,32 +1,22 @@
-# ARIMA commands: estimate, auto, forecast
+# ARIMA commands: estimate, forecast
 
 function register_arima_commands!()
     arima_estimate = LeafCommand("estimate", _arima_estimate;
         args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("column"; short="c", type=Int, default=1, description="Column index (1-based)"),
-            Option("p"; type=Int, default=1, description="AR order"),
+            Option("p"; type=Int, default=nothing, description="AR order (default: auto selection)"),
             Option("d"; type=Int, default=0, description="Differencing order"),
             Option("q"; type=Int, default=0, description="MA order"),
+            Option("max-p"; type=Int, default=5, description="Max AR order for auto selection"),
+            Option("max-d"; type=Int, default=2, description="Max differencing order for auto selection"),
+            Option("max-q"; type=Int, default=5, description="Max MA order for auto selection"),
+            Option("criterion"; type=String, default="bic", description="aic|bic (for auto selection)"),
             Option("method"; short="m", type=String, default="css_mle", description="ols|css|mle|css_mle"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
         ],
-        description="Estimate ARIMA(p,d,q) model")
-
-    arima_auto = LeafCommand("auto", _arima_auto;
-        args=[Argument("data"; description="Path to CSV data file")],
-        options=[
-            Option("column"; short="c", type=Int, default=1, description="Column index (1-based)"),
-            Option("max-p"; type=Int, default=5, description="Maximum AR order"),
-            Option("max-d"; type=Int, default=2, description="Maximum differencing order"),
-            Option("max-q"; type=Int, default=5, description="Maximum MA order"),
-            Option("criterion"; type=String, default="bic", description="aic|bic"),
-            Option("method"; short="m", type=String, default="css_mle", description="ols|css|mle|css_mle"),
-            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
-            Option("output"; short="o", type=String, default="", description="Export results to file"),
-        ],
-        description="Automatic ARIMA order selection")
+        description="Estimate ARIMA(p,d,q) model (auto-selects order when --p omitted)")
 
     arima_forecast = LeafCommand("forecast", _arima_forecast;
         args=[Argument("data"; description="Path to CSV data file")],
@@ -45,7 +35,6 @@ function register_arima_commands!()
 
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "estimate"  => arima_estimate,
-        "auto"      => arima_auto,
         "forecast"  => arima_forecast,
     )
     return NodeCommand("arima", subcmds, "ARIMA (AutoRegressive Integrated Moving Average) models")
@@ -114,48 +103,37 @@ function _arima_coef_table(model; format::String="table", output::String="", tit
     output_result(coef_df; format=Symbol(format), output=output, title=title)
 end
 
-function _arima_estimate(; data::String, column::Int=1, p::Int=1, d::Int=0, q::Int=0,
-                          method::String="css_mle", format::String="table", output::String="")
+function _arima_estimate(; data::String, column::Int=1, p=nothing, d::Int=0, q::Int=0,
+                          max_p::Int=5, max_d::Int=2, max_q::Int=5,
+                          criterion::String="bic", method::String="css_mle",
+                          format::String="table", output::String="")
     y, vname = _extract_series(data, column)
     method_sym = Symbol(method)
-    label = _model_label(p, d, q)
-
-    println("Estimating $label: variable=$vname, observations=$(length(y)), method=$method")
-    println()
-
-    model = _estimate_arima_model(y, p, d, q; method=method_sym)
-
-    _arima_coef_table(model; format=format, output=output, title="$label Coefficients ($vname)")
-
-    println()
-    output_kv(Pair{String,Any}[
-        "AIC" => round(aic(model); digits=4),
-        "BIC" => round(bic(model); digits=4),
-        "Log-likelihood" => round(loglikelihood(model); digits=4),
-    ]; format=format, title="Information Criteria")
-end
-
-function _arima_auto(; data::String, column::Int=1, max_p::Int=5, max_d::Int=2, max_q::Int=5,
-                      criterion::String="bic", method::String="css_mle",
-                      format::String="table", output::String="")
-    y, vname = _extract_series(data, column)
-    crit_sym = Symbol(lowercase(criterion))
-    method_sym = Symbol(method)
-
-    println("Auto ARIMA: variable=$vname, observations=$(length(y))")
-    println("  Search: p=0:$max_p, d=0:$max_d, q=0:$max_q, criterion=$criterion, method=$method")
-    println()
-
     safe_method = method_sym == :css_mle ? :mle : method_sym
-    model = auto_arima(y; max_p=max_p, max_q=max_q, max_d=max_d, criterion=crit_sym, method=safe_method)
+
+    model = if isnothing(p)
+        # Auto order selection
+        crit_sym = Symbol(lowercase(criterion))
+        println("Auto ARIMA: variable=$vname, observations=$(length(y))")
+        println("  Search: p=0:$max_p, d=0:$max_d, q=0:$max_q, criterion=$criterion, method=$method")
+        println()
+        m = auto_arima(y; max_p=max_p, max_q=max_q, max_d=max_d, criterion=crit_sym, method=safe_method)
+        label = _model_label(ar_order(m), diff_order(m), ma_order(m))
+        printstyled("Selected model: $label\n"; bold=true)
+        println()
+        m
+    else
+        # Explicit order
+        label = _model_label(p, d, q)
+        println("Estimating $label: variable=$vname, observations=$(length(y)), method=$method")
+        println()
+        _estimate_arima_model(y, p, d, q; method=method_sym)
+    end
 
     p_sel = ar_order(model)
     d_sel = diff_order(model)
     q_sel = ma_order(model)
     label = _model_label(p_sel, d_sel, q_sel)
-
-    printstyled("Selected model: $label\n"; bold=true)
-    println()
 
     _arima_coef_table(model; format=format, output=output, title="$label Coefficients ($vname)")
 

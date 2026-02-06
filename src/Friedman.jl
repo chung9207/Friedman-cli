@@ -2,7 +2,7 @@ module Friedman
 
 using CSV, DataFrames, PrettyTables, JSON3, TOML
 using MacroEconometricModels
-using LinearAlgebra: eigvals
+using LinearAlgebra: eigvals, diag, I
 using Statistics: mean, median
 
 # CLI engine
@@ -15,12 +15,12 @@ include("cli/dispatch.jl")
 include("io.jl")
 include("config.jl")
 
+# Shared utilities (must come before var/bvar)
+include("commands/shared.jl")
+
 # Commands
 include("commands/var.jl")
 include("commands/bvar.jl")
-include("commands/irf.jl")
-include("commands/fevd.jl")
-include("commands/hd.jl")
 include("commands/lp.jl")
 include("commands/factor.jl")
 include("commands/test_cmd.jl")
@@ -28,7 +28,7 @@ include("commands/gmm.jl")
 include("commands/arima.jl")
 include("commands/nongaussian.jl")
 
-const FRIEDMAN_VERSION = v"0.1.2"
+const FRIEDMAN_VERSION = v"0.1.3"
 
 """
     build_app() → Entry
@@ -39,9 +39,6 @@ function build_app()
     root_cmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "var"    => register_var_commands!(),
         "bvar"   => register_bvar_commands!(),
-        "irf"    => register_irf_commands!(),
-        "fevd"   => register_fevd_commands!(),
-        "hd"     => register_hd_commands!(),
         "lp"     => register_lp_commands!(),
         "factor" => register_factor_commands!(),
         "test"   => register_test_commands!(),
