@@ -153,12 +153,12 @@ function _nongaussian_ml(; data::String, lags=nothing, distribution::String="stu
     println()
 
     # Model fit
-    output_kv([
-        "Log-likelihood" => Any(round(result.loglik; digits=4)),
-        "Log-likelihood (Gaussian)" => Any(round(result.loglik_gaussian; digits=4)),
-        "AIC" => Any(round(result.aic; digits=4)),
-        "BIC" => Any(round(result.bic; digits=4)),
-        "Distribution" => Any(string(result.distribution)),
+    output_kv(Pair{String,Any}[
+        "Log-likelihood" => round(result.loglik; digits=4),
+        "Log-likelihood (Gaussian)" => round(result.loglik_gaussian; digits=4),
+        "AIC" => round(result.aic; digits=4),
+        "BIC" => round(result.bic; digits=4),
+        "Distribution" => string(result.distribution),
     ]; format=format, title="Model Fit")
 
     # Distribution parameters
@@ -166,7 +166,11 @@ function _nongaussian_ml(; data::String, lags=nothing, distribution::String="stu
         println()
         println("Distribution parameters:")
         for (k, v) in pairs(result.dist_params)
-            println("  $k = $(round(v; digits=4))")
+            if v isa AbstractArray
+                println("  $k = $(round.(v; digits=4))")
+            else
+                println("  $k = $(round(v; digits=4))")
+            end
         end
     end
 
@@ -248,7 +252,7 @@ function _nongaussian_normality(; data::String, lags=nothing,
     )
     for r in suite.results
         push!(test_df, (
-            test=r.test_name,
+            test=string(r.test_name),
             statistic=round(r.statistic; digits=4),
             p_value=round(r.pvalue; digits=4),
             df=r.df
@@ -294,8 +298,8 @@ function _nongaussian_identifiability(; data::String, lags=nothing, test::String
         push!(results_df, (
             test="Identification Strength",
             statistic=round(str_result.statistic; digits=4),
-            p_value=round(str_result.p_value; digits=4),
-            conclusion=str_result.p_value < 0.05 ? "Strong identification" : "Weak identification"
+            p_value=round(str_result.pvalue; digits=4),
+            conclusion=str_result.pvalue < 0.05 ? "Strong identification" : "Weak identification"
         ))
     end
 
@@ -316,8 +320,8 @@ function _nongaussian_identifiability(; data::String, lags=nothing, test::String
         push!(results_df, (
             test="Shock Gaussianity",
             statistic=round(gauss_result.statistic; digits=4),
-            p_value=round(gauss_result.p_value; digits=4),
-            conclusion=gauss_result.p_value < 0.05 ? "Reject Gaussianity" : "Cannot reject Gaussianity"
+            p_value=round(gauss_result.pvalue; digits=4),
+            conclusion=gauss_result.pvalue < 0.05 ? "Reject Gaussianity" : "Cannot reject Gaussianity"
         ))
     end
 
@@ -326,8 +330,8 @@ function _nongaussian_identifiability(; data::String, lags=nothing, test::String
         push!(results_df, (
             test="Shock Independence",
             statistic=round(indep_result.statistic; digits=4),
-            p_value=round(indep_result.p_value; digits=4),
-            conclusion=indep_result.p_value < 0.05 ? "Reject independence" : "Cannot reject independence"
+            p_value=round(indep_result.pvalue; digits=4),
+            conclusion=indep_result.pvalue < 0.05 ? "Reject independence" : "Cannot reject independence"
         ))
     end
 
@@ -336,8 +340,8 @@ function _nongaussian_identifiability(; data::String, lags=nothing, test::String
         push!(results_df, (
             test="Gaussian vs Non-Gaussian",
             statistic=round(comp_result.statistic; digits=4),
-            p_value=round(comp_result.p_value; digits=4),
-            conclusion=comp_result.p_value < 0.05 ? "Non-Gaussian preferred" : "No significant difference"
+            p_value=round(comp_result.pvalue; digits=4),
+            conclusion=comp_result.pvalue < 0.05 ? "Non-Gaussian preferred" : "No significant difference"
         ))
     end
 

@@ -74,7 +74,7 @@ function _fevd_compute(; data::String, lags=nothing, horizons::Int=20,
 
     fevd_result = fevd(model, horizons; kwargs...)
 
-    summary(fevd_result)
+    MacroEconometricModels.summary(fevd_result)
 
     # Output FEVD proportions for each variable
     proportions = fevd_result.proportions  # n_vars x n_shocks x H
@@ -113,7 +113,7 @@ function _fevd_bayesian(Y::Matrix{Float64}, p::Int, n::Int, horizons::Int,
     bfevd = fevd(chain, p, n, horizons;
         data=Y, quantiles=[0.16, 0.5, 0.84])
 
-    summary(bfevd)
+    MacroEconometricModels.summary(bfevd)
 
     # Output posterior mean FEVD proportions for each variable
     # bfevd.mean: n_vars x n_shocks x H

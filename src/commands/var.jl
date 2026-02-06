@@ -20,6 +20,8 @@ function register_var_commands!()
         options=[
             Option("max-lags"; type=Int, default=12, description="Maximum lag order to test"),
             Option("criterion"; type=String, default="aic", description="aic|bic|hqc"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
         ],
         description="Select optimal lag order for VAR")
 
@@ -61,23 +63,24 @@ function _var_estimate(; data::String, lags=nothing, trend::String="constant",
     println()
 
     model = estimate_var(Y, p)
-    summary(model)
+    MacroEconometricModels.summary(model)
 
     # Output coefficient matrix
+    # coef(model) returns (n_regressors x n_vars) — transpose so rows=equations
     coef_mat = coef(model)
-    n_cols = size(coef_mat, 2)
-    col_names = String[]
+    n_rows = size(coef_mat, 1)
+
+    row_names = String[]
     for lag in 1:p
         for v in varnames
-            push!(col_names, "$(v)_L$(lag)")
+            push!(row_names, "$(v)_L$(lag)")
         end
     end
-    # Constant term column if present
-    if n_cols > n * p
-        push!(col_names, "const")
+    if n_rows > n * p
+        push!(row_names, "const")
     end
 
-    coef_df = DataFrame(coef_mat, col_names)
+    coef_df = DataFrame(permutedims(coef_mat), row_names)
     insertcols!(coef_df, 1, :equation => varnames)
 
     output_result(coef_df; format=Symbol(format), output=output, title="VAR($p) Coefficients")
@@ -92,7 +95,8 @@ function _var_estimate(; data::String, lags=nothing, trend::String="constant",
     ]; format=format, title="Information Criteria")
 end
 
-function _var_lagselect(; data::String, max_lags::Int=12, criterion::String="aic")
+function _var_lagselect(; data::String, max_lags::Int=12, criterion::String="aic",
+                         format::String="table", output::String="")
     df = load_data(data)
     Y = df_to_matrix(df)
     n = size(Y, 2)
@@ -124,9 +128,14 @@ function _var_lagselect(; data::String, max_lags::Int=12, criterion::String="aic
     # Mark optimal
     optimal = select_lag_order(Y, max_p; criterion=crit_sym)
 
-    output_result(res_df; format=:table, title="Lag Order Selection")
+    output_result(res_df; format=Symbol(format), output=output, title="Lag Order Selection")
     println()
     printstyled("Optimal lag order ($criterion): $optimal\n"; bold=true)
+
+    if format == "json"
+        output_kv(Pair{String,Any}["optimal_lag" => optimal, "criterion" => criterion];
+                  format=format, title="Optimal Lag")
+    end
 end
 
 function _var_stability(; data::String, lags=nothing, format::String="table", output::String="")

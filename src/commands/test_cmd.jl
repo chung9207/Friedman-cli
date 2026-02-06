@@ -95,18 +95,11 @@ function _test_adf(; data::String, column::Int=1, max_lags=nothing,
 
     result = adf_test(y; lags=lags_arg, regression=regression)
 
-    pairs = [
-        "Test statistic" => Any(round(result.statistic; digits=4)),
-        "Lags" => Any(result.lags),
-        "p-value" => Any(round(result.pvalue; digits=4)),
+    pairs = Pair{String,Any}[
+        "Test statistic" => round(result.statistic; digits=4),
+        "Lags" => result.lags,
+        "p-value" => round(result.pvalue; digits=4),
     ]
-
-    # Critical values if available
-    if hasproperty(result, :critical_values)
-        for (level, cv) in result.critical_values
-            push!(pairs, "$level critical value" => Any(round(cv; digits=4)))
-        end
-    end
 
     output_kv(pairs; format=format, output=output, title="ADF Test: $vname")
 
@@ -129,14 +122,9 @@ function _test_kpss(; data::String, column::Int=1, trend::String="constant",
 
     result = kpss_test(y; regression=regression)
 
-    pairs = [
-        "Test statistic" => Any(round(result.statistic; digits=4)),
+    pairs = Pair{String,Any}[
+        "Test statistic" => round(result.statistic; digits=4),
     ]
-    if hasproperty(result, :critical_values)
-        for (level, cv) in result.critical_values
-            push!(pairs, "$level critical value" => Any(round(cv; digits=4)))
-        end
-    end
 
     output_kv(pairs; format=format, output=output, title="KPSS Test: $vname")
 
@@ -159,9 +147,9 @@ function _test_pp(; data::String, column::Int=1, trend::String="constant",
 
     result = pp_test(y; regression=regression)
 
-    pairs = [
-        "Test statistic" => Any(round(result.statistic; digits=4)),
-        "p-value" => Any(round(result.pvalue; digits=4)),
+    pairs = Pair{String,Any}[
+        "Test statistic" => round(result.statistic; digits=4),
+        "p-value" => round(result.pvalue; digits=4),
     ]
 
     output_kv(pairs; format=format, output=output, title="Phillips-Perron Test: $vname")
@@ -184,20 +172,15 @@ function _test_za(; data::String, column::Int=1, trend::String="both",
 
     result = za_test(y; regression=regression, trim=trim)
 
-    pairs = [
-        "Test statistic" => Any(round(result.statistic; digits=4)),
-        "Break date" => Any(result.break_point),
+    pairs = Pair{String,Any}[
+        "Test statistic" => round(result.statistic; digits=4),
+        "Break date" => result.break_index,
     ]
-    if hasproperty(result, :critical_values)
-        for (level, cv) in result.critical_values
-            push!(pairs, "$level critical value" => Any(round(cv; digits=4)))
-        end
-    end
 
     output_kv(pairs; format=format, output=output, title="Zivot-Andrews Test: $vname")
 
     println()
-    println("Estimated structural break at observation $(result.break_point)")
+    println("Estimated structural break at observation $(result.break_index)")
 end
 
 function _test_np(; data::String, column::Int=1, trend::String="constant",
@@ -210,11 +193,11 @@ function _test_np(; data::String, column::Int=1, trend::String="constant",
 
     result = ngperron_test(y; regression=regression)
 
-    pairs = [
-        "MZa statistic" => Any(round(result.MZa; digits=4)),
-        "MZt statistic" => Any(round(result.MZt; digits=4)),
-        "MSB statistic" => Any(round(result.MSB; digits=4)),
-        "MPT statistic" => Any(round(result.MPT; digits=4)),
+    pairs = Pair{String,Any}[
+        "MZa statistic" => round(result.MZa; digits=4),
+        "MZt statistic" => round(result.MZt; digits=4),
+        "MSB statistic" => round(result.MSB; digits=4),
+        "MPT statistic" => round(result.MPT; digits=4),
     ]
 
     output_kv(pairs; format=format, output=output, title="Ng-Perron Test: $vname")
@@ -234,20 +217,20 @@ function _test_johansen(; data::String, lags::Int=2, trend::String="constant",
 
     # Trace test
     trace_df = DataFrame(
-        rank=0:(length(result.trace_stat)-1),
-        trace_stat=round.(result.trace_stat; digits=4),
-        critical_value_5pct=round.(result.trace_cv_5; digits=4),
-        reject=[s > c ? "yes" : "no" for (s, c) in zip(result.trace_stat, result.trace_cv_5)]
+        rank=0:(length(result.trace_stats)-1),
+        trace_stat=round.(result.trace_stats; digits=4),
+        p_value=round.(result.trace_pvalues; digits=4),
+        reject=[p < 0.05 ? "yes" : "no" for p in result.trace_pvalues]
     )
     output_result(trace_df; format=Symbol(format), title="Johansen Trace Test")
     println()
 
     # Max eigenvalue test
     maxeig_df = DataFrame(
-        rank=0:(length(result.max_stat)-1),
-        max_stat=round.(result.max_stat; digits=4),
-        critical_value_5pct=round.(result.max_cv_5; digits=4),
-        reject=[s > c ? "yes" : "no" for (s, c) in zip(result.max_stat, result.max_cv_5)]
+        rank=0:(length(result.max_eigen_stats)-1),
+        max_stat=round.(result.max_eigen_stats; digits=4),
+        p_value=round.(result.max_eigen_pvalues; digits=4),
+        reject=[p < 0.05 ? "yes" : "no" for p in result.max_eigen_pvalues]
     )
     output_result(maxeig_df; format=Symbol(format),
                   output=output, title="Johansen Max Eigenvalue Test")
@@ -255,8 +238,8 @@ function _test_johansen(; data::String, lags::Int=2, trend::String="constant",
     println()
     # Determine cointegration rank
     rank = 0
-    for i in 1:length(result.trace_stat)
-        if result.trace_stat[i] > result.trace_cv_5[i]
+    for i in 1:length(result.trace_pvalues)
+        if result.trace_pvalues[i] < 0.05
             rank = i
         else
             break

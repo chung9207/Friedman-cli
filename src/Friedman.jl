@@ -3,7 +3,7 @@ module Friedman
 using CSV, DataFrames, PrettyTables, JSON3, TOML
 using MacroEconometricModels
 using LinearAlgebra: eigvals
-using Statistics: mean
+using Statistics: mean, median
 
 # CLI engine
 include("cli/types.jl")

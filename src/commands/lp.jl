@@ -237,8 +237,9 @@ function _lp_state(; data::String, shock::Int=1, state_var=nothing,
     println("Estimating State-Dependent LP: shock=$shock, state=$state_var, γ=$gamma, method=$method")
     println()
 
-    model = estimate_state_lp(Y, shock, state_var, horizons;
-        gamma=gamma, method=Symbol(method))
+    state_vec = Y[:, state_var]
+    model = estimate_state_lp(Y, shock, state_vec, horizons;
+        gamma=gamma)
 
     results = state_irf(model)
 
@@ -261,9 +262,10 @@ function _lp_state(; data::String, shock::Int=1, state_var=nothing,
 
     # Test regime difference
     diff_test = test_regime_difference(model)
+    jt = diff_test.joint_test
     println("Regime Difference Test:")
-    println("  Wald statistic: $(round(diff_test.wald_stat; digits=3))")
-    println("  p-value: $(round(diff_test.p_value; digits=4))")
+    println("  Avg t-statistic: $(round(jt.avg_t_stat; digits=3))")
+    println("  p-value: $(round(jt.p_value; digits=4))")
 end
 
 function _lp_propensity(; data::String, treatment::Int=1, horizons::Int=20,
@@ -276,21 +278,22 @@ function _lp_propensity(; data::String, treatment::Int=1, horizons::Int=20,
     println("Estimating Propensity Score LP: treatment=$treatment, horizons=$horizons, method=$score_method")
     println()
 
-    # Treatment is the specified column, covariates are all others
-    treatment_vec = Y[:, treatment]
+    # Treatment must be Bool — binarize via median split
+    treatment_bool = Bool.(Y[:, treatment] .> median(Y[:, treatment]))
     covariates = Y[:, setdiff(1:size(Y,2), [treatment])]
 
-    config = PropensityScoreConfig(; method=Symbol(score_method))
-    model = estimate_propensity_lp(Y, treatment_vec, horizons;
-        covariates=covariates, config=config)
+    model = estimate_propensity_lp(Y, treatment_bool, covariates, horizons;
+        ps_method=Symbol(score_method))
 
     irf_result = propensity_irf(model)
 
     # Diagnostics
     diag = propensity_diagnostics(model)
+    ps = diag.propensity_summary
     println("Propensity Score Diagnostics:")
-    println("  Mean score: $(round(diag.mean_score; digits=4))")
-    println("  Effective sample size: $(round(diag.effective_n; digits=1))")
+    println("  Treated mean score: $(round(ps.treated.mean; digits=4))")
+    println("  Control mean score: $(round(ps.control.mean; digits=4))")
+    println("  Max weighted SMD: $(round(diag.balance.max_weighted; digits=4))")
     println()
 
     irf_df = DataFrame()
@@ -361,19 +364,22 @@ function _lp_robust(; data::String, treatment::Int=1, horizons::Int=20,
     println("Estimating Doubly Robust LP: treatment=$treatment, horizons=$horizons, method=$score_method")
     println()
 
-    treatment_vec = Y[:, treatment]
+    # Treatment must be Bool — binarize via median split
+    treatment_bool = Bool.(Y[:, treatment] .> median(Y[:, treatment]))
     covariates = Y[:, setdiff(1:size(Y,2), [treatment])]
 
-    model = doubly_robust_lp(Y, treatment_vec, covariates, horizons;
+    model = doubly_robust_lp(Y, treatment_bool, covariates, horizons;
         ps_method=Symbol(score_method))
 
     irf_result = propensity_irf(model)
 
     # Diagnostics
     diag = propensity_diagnostics(model)
+    ps = diag.propensity_summary
     println("Doubly Robust Diagnostics:")
-    println("  Mean score: $(round(diag.mean_score; digits=4))")
-    println("  Effective sample size: $(round(diag.effective_n; digits=1))")
+    println("  Treated mean score: $(round(ps.treated.mean; digits=4))")
+    println("  Control mean score: $(round(ps.control.mean; digits=4))")
+    println("  Max weighted SMD: $(round(diag.balance.max_weighted; digits=4))")
     println()
 
     irf_df = DataFrame()

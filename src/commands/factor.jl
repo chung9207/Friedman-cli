@@ -71,8 +71,8 @@ function _factor_static(; data::String, nfactors=nothing, criterion::String="ic1
     r = if isnothing(nfactors)
         println("Selecting number of factors via Bai-Ng information criteria...")
         ic = ic_criteria(X, min(20, size(X, 2)))
-        crit_sym = Symbol(lowercase(criterion))
-        optimal_r = getfield(ic, crit_sym)
+        r_sym = Symbol("r_", uppercase(criterion))
+        optimal_r = getfield(ic, r_sym)
         println("  $criterion suggests $optimal_r factors")
         optimal_r
     else
@@ -87,10 +87,9 @@ function _factor_static(; data::String, nfactors=nothing, criterion::String="ic1
     # Scree plot data
     scree = scree_plot_data(model)
     scree_df = DataFrame(
-        component=1:length(scree.eigenvalues),
-        eigenvalue=scree.eigenvalues,
-        variance_share=scree.variance_shares,
-        cumulative=scree.cumulative_shares
+        component=scree.factors,
+        eigenvalue=scree.explained_variance,
+        cumulative=scree.cumulative_variance
     )
     output_result(scree_df; format=Symbol(format), title="Scree Data (Eigenvalues & Variance Shares)")
     println()
@@ -111,8 +110,8 @@ function _factor_dynamic(; data::String, nfactors=nothing, factor_lags::Int=1,
 
     r = if isnothing(nfactors)
         println("Selecting number of factors...")
-        ic = ic_criteria_dynamic(X, min(10, size(X, 2)), 4; method=:twostep)
-        optimal_r = ic.r_opt
+        ic = ic_criteria(X, min(10, size(X, 2)))
+        optimal_r = ic.r_IC1
         println("  Auto-selected $optimal_r factors")
         optimal_r
     else
@@ -124,7 +123,8 @@ function _factor_dynamic(; data::String, nfactors=nothing, factor_lags::Int=1,
 
     model = estimate_dynamic_factors(X, r, factor_lags; method=Symbol(method))
 
-    stable = is_stationary(model)
+    stable_result = is_stationary(model)
+    stable = stable_result isa Bool ? stable_result : stable_result.is_stationary
     if stable
         printstyled("✓ Factor VAR is stationary\n"; color=:green)
     else
@@ -158,7 +158,7 @@ function _factor_gdfm(; data::String, nfactors=nothing, dynamic_rank=nothing,
     q = if isnothing(dynamic_rank)
         println("Selecting dynamic rank...")
         ic = ic_criteria_gdfm(X, min(5, size(X, 2)))
-        q_opt = ic.q_opt
+        q_opt = ic.q_ratio
         println("  Auto-selected $q_opt dynamic factors")
         q_opt
     else
@@ -167,8 +167,8 @@ function _factor_gdfm(; data::String, nfactors=nothing, dynamic_rank=nothing,
 
     r = if isnothing(nfactors)
         println("Selecting static rank...")
-        ic = ic_criteria_gdfm(X, q)
-        r_opt = haskey(ic, :r_opt) ? ic.r_opt : 0
+        ic_static = ic_criteria(X, min(20, size(X, 2)))
+        r_opt = ic_static.r_IC1
         println("  Auto-selected $r_opt static factors")
         r_opt
     else
@@ -200,7 +200,7 @@ function _factor_forecast(; data::String, nfactors=nothing, horizon::Int=12,
     r = if isnothing(nfactors)
         println("Selecting number of factors via Bai-Ng information criteria...")
         ic = ic_criteria(X, min(20, size(X, 2)))
-        optimal_r = ic.ic1
+        optimal_r = ic.r_IC1
         println("  IC1 suggests $optimal_r factors")
         optimal_r
     else

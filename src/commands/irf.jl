@@ -149,7 +149,7 @@ function _irf_compute(; data::String, lags=nothing, shock::Int=1, horizons::Int=
 
     irf_result = irf(model, horizons; kwargs...)
 
-    summary(irf_result)
+    MacroEconometricModels.summary(irf_result)
 
     # Output IRF for the specified shock
     irf_vals = irf_result.values  # H x n x n
@@ -214,7 +214,7 @@ function _irf_bayesian(Y::Matrix{Float64}, p::Int, n::Int, horizons::Int, shock:
 
     birf = irf(chain, p, n, horizons; kwargs...)
 
-    summary(birf)
+    MacroEconometricModels.summary(birf)
 
     # Output median IRF with credible intervals
     # birf.quantiles: (H, n_vars, n_shocks, n_quantiles)

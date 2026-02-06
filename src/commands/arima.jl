@@ -54,7 +54,9 @@ end
 # Estimate the appropriate model variant based on (p, d, q)
 function _estimate_arima_model(y::Vector{Float64}, p::Int, d::Int, q::Int; method::Symbol=:css_mle)
     if d == 0 && q == 0
-        return estimate_ar(y, p; method=method)
+        # estimate_ar only accepts :ols or :mle
+        ar_method = method in (:ols, :mle) ? method : :mle
+        return estimate_ar(y, p; method=ar_method)
     elseif d == 0 && p == 0
         return estimate_ma(y, q; method=method)
     elseif d == 0
@@ -78,7 +80,6 @@ end
 
 function _arima_coef_table(model; format::String="table", output::String="", title::String="Coefficients")
     c = coef(model)
-    se = stderror(model)
 
     # Build parameter names
     p_order = ar_order(model)
@@ -96,11 +97,19 @@ function _arima_coef_table(model; format::String="table", output::String="", tit
         push!(param_names, "const$i")
     end
 
-    coef_df = DataFrame(
-        parameter = param_names,
-        estimate  = round.(c; digits=6),
-        std_error = round.(se; digits=6),
-    )
+    coef_df = try
+        se = stderror(model)
+        DataFrame(
+            parameter = param_names,
+            estimate  = round.(c; digits=6),
+            std_error = round.(se; digits=6),
+        )
+    catch
+        DataFrame(
+            parameter = param_names,
+            estimate  = round.(c; digits=6),
+        )
+    end
 
     output_result(coef_df; format=Symbol(format), output=output, title=title)
 end
@@ -119,10 +128,10 @@ function _arima_estimate(; data::String, column::Int=1, p::Int=1, d::Int=0, q::I
     _arima_coef_table(model; format=format, output=output, title="$label Coefficients ($vname)")
 
     println()
-    output_kv([
-        "AIC" => Any(round(aic(model); digits=4)),
-        "BIC" => Any(round(bic(model); digits=4)),
-        "Log-likelihood" => Any(round(loglikelihood(model); digits=4)),
+    output_kv(Pair{String,Any}[
+        "AIC" => round(aic(model); digits=4),
+        "BIC" => round(bic(model); digits=4),
+        "Log-likelihood" => round(loglikelihood(model); digits=4),
     ]; format=format, title="Information Criteria")
 end
 
@@ -137,7 +146,8 @@ function _arima_auto(; data::String, column::Int=1, max_p::Int=5, max_d::Int=2, 
     println("  Search: p=0:$max_p, d=0:$max_d, q=0:$max_q, criterion=$criterion, method=$method")
     println()
 
-    model = auto_arima(y; max_p=max_p, max_q=max_q, max_d=max_d, criterion=crit_sym, method=method_sym)
+    safe_method = method_sym == :css_mle ? :mle : method_sym
+    model = auto_arima(y; max_p=max_p, max_q=max_q, max_d=max_d, criterion=crit_sym, method=safe_method)
 
     p_sel = ar_order(model)
     d_sel = diff_order(model)
@@ -150,10 +160,10 @@ function _arima_auto(; data::String, column::Int=1, max_p::Int=5, max_d::Int=2, 
     _arima_coef_table(model; format=format, output=output, title="$label Coefficients ($vname)")
 
     println()
-    output_kv([
-        "AIC" => Any(round(aic(model); digits=4)),
-        "BIC" => Any(round(bic(model); digits=4)),
-        "Log-likelihood" => Any(round(loglikelihood(model); digits=4)),
+    output_kv(Pair{String,Any}[
+        "AIC" => round(aic(model); digits=4),
+        "BIC" => round(bic(model); digits=4),
+        "Log-likelihood" => round(loglikelihood(model); digits=4),
     ]; format=format, title="Information Criteria")
 end
 
@@ -164,9 +174,10 @@ function _arima_forecast(; data::String, column::Int=1, p=nothing, d::Int=0, q::
     method_sym = Symbol(method)
 
     # Estimate model: auto if p not specified, explicit otherwise
+    safe_method = method_sym == :css_mle ? :mle : method_sym
     model = if isnothing(p)
         println("Auto ARIMA + Forecast: variable=$vname, observations=$(length(y))")
-        auto_arima(y; method=method_sym)
+        auto_arima(y; method=safe_method)
     else
         label = _model_label(p, d, q)
         println("$label Forecast: variable=$vname, observations=$(length(y)), method=$method")

@@ -72,7 +72,7 @@ function _hd_compute(; data::String, lags=nothing, id::String="cholesky",
 
     hd_result = historical_decomposition(model, size(Y, 1) - p; kwargs...)
 
-    summary(hd_result)
+    MacroEconometricModels.summary(hd_result)
 
     # Verify decomposition
     is_valid = verify_decomposition(hd_result)
@@ -137,7 +137,7 @@ function _hd_bayesian(Y::Matrix{Float64}, p::Int, n::Int, varnames::Vector{Strin
     bhd = historical_decomposition(chain, p, n, horizon;
         data=Y, method=method, quantiles=[0.16, 0.5, 0.84])
 
-    summary(bhd)
+    MacroEconometricModels.summary(bhd)
 
     # Output posterior mean contributions for each variable
     # bhd.mean: contributions (T_eff x n_vars x n_shocks)
