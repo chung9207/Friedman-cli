@@ -28,10 +28,11 @@ julia --project bin/friedman [command] [subcommand] [args...] [options...]
 | `fevd`   | `compute` | Forecast Error Variance Decomposition (frequentist + Bayesian) |
 | `hd`     | `compute` | Historical Decomposition (frequentist + Bayesian) |
 | `lp`     | `estimate` `iv` `smooth` `state` `propensity` `multi` `robust` | Local Projections |
-| `factor` | `static` `dynamic` `gdfm` | Factor Models |
+| `factor` | `static` `dynamic` `gdfm` `forecast` | Factor Models |
 | `test`   | `adf` `kpss` `pp` `za` `np` `johansen` | Unit Root & Cointegration Tests |
 | `gmm`    | `estimate` | Generalized Method of Moments |
 | `arima`  | `estimate` `auto` `forecast` | ARIMA Models |
+| `nongaussian` | `fastica` `ml` `heteroskedasticity` `normality` `identifiability` | Non-Gaussian SVAR |
 
 All commands support `--format` (`table`|`csv`|`json`) and `--output` (file path) options.
 
@@ -151,6 +152,11 @@ friedman factor dynamic data.csv --nfactors=2 --factor-lags=1 --method=twostep
 
 # Generalized DFM (spectral)
 friedman factor gdfm data.csv --dynamic-rank=2
+
+# Factor model forecasting
+friedman factor forecast data.csv --horizon=12
+friedman factor forecast data.csv --nfactors=3 --horizon=24 --ci-method=bootstrap
+friedman factor forecast data.csv --ci-method=parametric --conf-level=0.90
 ```
 
 ### Unit Root & Cointegration Tests
@@ -201,6 +207,33 @@ friedman arima forecast data.csv --horizons=12 --confidence=0.95
 
 # Forecast with explicit model
 friedman arima forecast data.csv --p=2 --d=1 --q=1 --horizons=24
+```
+
+### Non-Gaussian SVAR
+
+```bash
+# ICA-based identification (FastICA, Infomax, JADE)
+friedman nongaussian fastica data.csv --method=fastica --contrast=logcosh
+friedman nongaussian fastica data.csv --method=infomax --lags=4
+friedman nongaussian fastica data.csv --method=jade
+
+# Maximum likelihood (Student-t, skew-t, GHD)
+friedman nongaussian ml data.csv --distribution=student_t
+friedman nongaussian ml data.csv --distribution=skew_t --lags=2
+
+# Heteroskedasticity-based identification
+friedman nongaussian heteroskedasticity data.csv --method=markov --regimes=2
+friedman nongaussian heteroskedasticity data.csv --method=garch
+friedman nongaussian heteroskedasticity data.csv --method=smooth_transition --config=ng.toml
+friedman nongaussian heteroskedasticity data.csv --method=external --config=ng.toml
+
+# Normality test suite (checks if non-Gaussian methods are applicable)
+friedman nongaussian normality data.csv --lags=4
+
+# Identifiability tests
+friedman nongaussian identifiability data.csv --test=all
+friedman nongaussian identifiability data.csv --test=strength
+friedman nongaussian identifiability data.csv --test=gaussianity --method=fastica
 ```
 
 ## Output Formats
@@ -275,6 +308,15 @@ var = 2
 shock = 1
 sign = "positive"
 horizon = 0
+```
+
+**Non-Gaussian SVAR:**
+
+```toml
+[nongaussian]
+method = "smooth_transition"
+transition_variable = "spread"
+n_regimes = 2
 ```
 
 **GMM specification:**
