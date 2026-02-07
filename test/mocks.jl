@@ -267,13 +267,12 @@ report(::BayesianHistoricalDecomposition) = nothing
 is_stationary(m::VARModel) = (is_stationary=true, eigenvalues=[0.5+0.1im, 0.5-0.1im, 0.3+0.0im])
 is_stationary(m::DynamicFactorModel) = (is_stationary=true,)
 
-function companion_matrix(m::VARModel)
-    n = size(m.Y, 2)
-    np = n * m.p
+function companion_matrix(B::AbstractMatrix, n::Int, p::Int)
+    np = n * p
     np == 0 && return zeros(1, 1)
     C = zeros(np, np)
-    for j in 1:n, i in 1:min(size(m.B, 1), np)
-        C[j, i] = m.B[i, j] * 0.3
+    for j in 1:n, i in 1:min(size(B, 1), np)
+        C[j, i] = B[i, j] * 0.3
     end
     np > n && (C[n+1:np, 1:np-n] = Matrix{Float64}(I(np - n)))
     C

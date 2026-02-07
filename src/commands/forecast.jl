@@ -202,7 +202,7 @@ function _forecast_var(; data::String, lags=nothing, horizons::Int=12,
     alpha = 1.0 - confidence
     z = quantile_normal(1.0 - alpha / 2.0)
 
-    comp = companion_matrix(model)
+    comp = companion_matrix(coef(model), n, p)
     n_comp = size(comp, 1)
     J = zeros(n, n_comp)
     J[1:n, 1:n] = I(n)

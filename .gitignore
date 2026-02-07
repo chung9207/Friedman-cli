@@ -10,3 +10,5 @@ build_sysimage.jl
 precompile_exec.jl
 friedman.so
 bin/friedman-wrapper
+data.csv
+.friedmanlog.bson
