@@ -55,7 +55,7 @@ end
 SVARRestrictions(n::Int; zeros=ZeroRestriction[], signs=SignRestriction[]) =
     SVARRestrictions(n, zeros, signs)
 struct AriasSVARResult{T}
-    Q_draws::Vector{Matrix{T}}; irf::Array{T,3}; weights::Vector{T}; acceptance_rate::T
+    Q_draws::Vector{Matrix{T}}; irf_draws::Array{T,4}; weights::Vector{T}; acceptance_rate::T
     restrictions::SVARRestrictions
 end
 
@@ -314,8 +314,13 @@ sign_restriction(variable, shock, sign::Symbol; horizon=0) = SignRestriction(var
 function identify_arias(model::VARModel, restrictions::SVARRestrictions, horizon::Int;
                         n_draws=1000, n_rotations=1000)
     n = size(model.Y, 2)
-    irf_vals = ones(horizon + 1, n, n) * 0.1
-    AriasSVARResult([Matrix{Float64}(I(n))], irf_vals, [1.0], 0.5, restrictions)
+    n_d = 10
+    irf_draws = ones(n_d, horizon + 1, n, n) * 0.1
+    AriasSVARResult([Matrix{Float64}(I(n)) for _ in 1:n_d], irf_draws, ones(n_d), 0.5, restrictions)
+end
+using Statistics: mean as _mean
+function irf_mean(result::AriasSVARResult)
+    dropdims(_mean(result.irf_draws; dims=1); dims=1)
 end
 
 # Chain parameter extraction (BVAR forecast)
@@ -510,7 +515,6 @@ function _mock_ica(model::VARModel, method_sym::Symbol)
                   ones(T_u, n)*0.1, method_sym, true, 50, 0.001)
 end
 identify_fastica(model::VARModel; contrast=:logcosh, max_iter=200, tol=1e-6) = _mock_ica(model, :fastica)
-identify_infomax(model::VARModel; max_iter=200, tol=1e-6, learning_rate=0.01) = _mock_ica(model, :infomax)
 identify_jade(model::VARModel) = _mock_ica(model, :jade)
 identify_sobi(model::VARModel) = _mock_ica(model, :sobi)
 identify_dcov(model::VARModel) = _mock_ica(model, :dcov)
@@ -569,7 +573,7 @@ export select_lag_order, estimate_var, estimate_bvar, posterior_mean_model, post
 export optimize_hyperparameters, coef, loglikelihood, stderror
 export is_stationary, companion_matrix, companion_matrix_factors, nvars
 export irf, fevd, historical_decomposition, verify_decomposition, contribution
-export zero_restriction, sign_restriction, identify_arias
+export zero_restriction, sign_restriction, identify_arias, irf_mean
 export estimate_lp, lp_irf, estimate_lp_iv, lp_iv_irf, weak_instrument_test
 export estimate_smooth_lp, smooth_lp_irf, cross_validate_lambda
 export estimate_state_lp, state_irf, test_regime_difference
@@ -581,7 +585,7 @@ export adf_test, kpss_test, pp_test, za_test, ngperron_test, johansen_test
 export estimate_lp_gmm, gmm_summary, j_test
 export estimate_ar, estimate_ma, estimate_arma, estimate_arima, auto_arima
 export ar_order, ma_order, diff_order, aic, bic
-export identify_fastica, identify_infomax, identify_jade, identify_sobi, identify_dcov, identify_hsic
+export identify_fastica, identify_jade, identify_sobi, identify_dcov, identify_hsic
 export identify_nongaussian_ml, identify_mixture_normal, identify_pml, identify_skew_normal
 export identify_markov_switching, identify_garch, identify_smooth_transition, identify_external_volatility
 export normality_test_suite, test_identification_strength, test_shock_gaussianity

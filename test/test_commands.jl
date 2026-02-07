@@ -1639,10 +1639,10 @@ end  # arima.jl
         end
     end
 
-    @testset "_nongaussian_fastica — all 6 ICA methods" begin
+    @testset "_nongaussian_fastica — all 5 ICA methods" begin
         mktempdir() do dir
             csv = _make_csv(dir; T=100, n=3)
-            for method in ["fastica", "infomax", "jade", "sobi", "dcov", "hsic"]
+            for method in ["fastica", "jade", "sobi", "dcov", "hsic"]
                 out = _capture() do
                     _nongaussian_fastica(; data=csv, lags=2, method=method, format="table")
                 end
@@ -1859,10 +1859,10 @@ end  # arima.jl
         end
     end
 
-    @testset "_nongaussian_identifiability — all 6 ICA methods" begin
+    @testset "_nongaussian_identifiability — all 5 ICA methods" begin
         mktempdir() do dir
             csv = _make_csv(dir; T=100, n=3)
-            for ica_method in ["fastica", "infomax", "jade", "sobi", "dcov", "hsic"]
+            for ica_method in ["fastica", "jade", "sobi", "dcov", "hsic"]
                 out = _capture() do
                     _nongaussian_identifiability(; data=csv, lags=2, test="gaussianity",
                                                   method=ica_method, format="table")

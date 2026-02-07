@@ -225,9 +225,8 @@ friedman arima forecast data.csv --p=2 --d=1 --q=1 --horizons=24
 ### Non-Gaussian SVAR
 
 ```bash
-# ICA-based identification (FastICA, Infomax, JADE, SOBI, dCov, HSIC)
+# ICA-based identification (FastICA, JADE, SOBI, dCov, HSIC)
 friedman nongaussian fastica data.csv --method=fastica --contrast=logcosh
-friedman nongaussian fastica data.csv --method=infomax --lags=4
 friedman nongaussian fastica data.csv --method=jade
 friedman nongaussian fastica data.csv --method=sobi
 friedman nongaussian fastica data.csv --method=dcov

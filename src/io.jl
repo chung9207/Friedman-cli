@@ -86,9 +86,7 @@ function _write_table(df::DataFrame, output::String, title::String)
     try
         pretty_table(io, df;
             title=title,
-            tf=tf_unicode_rounded,
-            alignment=:c,
-            show_subheader=false)
+            alignment=:c)
     finally
         isempty(output) || close(io)
     end

@@ -7,7 +7,7 @@ function register_nongaussian_commands!()
         ],
         options=[
             Option("lags"; short="p", type=Int, default=nothing, description="Lag order (default: auto via AIC)"),
-            Option("method"; type=String, default="fastica", description="fastica|infomax|jade|sobi|dcov|hsic"),
+            Option("method"; type=String, default="fastica", description="fastica|jade|sobi|dcov|hsic"),
             Option("contrast"; type=String, default="logcosh", description="logcosh|exp|kurtosis (for FastICA)"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
@@ -58,7 +58,7 @@ function register_nongaussian_commands!()
         options=[
             Option("lags"; short="p", type=Int, default=nothing, description="Lag order (default: auto via AIC)"),
             Option("test"; short="t", type=String, default="all", description="strength|gaussianity|independence|overidentification|all"),
-            Option("method"; type=String, default="fastica", description="fastica|infomax|jade|sobi|dcov|hsic (for gaussianity/independence/overidentification tests)"),
+            Option("method"; type=String, default="fastica", description="fastica|jade|sobi|dcov|hsic (for gaussianity/independence/overidentification tests)"),
             Option("contrast"; type=String, default="logcosh", description="logcosh|exp|kurtosis (for FastICA)"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
@@ -104,9 +104,7 @@ function _nongaussian_fastica(; data::String, lags=nothing, method::String="fast
     println("Non-Gaussian SVAR: method=$method, contrast=$contrast, VAR($p), $n variables")
     println()
 
-    result = if method == "infomax"
-        identify_infomax(model)
-    elseif method == "jade"
+    result = if method == "jade"
         identify_jade(model)
     elseif method == "sobi"
         identify_sobi(model)
@@ -323,9 +321,7 @@ function _nongaussian_identifiability(; data::String, lags=nothing, test::String
     # For gaussianity, independence, and overidentification tests, we need an ICA result
     ica_result = nothing
     if run_gaussianity || run_independence || run_overid
-        ica_result = if method == "infomax"
-            identify_infomax(model)
-        elseif method == "jade"
+        ica_result = if method == "jade"
             identify_jade(model)
         elseif method == "sobi"
             identify_sobi(model)

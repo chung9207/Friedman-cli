@@ -295,7 +295,7 @@ function _var_irf_arias(model::VARModel, config::String, horizons::Int,
     restrictions = SVARRestrictions(n; zeros=zero_restrs, signs=sign_restrs)
     result = identify_arias(model, restrictions, horizons)
 
-    irf_vals = result.irf  # H x n x n
+    irf_vals = irf_mean(result)  # H x n x n
     n_h = size(irf_vals, 1)
 
     irf_df = DataFrame()
