@@ -678,7 +678,7 @@ function _forecast_sv(; data::String, column::Int=1, draws::Int=5000,
     println("Stochastic Volatility Forecast: variable=$vname, horizons=$horizons, draws=$draws")
     println()
 
-    model = estimate_sv(y; n_draws=draws)
+    model = estimate_sv(y; n_samples=draws)
     fc = forecast(model, horizons)
 
     fc_df = DataFrame(

@@ -574,11 +574,11 @@ function forecast(m::Union{ARModel,MAModel,ARMAModel,ARIMAModel}, h::Int; conf_l
 end
 
 # Volatility model functions
-estimate_arch(y, q) = ARCHModel(ones(q+1) * 0.1)
-estimate_garch(y, p, q) = GARCHModel(ones(p+q+1) * 0.1)
-estimate_egarch(y, p, q) = EGARCHModel(ones(2*q+p+1) * 0.1)
-estimate_gjr_garch(y, p, q) = GJRGARCHModel(ones(2*q+p+1) * 0.1)
-estimate_sv(y; n_draws=5000) = SVModel(ones(3) * 0.1)
+estimate_arch(y, q) = ARCHModel(ones(q+2) * 0.1)
+estimate_garch(y, p, q) = GARCHModel(ones(p+q+2) * 0.1)
+estimate_egarch(y, p, q) = EGARCHModel(ones(2*q+p+2) * 0.1)
+estimate_gjr_garch(y, p, q) = GJRGARCHModel(ones(2*q+p+2) * 0.1)
+estimate_sv(y; n_samples=5000) = SVModel(ones(3) * 0.1)
 coef(m::Union{ARCHModel,GARCHModel,EGARCHModel,GJRGARCHModel,SVModel}) = m.coefficients
 persistence(m::Union{ARCHModel,GARCHModel,EGARCHModel,GJRGARCHModel,SVModel}) = 0.85
 halflife(m::Union{GARCHModel,GJRGARCHModel}) = 4.3

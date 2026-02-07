@@ -836,7 +836,7 @@ function _estimate_arch(; data::String, column::Int=1, q::Int=1,
     model = estimate_arch(y, q)
 
     c = coef(model)
-    param_names = ["omega"; ["alpha$i" for i in 1:q]]
+    param_names = ["mu"; "omega"; ["alpha$i" for i in 1:q]]
     coef_df = DataFrame(parameter=param_names[1:length(c)], estimate=round.(c; digits=6))
     output_result(coef_df; format=Symbol(format), output=output, title="ARCH($q) Coefficients ($vname)")
 
@@ -857,7 +857,7 @@ function _estimate_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
     model = estimate_garch(y, p, q)
 
     c = coef(model)
-    param_names = ["omega"; ["alpha$i" for i in 1:q]; ["beta$i" for i in 1:p]]
+    param_names = ["mu"; "omega"; ["alpha$i" for i in 1:q]; ["beta$i" for i in 1:p]]
     coef_df = DataFrame(parameter=param_names[1:length(c)], estimate=round.(c; digits=6))
     output_result(coef_df; format=Symbol(format), output=output, title="GARCH($p,$q) Coefficients ($vname)")
 
@@ -880,7 +880,7 @@ function _estimate_egarch(; data::String, column::Int=1, p::Int=1, q::Int=1,
     model = estimate_egarch(y, p, q)
 
     c = coef(model)
-    param_names = ["omega"; ["alpha$i" for i in 1:q]; ["gamma$i" for i in 1:q]; ["beta$i" for i in 1:p]]
+    param_names = ["mu"; "omega"; ["alpha$i" for i in 1:q]; ["gamma$i" for i in 1:q]; ["beta$i" for i in 1:p]]
     coef_df = DataFrame(parameter=param_names[1:length(c)], estimate=round.(c; digits=6))
     output_result(coef_df; format=Symbol(format), output=output, title="EGARCH($p,$q) Coefficients ($vname)")
 
@@ -899,7 +899,7 @@ function _estimate_gjr_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
     model = estimate_gjr_garch(y, p, q)
 
     c = coef(model)
-    param_names = ["omega"; ["alpha$i" for i in 1:q]; ["gamma$i" for i in 1:q]; ["beta$i" for i in 1:p]]
+    param_names = ["mu"; "omega"; ["alpha$i" for i in 1:q]; ["gamma$i" for i in 1:q]; ["beta$i" for i in 1:p]]
     coef_df = DataFrame(parameter=param_names[1:length(c)], estimate=round.(c; digits=6))
     output_result(coef_df; format=Symbol(format), output=output, title="GJR-GARCH($p,$q) Coefficients ($vname)")
 
@@ -917,7 +917,7 @@ function _estimate_sv(; data::String, column::Int=1, draws::Int=5000,
     println("Estimating Stochastic Volatility: variable=$vname, observations=$(length(y)), draws=$draws")
     println()
 
-    model = estimate_sv(y; n_draws=draws)
+    model = estimate_sv(y; n_samples=draws)
 
     c = coef(model)
     param_names = ["mu", "phi", "sigma_eta"]
