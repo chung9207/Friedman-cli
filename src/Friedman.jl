@@ -28,7 +28,7 @@ include("commands/gmm.jl")
 include("commands/arima.jl")
 include("commands/nongaussian.jl")
 
-const FRIEDMAN_VERSION = v"0.1.3"
+const FRIEDMAN_VERSION = v"0.1.4"
 
 """
     build_app() → Entry

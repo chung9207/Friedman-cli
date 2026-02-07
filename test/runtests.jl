@@ -361,11 +361,11 @@ using Test
         @test contains(help_text, "friedman var")
 
         # Entry help includes version number
-        entry = Entry("friedman", node; version=v"0.1.3")
+        entry = Entry("friedman", node; version=v"0.1.4")
         buf = IOBuffer()
         print_help(buf, entry)
         help_text = String(take!(buf))
-        @test contains(help_text, "0.1.3")
+        @test contains(help_text, "0.1.4")
 
         # Leaf with optional argument shows [arg] not <arg>
         leaf_opt_arg = LeafCommand("test", handler;
@@ -480,9 +480,9 @@ using Test
         @test called_with[][:data] == "test.csv"
 
         # dispatch() with ["--version"] prints version
-        entry = Entry("friedman", outer_node; version=v"0.1.3")
+        entry = Entry("friedman", outer_node; version=v"0.1.4")
         version_output = strip(capture_stdout(() -> dispatch(entry, ["--version"])))
-        @test contains(version_output, "0.1.3")
+        @test contains(version_output, "0.1.4")
 
         # dispatch() with [] shows help (no error)
         help_output = capture_stdout(() -> dispatch(entry, String[]))
@@ -530,7 +530,7 @@ using Test
 
         # -V short flag triggers version
         v_output = strip(capture_stdout(() -> dispatch(entry, ["-V"])))
-        @test contains(v_output, "0.1.3")
+        @test contains(v_output, "0.1.4")
     end
 
     @testset "VAR pipeline structure (pipeline)" begin
@@ -830,7 +830,7 @@ using Test
         root = NodeCommand("friedman",
             Dict{String,Union{NodeCommand,LeafCommand}}("var" => var_node, "bvar" => bvar_node),
             "Friedman CLI")
-        entry = Entry("friedman", root; version=v"0.1.3")
+        entry = Entry("friedman", root; version=v"0.1.4")
 
         # Top level should NOT have irf, fevd, hd
         @test !haskey(root.subcmds, "irf")
