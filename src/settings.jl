@@ -42,8 +42,12 @@ function load_settings()
     dir = friedman_home()
     path = joinpath(dir, "settings.json")
     isfile(path) || return Dict{String,Any}()
-    json_str = read(path, String)
-    return Dict{String,Any}(JSON3.read(json_str, Dict{String,Any}))
+    try
+        json_str = read(path, String)
+        return Dict{String,Any}(JSON3.read(json_str, Dict{String,Any}))
+    catch
+        return Dict{String,Any}()
+    end
 end
 
 """
@@ -88,8 +92,12 @@ function load_projects()
     dir = friedman_home()
     path = joinpath(dir, "projects.json")
     isfile(path) || return Dict{String,Any}[]
-    json_str = read(path, String)
-    return Vector{Dict{String,Any}}(JSON3.read(json_str, Vector{Dict{String,Any}}))
+    try
+        json_str = read(path, String)
+        return Vector{Dict{String,Any}}(JSON3.read(json_str, Vector{Dict{String,Any}}))
+    catch
+        return Dict{String,Any}[]
+    end
 end
 
 """

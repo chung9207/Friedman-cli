@@ -217,6 +217,30 @@ struct VolatilityForecast{T<:Real}
     forecast::Vector{T}; horizon::Int
 end
 
+# ─── VECM Types ──────────────────────────────────────────
+
+struct VECMModel{T<:Real}
+    Y::Matrix{T}; p::Int; rank::Int
+    alpha::Matrix{T}; beta::Matrix{T}; Pi::Matrix{T}
+    Gamma::Vector{Matrix{T}}; mu::Vector{T}
+    U::Matrix{T}; Sigma::Matrix{T}
+    aic::T; bic::T; hqic::T; loglik::T
+    deterministic::Symbol; method::Symbol
+end
+
+struct VECMForecast{T<:Real}
+    levels::Matrix{T}; differences::Matrix{T}
+    ci_lower::Union{Matrix{T},Nothing}; ci_upper::Union{Matrix{T},Nothing}
+    horizon::Int; ci_method::Symbol
+end
+
+struct VECMGrangerResult{T<:Real}
+    short_run_stat::T; short_run_pvalue::T; short_run_df::Int
+    long_run_stat::T; long_run_pvalue::T; long_run_df::Int
+    strong_stat::T; strong_pvalue::T; strong_df::Int
+    cause_var::Int; effect_var::Int
+end
+
 # ─── Mock Helper ──────────────────────────────────────────
 
 function _mock_var(Y::Matrix{Float64}, p::Int)
@@ -638,6 +662,54 @@ test_shock_independence(result::ICASVARResult) = (statistic=3.0, pvalue=0.08)
 test_overidentification(model::VARModel, result::ICASVARResult; restrictions=nothing, n_bootstrap=100) = (statistic=1.5, pvalue=0.45)
 test_gaussian_vs_nongaussian(model::VARModel) = (statistic=18.0, pvalue=0.001)
 
+# ─── VECM Functions ──────────────────────────────────────
+
+function estimate_vecm(Y::AbstractMatrix, p::Int; rank=nothing, deterministic=:constant,
+                       method=:johansen, significance=0.05)
+    T_obs, n = size(Y)
+    r = isnothing(rank) ? min(1, n - 1) : rank
+    alpha = ones(n, r) * 0.1
+    beta = ones(n, r) * 0.2
+    Pi = alpha * beta'
+    Gamma = [ones(n, n) * 0.05 for _ in 1:max(1, p - 1)]
+    mu = zeros(n)
+    U = zeros(T_obs - p, n) .+ 0.01
+    Sigma = Matrix{Float64}(I(n)) * 0.01
+    VECMModel(Y, p, r, alpha, beta, Pi, Gamma, mu, U, Sigma,
+              -100.0, -95.0, -97.0, -500.0, deterministic, method)
+end
+
+select_vecm_rank(Y::AbstractMatrix, p::Int; criterion=:trace, significance=0.05) =
+    min(1, size(Y, 2) - 1)
+
+function to_var(vecm::VECMModel)
+    _mock_var(vecm.Y, vecm.p)
+end
+
+cointegrating_rank(m::VECMModel) = m.rank
+coef(m::VECMModel) = m.Pi
+loglikelihood(m::VECMModel) = m.loglik
+report(::VECMModel) = nothing
+
+function forecast(vecm::VECMModel, h::Int; ci_method=:none, reps=500, conf_level=0.95)
+    n = size(vecm.Y, 2)
+    levels = ones(h, n) * 0.1
+    diffs = ones(h, n) * 0.01
+    has_ci = ci_method != :none
+    VECMForecast(levels, diffs,
+        has_ci ? levels .- 0.5 : nothing,
+        has_ci ? levels .+ 0.5 : nothing,
+        h, ci_method)
+end
+
+function granger_causality_vecm(vecm::VECMModel, cause::Int, effect::Int)
+    VECMGrangerResult(
+        8.5, 0.014, 2,   # short-run
+        5.2, 0.023, 1,   # long-run
+        12.3, 0.006, 3,  # strong (joint)
+        cause, effect)
+end
+
 # ─── Exports ──────────────────────────────────────────────
 
 export VARModel, MockChains, BVARPosterior, MinnesotaHyperparameters
@@ -654,6 +726,7 @@ export NormalityTestResult, NormalityTestSuite
 export ADFResult, KPSSResult, PPResult, ZAResult, NgPerronResult, JohansenResult
 export GMMModel
 export ARCHModel, GARCHModel, EGARCHModel, GJRGARCHModel, SVModel, VolatilityForecast
+export VECMModel, VECMForecast, VECMGrangerResult
 
 export select_lag_order, estimate_var, estimate_bvar, posterior_mean_model, posterior_median_model
 export optimize_hyperparameters, coef, loglikelihood, stderror, report
@@ -679,5 +752,6 @@ export identify_nongaussian_ml, identify_mixture_normal, identify_pml, identify_
 export identify_markov_switching, identify_garch, identify_smooth_transition, identify_external_volatility
 export normality_test_suite, test_identification_strength, test_shock_gaussianity
 export test_shock_independence, test_overidentification, test_gaussian_vs_nongaussian
+export estimate_vecm, select_vecm_rank, to_var, cointegrating_rank, granger_causality_vecm
 
 end # module

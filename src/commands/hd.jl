@@ -41,10 +41,25 @@ function register_hd_commands!()
         ],
         description="Compute historical decomposition via structural LP")
 
+    hd_vecm = LeafCommand("vecm", _hd_vecm;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("lags"; short="p", type=Int, default=2, description="Lag order (in levels)"),
+            Option("rank"; short="r", type=String, default="auto", description="Cointegration rank (auto|1|2|...)"),
+            Option("deterministic"; type=String, default="constant", description="none|constant|trend"),
+            Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun"),
+            Option("config"; type=String, default="", description="TOML config for identification"),
+            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        description="Compute historical decomposition via VECM → VAR representation")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "var"  => hd_var,
         "bvar" => hd_bvar,
         "lp"   => hd_lp,
+        "vecm" => hd_vecm,
     )
     return NodeCommand("hd", subcmds, "Historical Decomposition")
 end
@@ -73,24 +88,10 @@ function _hd_var(; data::String, lags=nothing, id::String="cholesky",
     end
     println()
 
-    for vi in 1:n
-        T_eff = hd_result.T_eff
-        hd_df = DataFrame()
-        hd_df.period = 1:T_eff
-        hd_df.actual = hd_result.actual[:, vi]
-        hd_df.initial = hd_result.initial_conditions[:, vi]
-
-        for si in 1:n
-            shock_name = si <= length(varnames) ? varnames[si] : "shock_$si"
-            hd_df[!, "contrib_$shock_name"] = contribution(hd_result, vi, si)
-        end
-
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-        output_result(hd_df; format=Symbol(format),
-                      output=isempty(output) ? "" : replace(output, "." => "_$(vname)."),
-                      title="Historical Decomposition: $vname ($id identification)")
-        println()
-    end
+    _output_hd_tables((vi, si) -> contribution(hd_result, vi, si), varnames, hd_result.T_eff;
+                      id=id, title_prefix="Historical Decomposition",
+                      format=format, output=output,
+                      actual=hd_result.actual, initial=hd_result.initial_conditions)
 
     storage_save_auto!("hd", Dict{String,Any}("type" => "var", "id" => id, "n_vars" => n),
         Dict{String,Any}("command" => "hd var", "data" => data))
@@ -117,25 +118,12 @@ function _hd_bvar(; data::String, lags::Int=4, id::String="cholesky",
     report(bhd)
 
     mean_contrib = bhd.mean
-    initial_mean = bhd.initial_mean
     T_eff = size(mean_contrib, 1)
 
-    for vi in 1:n
-        hd_df = DataFrame()
-        hd_df.period = 1:T_eff
-        hd_df.initial = initial_mean[:, vi]
-
-        for si in 1:n
-            shock_name = si <= length(varnames) ? varnames[si] : "shock_$si"
-            hd_df[!, "contrib_$shock_name"] = mean_contrib[:, vi, si]
-        end
-
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-        output_result(hd_df; format=Symbol(format),
-                      output=isempty(output) ? "" : replace(output, "." => "_$(vname)."),
-                      title="Bayesian HD: $vname ($id, posterior mean)")
-        println()
-    end
+    _output_hd_tables((vi, si) -> mean_contrib[:, vi, si], varnames, T_eff;
+                      id=id, title_prefix="Bayesian HD",
+                      format=format, output=output,
+                      initial=bhd.initial_mean)
 
     storage_save_auto!("hd", Dict{String,Any}("type" => "bvar", "id" => id, "n_vars" => n),
         Dict{String,Any}("command" => "hd bvar", "data" => data))
@@ -147,9 +135,7 @@ function _hd_lp(; data::String, lags::Int=4, var_lags=nothing,
                  id::String="cholesky", vcov::String="newey_west", config::String="",
                  from_tag::String="",
                  output::String="", format::String="table")
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
+    Y, varnames = load_multivariate_data(data)
     n = size(Y, 2)
     vp = isnothing(var_lags) ? lags : var_lags
     lp_horizon = 20
@@ -179,25 +165,50 @@ function _hd_lp(; data::String, lags::Int=4, var_lags=nothing,
     end
     println()
 
-    for vi in 1:n
-        T_eff = hd_result.T_eff
-        hd_df = DataFrame()
-        hd_df.period = 1:T_eff
-        hd_df.actual = hd_result.actual[:, vi]
-        hd_df.initial = hd_result.initial_conditions[:, vi]
-
-        for si in 1:n
-            shock_name = si <= length(varnames) ? varnames[si] : "shock_$si"
-            hd_df[!, "contrib_$shock_name"] = contribution(hd_result, vi, si)
-        end
-
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-        output_result(hd_df; format=Symbol(format),
-                      output=isempty(output) ? "" : replace(output, "." => "_$(vname)."),
-                      title="LP Historical Decomposition: $vname ($id identification)")
-        println()
-    end
+    _output_hd_tables((vi, si) -> contribution(hd_result, vi, si), varnames, hd_result.T_eff;
+                      id=id, title_prefix="LP Historical Decomposition",
+                      format=format, output=output,
+                      actual=hd_result.actual, initial=hd_result.initial_conditions)
 
     storage_save_auto!("hd", Dict{String,Any}("type" => "lp", "id" => id, "n_vars" => n),
         Dict{String,Any}("command" => "hd lp", "data" => data))
+end
+
+# ── VECM HD ─────────────────────────────────────────────
+
+function _hd_vecm(; data::String, lags::Int=2, rank::String="auto",
+                   deterministic::String="constant",
+                   id::String="cholesky", config::String="",
+                   from_tag::String="",
+                   output::String="", format::String="table")
+    vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
+    var_model = to_var(vecm)
+    n = size(Y, 2)
+    r = cointegrating_rank(vecm)
+
+    println("Computing VECM Historical Decomposition: rank=$r, VAR($p), id=$id")
+    println()
+
+    kwargs = _build_identification_kwargs(id, config)
+    T_eff = size(Y, 1) - p
+    hd_result = historical_decomposition(var_model, T_eff; kwargs...)
+
+    report(hd_result)
+
+    is_valid = verify_decomposition(hd_result)
+    if is_valid
+        printstyled("Decomposition verified (contributions sum to actual values)\n"; color=:green)
+    else
+        printstyled("Decomposition verification failed\n"; color=:yellow)
+    end
+    println()
+
+    _output_hd_tables((vi, si) -> contribution(hd_result, vi, si), varnames, hd_result.T_eff;
+                      id=id, title_prefix="VECM Historical Decomposition",
+                      format=format, output=output,
+                      actual=hd_result.actual, initial=hd_result.initial_conditions)
+
+    storage_save_auto!("hd", Dict{String,Any}("type" => "vecm", "id" => id,
+        "n_vars" => n, "rank" => r),
+        Dict{String,Any}("command" => "hd vecm", "data" => data))
 end

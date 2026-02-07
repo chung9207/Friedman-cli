@@ -1,4 +1,184 @@
-# Shared utilities for VAR/BVAR post-estimation commands (irf, fevd, hd, forecast)
+# Shared utilities for command handlers
+
+# ── Data Loading Helpers ───────────────────────────────────
+
+"""
+    load_multivariate_data(data) → (Y::Matrix{Float64}, varnames::Vector{String})
+
+Load CSV, convert to numeric matrix and extract variable names.
+"""
+function load_multivariate_data(data::String)
+    df = load_data(data)
+    Y = df_to_matrix(df)
+    varnames = variable_names(df)
+    return Y, varnames
+end
+
+"""
+    load_univariate_series(data, column) → (y::Vector{Float64}, vname::String)
+
+Load CSV and extract a single numeric column by index.
+"""
+function load_univariate_series(data::String, column::Int)
+    df = load_data(data)
+    varnames = variable_names(df)
+    column > length(varnames) && error("column $column out of range (data has $(length(varnames)) numeric columns)")
+    y = Vector{Float64}(df[!, varnames[column]])
+    return y, varnames[column]
+end
+
+# ── Naming Helpers ─────────────────────────────────────────
+
+"""Safe shock name: uses variable name if in range, else "shock_N"."""
+_shock_name(varnames::Vector{String}, idx::Int) =
+    idx <= length(varnames) ? varnames[idx] : "shock_$idx"
+
+"""Safe variable name: uses variable name if in range, else "var_N"."""
+_var_name(varnames::Vector{String}, idx::Int) =
+    idx <= length(varnames) ? varnames[idx] : "var_$idx"
+
+"""Generate per-variable output path by inserting suffix before extension."""
+function _per_var_output_path(output::String, suffix::String)
+    isempty(output) && return ""
+    return replace(output, "." => "_$(suffix).")
+end
+
+# ── Output Helpers ─────────────────────────────────────────
+
+"""Build a coefficient table DataFrame for VAR/BVAR models."""
+function _build_var_coef_table(coef_mat::AbstractMatrix, varnames::Vector{String}, p::Int)
+    n = length(varnames)
+    n_rows = size(coef_mat, 1)
+    row_names = String[]
+    for lag in 1:p
+        for v in varnames
+            push!(row_names, "$(v)_L$(lag)")
+        end
+    end
+    if n_rows > n * p
+        push!(row_names, "const")
+    end
+    coef_df = DataFrame(permutedims(coef_mat), row_names)
+    insertcols!(coef_df, 1, :equation => varnames)
+    return coef_df
+end
+
+"""Output AIC/BIC/HQC/loglik for a VAR-like model."""
+function output_model_criteria(model; format::String="table", output::String="", title::String="Information Criteria")
+    pairs = Pair{String,Any}[
+        "AIC" => model.aic,
+        "BIC" => model.bic,
+        "HQC" => model.hqic,
+    ]
+    if hasproperty(model, :loglik) || hasmethod(loglikelihood, (typeof(model),))
+        try
+            push!(pairs, "Log-likelihood" => loglikelihood(model))
+        catch; end
+    end
+    output_kv(pairs; format=format, title=title)
+end
+
+"""Output per-variable FEVD tables."""
+function _output_fevd_tables(proportions::AbstractArray, varnames::Vector{String},
+                              horizons::Int; id::String="cholesky",
+                              title_prefix::String="FEVD",
+                              format::String="table", output::String="")
+    n = length(varnames)
+    for vi in 1:n
+        fevd_df = DataFrame()
+        fevd_df.horizon = 1:horizons
+        for si in 1:n
+            fevd_df[!, _shock_name(varnames, si)] = proportions[vi, si, :]
+        end
+        vname = _var_name(varnames, vi)
+        output_result(fevd_df; format=Symbol(format),
+                      output=_per_var_output_path(output, vname),
+                      title="$title_prefix for $vname ($id identification)")
+        println()
+    end
+end
+
+"""Output per-variable HD tables."""
+function _output_hd_tables(get_contrib::Function, varnames::Vector{String},
+                            T_eff::Int; id::String="cholesky",
+                            title_prefix::String="Historical Decomposition",
+                            format::String="table", output::String="",
+                            actual=nothing, initial=nothing)
+    n = length(varnames)
+    for vi in 1:n
+        hd_df = DataFrame()
+        hd_df.period = 1:T_eff
+        if !isnothing(actual)
+            hd_df.actual = actual[:, vi]
+        end
+        if !isnothing(initial)
+            hd_df.initial = initial[:, vi]
+        end
+        for si in 1:n
+            hd_df[!, "contrib_$(_shock_name(varnames, si))"] = get_contrib(vi, si)
+        end
+        vname = _var_name(varnames, vi)
+        output_result(hd_df; format=Symbol(format),
+                      output=_per_var_output_path(output, vname),
+                      title="$title_prefix: $vname ($id identification)")
+        println()
+    end
+end
+
+# ── Validation Helpers ─────────────────────────────────────
+
+"""Validate that a method string is in the allowed set."""
+function validate_method(method::String, allowed::Vector{String}, context::String)
+    method in allowed || error("unknown $context: $method (expected $(join(allowed, "|")))")
+    return method
+end
+
+# ── Test Helpers ───────────────────────────────────────────
+
+"""Print colored p-value interpretation for hypothesis tests."""
+function interpret_test_result(pvalue::Real, reject_msg::String, accept_msg::String; level::Float64=0.05)
+    println()
+    if pvalue < level
+        printstyled("-> $reject_msg\n"; color=:yellow)
+    else
+        printstyled("-> $accept_msg\n"; color=:green)
+    end
+end
+
+"""Convert trend string to Symbol for test regression kwarg."""
+function to_regression_symbol(trend::String)
+    trend == "none" && return :none
+    trend == "both" && return :both
+    return Symbol(trend)
+end
+
+# ── Volatility Output Helpers ──────────────────────────────
+
+"""Shared volatility model estimation output: coefficients + persistence."""
+function _vol_estimate_output(model, vname::String, param_names::Vector{String},
+                               model_label::String; format::String="table", output::String="")
+    c = coef(model)
+    coef_df = DataFrame(parameter=param_names[1:length(c)], estimate=round.(c; digits=6))
+    output_result(coef_df; format=Symbol(format), output=output,
+                  title="$model_label Coefficients ($vname)")
+    println()
+    p_val = persistence(model)
+    println("Persistence: $(round(p_val; digits=4))")
+end
+
+"""Shared volatility forecast output: horizon/variance/volatility table."""
+function _vol_forecast_output(fc, vname::String, model_label::String,
+                               horizons::Int; format::String="table", output::String="")
+    fc_df = DataFrame(
+        horizon=1:horizons,
+        variance=round.(fc.forecast; digits=6),
+        volatility=round.(sqrt.(fc.forecast); digits=6)
+    )
+    output_result(fc_df; format=Symbol(format), output=output,
+                  title="$model_label Volatility Forecast ($vname, h=$horizons)")
+end
+
+# ── Constants ──────────────────────────────────────────────
 
 """
     ID_METHOD_MAP
@@ -29,9 +209,7 @@ const ID_METHOD_MAP = Dict(
 Load data from CSV, optionally auto-select lag order, and estimate a frequentist VAR.
 """
 function _load_and_estimate_var(data::String, lags)
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
+    Y, varnames = load_multivariate_data(data)
     n = size(Y, 2)
 
     p = if isnothing(lags)
@@ -52,9 +230,7 @@ Returns a BVARPosterior (which carries p, n, data internally).
 """
 function _load_and_estimate_bvar(data::String, lags::Int, config::String,
                                   draws::Int, sampler::String)
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
+    Y, varnames = load_multivariate_data(data)
     n = size(Y, 2)
     p = lags
 
@@ -205,9 +381,7 @@ function _load_and_structural_lp(data::String, horizons::Int, lags::Int,
                                   config::String;
                                   ci_type::Symbol=:none, reps::Int=200,
                                   conf_level::Float64=0.95)
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
+    Y, varnames = load_multivariate_data(data)
 
     method = get(ID_METHOD_MAP, id, :cholesky)
     check_func, narrative_check = _build_check_func(config)
@@ -232,6 +406,28 @@ function _load_and_structural_lp(data::String, horizons::Int, lags::Int,
 
     slp = structural_lp(Y, horizons; kwargs...)
     return slp, Y, varnames
+end
+
+"""
+    _load_and_estimate_vecm(data, lags, rank, deterministic, method, significance)
+        -> (vecm, Y, varnames, p)
+
+Load data from CSV and estimate a VECM. When rank=="auto", uses select_vecm_rank().
+"""
+function _load_and_estimate_vecm(data::String, lags::Int, rank::String,
+                                  deterministic::String, method::String,
+                                  significance::Float64)
+    Y, varnames = load_multivariate_data(data)
+
+    r = if rank == "auto"
+        select_vecm_rank(Y, lags; significance=significance)
+    else
+        parse(Int, rank)
+    end
+
+    vecm = estimate_vecm(Y, lags; rank=r, deterministic=Symbol(deterministic),
+                         method=Symbol(method), significance=significance)
+    return vecm, Y, varnames, lags
 end
 
 """

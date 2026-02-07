@@ -412,20 +412,88 @@ end
         @test quantile_normal(0.025) < 0
     end
 
-    @testset "_extract_series — valid column" begin
+    @testset "load_univariate_series — valid column" begin
         mktempdir() do dir
             csv = _make_csv(dir; T=50, n=3)
-            y, vname = _extract_series(csv, 1)
+            y, vname = load_univariate_series(csv, 1)
             @test length(y) == 50
             @test vname isa String
         end
     end
 
-    @testset "_extract_series — out of range" begin
+    @testset "load_univariate_series — out of range" begin
         mktempdir() do dir
             csv = _make_csv(dir; T=50, n=3)
-            @test_throws ErrorException _extract_series(csv, 10)
+            @test_throws ErrorException load_univariate_series(csv, 10)
         end
+    end
+
+    @testset "load_multivariate_data" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=50, n=3)
+            Y, varnames = load_multivariate_data(csv)
+            @test size(Y) == (50, 3)
+            @test length(varnames) == 3
+        end
+    end
+
+    @testset "_shock_name / _var_name" begin
+        varnames = ["gdp", "inf", "rate"]
+        @test _shock_name(varnames, 1) == "gdp"
+        @test _shock_name(varnames, 3) == "rate"
+        @test _shock_name(varnames, 5) == "shock_5"
+        @test _var_name(varnames, 2) == "inf"
+        @test _var_name(varnames, 10) == "var_10"
+    end
+
+    @testset "_per_var_output_path" begin
+        @test _per_var_output_path("", "gdp") == ""
+        @test _per_var_output_path("results.csv", "gdp") == "results_gdp.csv"
+        @test _per_var_output_path("out.json", "inf") == "out_inf.json"
+    end
+
+    @testset "validate_method" begin
+        @test validate_method("cholesky", ["cholesky", "sign"], "id") == "cholesky"
+        @test_throws ErrorException validate_method("unknown", ["cholesky", "sign"], "id")
+    end
+
+    @testset "interpret_test_result" begin
+        # Significant result
+        out = _capture() do
+            interpret_test_result(0.01, "Reject H0", "Fail to reject H0")
+        end
+        @test contains(out, "Reject H0")
+
+        # Non-significant result
+        out = _capture() do
+            interpret_test_result(0.10, "Reject H0", "Fail to reject H0")
+        end
+        @test contains(out, "Fail to reject H0")
+    end
+
+    @testset "to_regression_symbol" begin
+        @test to_regression_symbol("constant") == :constant
+        @test to_regression_symbol("none") == :none
+        @test to_regression_symbol("both") == :both
+        @test to_regression_symbol("trend") == :trend
+    end
+
+    @testset "_build_var_coef_table" begin
+        coef_mat = [0.5 0.1; 0.2 0.3; 0.01 0.02]
+        varnames = ["y1", "y2"]
+        df = _build_var_coef_table(coef_mat, varnames, 1)
+        @test size(df, 1) == 2
+        @test "equation" in names(df)
+        @test "y1_L1" in names(df)
+        @test "const" in names(df)
+    end
+
+    @testset "_vol_forecast_output" begin
+        fc = (forecast = [1.0, 2.0, 3.0],)
+        out = _capture() do
+            _vol_forecast_output(fc, "ret", "GARCH(1,1)", 3; format="table", output="")
+        end
+        @test contains(out, "GARCH(1,1)")
     end
 
 end  # Shared utilities
@@ -440,9 +508,9 @@ end  # Shared utilities
         node = register_estimate_commands!()
         @test node isa NodeCommand
         @test node.name == "estimate"
-        @test length(node.subcmds) == 15
+        @test length(node.subcmds) == 16
         for cmd in ["var", "bvar", "lp", "arima", "gmm", "static", "dynamic", "gdfm",
-                     "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml"]
+                     "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml", "vecm"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -1103,10 +1171,10 @@ end  # Estimate handlers
         node = register_test_commands!()
         @test node isa NodeCommand
         @test node.name == "test"
-        @test length(node.subcmds) == 12
+        @test length(node.subcmds) == 13
         for cmd in ["adf", "kpss", "pp", "za", "np", "johansen",
                      "normality", "identifiability", "heteroskedasticity",
-                     "arch_lm", "ljung_box", "var"]
+                     "arch_lm", "ljung_box", "var", "granger"]
             @test haskey(node.subcmds, cmd)
         end
         # VAR is a nested NodeCommand with lagselect and stability
@@ -1448,8 +1516,8 @@ end  # Test handlers
         node = register_irf_commands!()
         @test node isa NodeCommand
         @test node.name == "irf"
-        @test length(node.subcmds) == 3
-        for cmd in ["var", "bvar", "lp"]
+        @test length(node.subcmds) == 4
+        for cmd in ["var", "bvar", "lp", "vecm"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -1644,8 +1712,8 @@ end  # IRF handlers
         node = register_fevd_commands!()
         @test node isa NodeCommand
         @test node.name == "fevd"
-        @test length(node.subcmds) == 3
-        for cmd in ["var", "bvar", "lp"]
+        @test length(node.subcmds) == 4
+        for cmd in ["var", "bvar", "lp", "vecm"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -1716,8 +1784,8 @@ end  # FEVD handlers
         node = register_hd_commands!()
         @test node isa NodeCommand
         @test node.name == "hd"
-        @test length(node.subcmds) == 3
-        for cmd in ["var", "bvar", "lp"]
+        @test length(node.subcmds) == 4
+        for cmd in ["var", "bvar", "lp", "vecm"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -1788,9 +1856,9 @@ end  # HD handlers
         node = register_forecast_commands!()
         @test node isa NodeCommand
         @test node.name == "forecast"
-        @test length(node.subcmds) == 12
+        @test length(node.subcmds) == 13
         for cmd in ["var", "bvar", "lp", "arima", "static", "dynamic", "gdfm",
-                     "arch", "garch", "egarch", "gjr_garch", "sv"]
+                     "arch", "garch", "egarch", "gjr_garch", "sv", "vecm"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -2094,6 +2162,373 @@ end  # HD handlers
     end
 
 end  # Forecast handlers
+
+# ═══════════════════════════════════════════════════════════════
+# VECM handlers (estimate, irf, fevd, hd, forecast vecm + test granger)
+# ═══════════════════════════════════════════════════════════════
+
+@testset "VECM handlers" begin
+
+    # ── Structure tests ──────────────────────────────────────
+
+    @testset "register_estimate_commands! includes vecm" begin
+        node = register_estimate_commands!()
+        @test length(node.subcmds) == 16
+        @test haskey(node.subcmds, "vecm")
+        @test node.subcmds["vecm"] isa LeafCommand
+    end
+
+    @testset "register_irf_commands! includes vecm" begin
+        node = register_irf_commands!()
+        @test length(node.subcmds) == 4
+        @test haskey(node.subcmds, "vecm")
+    end
+
+    @testset "register_fevd_commands! includes vecm" begin
+        node = register_fevd_commands!()
+        @test length(node.subcmds) == 4
+        @test haskey(node.subcmds, "vecm")
+    end
+
+    @testset "register_hd_commands! includes vecm" begin
+        node = register_hd_commands!()
+        @test length(node.subcmds) == 4
+        @test haskey(node.subcmds, "vecm")
+    end
+
+    @testset "register_forecast_commands! includes vecm" begin
+        node = register_forecast_commands!()
+        @test length(node.subcmds) == 13
+        @test haskey(node.subcmds, "vecm")
+    end
+
+    @testset "register_test_commands! includes granger" begin
+        node = register_test_commands!()
+        @test length(node.subcmds) == 13
+        @test haskey(node.subcmds, "granger")
+        @test node.subcmds["granger"] isa LeafCommand
+    end
+
+    # ── _load_and_estimate_vecm ──────────────────────────────
+
+    @testset "_load_and_estimate_vecm — auto rank" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            vecm, Y, varnames, p = _load_and_estimate_vecm(csv, 2, "auto", "constant", "johansen", 0.05)
+            @test vecm isa MacroEconometricModels.VECMModel
+            @test cointegrating_rank(vecm) == 1
+            @test size(Y, 2) == 3
+            @test p == 2
+        end
+    end
+
+    @testset "_load_and_estimate_vecm — explicit rank" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            vecm, Y, varnames, p = _load_and_estimate_vecm(csv, 3, "2", "constant", "johansen", 0.05)
+            @test cointegrating_rank(vecm) == 2
+            @test p == 3
+        end
+    end
+
+    # ── estimate vecm ────────────────────────────────────────
+
+    @testset "_estimate_vecm — auto rank" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _estimate_vecm(; data=csv, lags=2, rank="auto", format="table")
+                end
+            end
+            @test occursin("VECM", out)
+            @test occursin("rank", out) || occursin("Cointegrat", out)
+            @test occursin("beta", out) || occursin("Cointegrating", out)
+            @test occursin("alpha", out) || occursin("Adjustment", out)
+        end
+    end
+
+    @testset "_estimate_vecm — explicit rank" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _estimate_vecm(; data=csv, lags=3, rank="2", format="table")
+                end
+            end
+            @test occursin("VECM", out)
+            @test occursin("rank: 2", out) || occursin("rank=2", out)
+        end
+    end
+
+    @testset "_estimate_vecm — json output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "vecm.json")
+            out = cd(dir) do
+                _capture() do
+                    _estimate_vecm(; data=csv, lags=2, rank="auto", format="json", output=outfile)
+                end
+            end
+            @test isfile(outfile)
+        end
+    end
+
+    @testset "_estimate_vecm — csv output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "vecm.csv")
+            out = cd(dir) do
+                _capture() do
+                    _estimate_vecm(; data=csv, lags=2, rank="auto", format="csv", output=outfile)
+                end
+            end
+            @test isfile(outfile)
+        end
+    end
+
+    @testset "_estimate_vecm — deterministic=none" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _estimate_vecm(; data=csv, lags=2, rank="1", deterministic="none", format="table")
+                end
+            end
+            @test occursin("VECM", out)
+        end
+    end
+
+    # ── irf vecm ─────────────────────────────────────────────
+
+    @testset "_irf_vecm — cholesky with bootstrap CI" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _irf_vecm(; data=csv, lags=2, rank="auto", shock=1, horizons=10,
+                               id="cholesky", ci="bootstrap", replications=100, format="table")
+                end
+            end
+            @test occursin("VECM IRF", out)
+            @test occursin("cholesky", out)
+        end
+    end
+
+    @testset "_irf_vecm — no CI" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _irf_vecm(; data=csv, lags=2, rank="1", shock=1, horizons=10,
+                               id="cholesky", ci="none", format="table")
+                end
+            end
+            @test occursin("VECM IRF", out)
+        end
+    end
+
+    @testset "_irf_vecm — sign identification with config" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            cfg = _make_sign_config(dir)
+            out = cd(dir) do
+                _capture() do
+                    _irf_vecm(; data=csv, lags=2, rank="auto", shock=1, horizons=10,
+                               id="sign", ci="none", config=cfg, format="table")
+                end
+            end
+            @test occursin("VECM IRF", out) || occursin("sign", out)
+        end
+    end
+
+    # ── fevd vecm ────────────────────────────────────────────
+
+    @testset "_fevd_vecm — default" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _fevd_vecm(; data=csv, lags=2, rank="auto", horizons=10,
+                                id="cholesky", format="table")
+                end
+            end
+            @test occursin("VECM FEVD", out)
+            @test occursin("cholesky", out)
+        end
+    end
+
+    @testset "_fevd_vecm — csv output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "fevd.csv")
+            out = cd(dir) do
+                _capture() do
+                    _fevd_vecm(; data=csv, lags=2, rank="1", horizons=10,
+                                id="cholesky", format="csv", output=outfile)
+                end
+            end
+            @test any(isfile, [replace(outfile, "." => s) for s in ["_var1.", "_var2.", "_var3."]])
+        end
+    end
+
+    # ── hd vecm ──────────────────────────────────────────────
+
+    @testset "_hd_vecm — default" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _hd_vecm(; data=csv, lags=2, rank="auto", id="cholesky", format="table")
+                end
+            end
+            @test occursin("VECM Historical Decomposition", out)
+            @test occursin("verified", out) || occursin("Decomposition", out)
+        end
+    end
+
+    @testset "_hd_vecm — explicit rank with sign id" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            cfg = _make_sign_config(dir)
+            out = cd(dir) do
+                _capture() do
+                    _hd_vecm(; data=csv, lags=2, rank="1", id="sign", config=cfg, format="table")
+                end
+            end
+            @test occursin("VECM Historical Decomposition", out) ||
+                  occursin("Historical Decomposition", out)
+        end
+    end
+
+    # ── forecast vecm ────────────────────────────────────────
+
+    @testset "_forecast_vecm — no CI" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _forecast_vecm(; data=csv, lags=2, rank="auto", horizons=8, format="table")
+                end
+            end
+            @test occursin("VECM Forecast", out)
+            @test occursin("rank=1", out) || occursin("rank", out)
+        end
+    end
+
+    @testset "_forecast_vecm — bootstrap CI" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _forecast_vecm(; data=csv, lags=2, rank="auto", horizons=8,
+                                    ci_method="bootstrap", replications=100, confidence=0.90,
+                                    format="table")
+                end
+            end
+            @test occursin("VECM Forecast", out)
+            @test occursin("90%", out)
+        end
+    end
+
+    @testset "_forecast_vecm — explicit rank" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _forecast_vecm(; data=csv, lags=3, rank="2", horizons=5, format="table")
+                end
+            end
+            @test occursin("VECM Forecast", out)
+            @test occursin("rank=2", out) || occursin("rank", out)
+        end
+    end
+
+    @testset "_forecast_vecm — json output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "fc.json")
+            out = cd(dir) do
+                _capture() do
+                    _forecast_vecm(; data=csv, lags=2, rank="auto", horizons=5,
+                                    format="json", output=outfile)
+                end
+            end
+            @test isfile(outfile)
+        end
+    end
+
+    # ── test granger ─────────────────────────────────────────
+
+    @testset "_test_granger — default" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _test_granger(; data=csv, cause=1, effect=2, lags=2, rank="auto", format="table")
+                end
+            end
+            @test occursin("Granger Causality", out)
+            @test occursin("Short-run", out) || occursin("short", out)
+            @test occursin("Long-run", out) || occursin("long", out)
+            @test occursin("Strong", out) || occursin("joint", out)
+        end
+    end
+
+    @testset "_test_granger — explicit rank" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _test_granger(; data=csv, cause=1, effect=2, lags=3, rank="1", format="table")
+                end
+            end
+            @test occursin("Granger", out)
+        end
+    end
+
+    @testset "_test_granger — csv output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "granger.csv")
+            out = cd(dir) do
+                _capture() do
+                    _test_granger(; data=csv, cause=1, effect=2, lags=2, rank="auto",
+                                   format="csv", output=outfile)
+                end
+            end
+            @test isfile(outfile)
+        end
+    end
+
+    @testset "_test_granger — json output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "granger.json")
+            out = cd(dir) do
+                _capture() do
+                    _test_granger(; data=csv, cause=1, effect=2, lags=2, rank="auto",
+                                   format="json", output=outfile)
+                end
+            end
+            @test isfile(outfile)
+        end
+    end
+
+    @testset "_test_granger — reversed direction" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _test_granger(; data=csv, cause=2, effect=1, lags=2, rank="auto", format="table")
+                end
+            end
+            @test occursin("Granger", out)
+            @test occursin("var2", out) || occursin("Granger Causality", out)
+        end
+    end
+
+end  # VECM handlers
 
 # ═══════════════════════════════════════════════════════════════
 # List, Rename, Project handlers

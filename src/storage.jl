@@ -91,7 +91,8 @@ function _serialize_value(v::NamedTuple)
     return Dict(string(k) => _serialize_value(v[k]) for k in keys(v))
 end
 function _serialize_value(v)
-    # Fallback: try to convert, otherwise store as string
+    # Fallback: lossy — store as string
+    @warn "Lossy serialization: $(typeof(v)) stored as string" maxlog=1
     return string(v)
 end
 

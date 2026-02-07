@@ -6,6 +6,12 @@ end
 
 Base.showerror(io::IO, e::ParseError) = print(io, "ParseError: ", e.message)
 
+struct DispatchError <: Exception
+    message::String
+end
+
+Base.showerror(io::IO, e::DispatchError) = print(io, "DispatchError: ", e.message)
+
 struct ParsedArgs
     positional::Vector{String}
     options::Dict{String,String}
@@ -119,6 +125,12 @@ end
 
 function convert_value(::Type{Symbol}, raw::String, ::String)
     return Symbol(raw)
+end
+
+function convert_value(::Type{T}, raw::String, name::String) where T
+    v = tryparse(T, raw)
+    isnothing(v) && throw(ParseError("option --$name: cannot convert '$raw' to $T"))
+    return v
 end
 
 """

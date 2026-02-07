@@ -7,7 +7,11 @@ Load and validate a TOML configuration file.
 """
 function load_config(path::String)
     isfile(path) || error("config file not found: $path")
-    return TOML.parsefile(path)
+    try
+        return TOML.parsefile(path)
+    catch e
+        error("failed to parse config file '$path': $(sprint(showerror, e))")
+    end
 end
 
 """
@@ -108,6 +112,9 @@ function _parse_matrix(rows::Vector)
     n = length(rows)
     n == 0 && return Matrix{Float64}(undef, 0, 0)
     m = length(rows[1])
+    for i in 2:n
+        length(rows[i]) == m || error("matrix row $i has $(length(rows[i])) elements, expected $m")
+    end
     mat = Matrix{Float64}(undef, n, m)
     for i in 1:n
         for j in 1:m

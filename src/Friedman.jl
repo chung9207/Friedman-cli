@@ -33,7 +33,7 @@ include("commands/list.jl")
 include("commands/rename.jl")
 include("commands/project.jl")
 
-const FRIEDMAN_VERSION = v"0.1.4"
+const FRIEDMAN_VERSION = v"0.2.0"
 
 """
     build_app() -> Entry
@@ -72,14 +72,23 @@ function main(args::Vector{String}=ARGS)
     # Pre-dispatch: resolve stored tags for irf/fevd/hd/forecast
     args = resolve_stored_tags(args)
 
-    # Handle bare "project" with no subcommand
+    # Handle bare "project" with no subcommand → default to "show"
     if length(args) == 1 && args[1] == "project"
-        _project_show()
-        return
+        push!(args, "show")
     end
 
     app = build_app()
-    dispatch(app, args)
+    try
+        dispatch(app, args)
+    catch e
+        if e isa ParseError || e isa DispatchError
+            printstyled(stderr, "Error: "; bold=true, color=:red)
+            println(stderr, e.message)
+            exit(1)
+        else
+            rethrow()
+        end
+    end
 end
 
 export main, build_app

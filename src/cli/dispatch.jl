@@ -1,6 +1,13 @@
 # Subcommand dispatch engine
 
 """
+    _wants_help(args) → Bool
+
+Check if help is requested anywhere in the argument list.
+"""
+_wants_help(args::Vector{String}) = "--help" in args || "-h" in args
+
+"""
     dispatch(entry, args)
 
 Main dispatch: walk the command tree from `entry` using `args`, then execute the matched leaf.
@@ -27,7 +34,7 @@ end
 Walk into a NodeCommand, matching the first token as a subcommand name.
 """
 function dispatch_node(node::NodeCommand, args::Vector{String}; prog::String=node.name)
-    if isempty(args) || args[1] in ("--help", "-h")
+    if isempty(args) || _wants_help(args)
         print_help(stdout, node; prog=prog)
         return
     end
@@ -36,11 +43,7 @@ function dispatch_node(node::NodeCommand, args::Vector{String}; prog::String=nod
     rest = args[2:end]
 
     if !haskey(node.subcmds, subcmd_name)
-        printstyled(stderr, "Error: "; bold=true, color=:red)
-        println(stderr, "unknown command '$subcmd_name'")
-        println(stderr)
-        print_help(stderr, node; prog=prog)
-        exit(1)
+        throw(DispatchError("$prog: unknown command '$subcmd_name'"))
     end
 
     subcmd = node.subcmds[subcmd_name]
@@ -60,7 +63,7 @@ Parse arguments for a LeafCommand and call its handler.
 """
 function dispatch_leaf(leaf::LeafCommand, args::Vector{String}; prog::String=leaf.name)
     # Handle --help
-    if "--help" in args || "-h" in args
+    if _wants_help(args)
         print_help(stdout, leaf; prog=prog)
         return
     end
@@ -71,11 +74,7 @@ function dispatch_leaf(leaf::LeafCommand, args::Vector{String}; prog::String=lea
         leaf.handler(; bound...)
     catch e
         if e isa ParseError
-            printstyled(stderr, "Error: "; bold=true, color=:red)
-            println(stderr, e.message)
-            println(stderr)
-            print_help(stderr, leaf; prog=prog)
-            exit(1)
+            throw(ParseError("$prog: $(e.message)"))
         else
             rethrow()
         end

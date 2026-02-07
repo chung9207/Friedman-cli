@@ -44,10 +44,26 @@ function register_fevd_commands!()
         ],
         description="Compute forecast error variance decomposition via structural LP")
 
+    fevd_vecm = LeafCommand("vecm", _fevd_vecm;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("lags"; short="p", type=Int, default=2, description="Lag order (in levels)"),
+            Option("rank"; short="r", type=String, default="auto", description="Cointegration rank (auto|1|2|...)"),
+            Option("deterministic"; type=String, default="constant", description="none|constant|trend"),
+            Option("horizons"; short="h", type=Int, default=20, description="Forecast horizon"),
+            Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun"),
+            Option("config"; type=String, default="", description="TOML config for identification"),
+            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        description="Compute FEVD via VECM → VAR representation")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "var"  => fevd_var,
         "bvar" => fevd_bvar,
         "lp"   => fevd_lp,
+        "vecm" => fevd_vecm,
     )
     return NodeCommand("fevd", subcmds, "Forecast Error Variance Decomposition")
 end
@@ -69,21 +85,8 @@ function _fevd_var(; data::String, lags=nothing, horizons::Int=20,
 
     report(fevd_result)
 
-    proportions = fevd_result.proportions  # n_vars x n_shocks x H
-
-    for vi in 1:n
-        fevd_df = DataFrame()
-        fevd_df.horizon = 1:horizons
-        for si in 1:n
-            shock_name = si <= length(varnames) ? varnames[si] : "shock_$si"
-            fevd_df[!, shock_name] = proportions[vi, si, :]
-        end
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-        output_result(fevd_df; format=Symbol(format),
-                      output=isempty(output) ? "" : replace(output, "." => "_$(vname)."),
-                      title="FEVD for $vname ($id identification)")
-        println()
-    end
+    _output_fevd_tables(fevd_result.proportions, varnames, horizons;
+                        id=id, title_prefix="FEVD", format=format, output=output)
 
     storage_save_auto!("fevd", Dict{String,Any}("type" => "var", "id" => id,
         "horizons" => horizons, "n_vars" => n),
@@ -107,21 +110,8 @@ function _fevd_bvar(; data::String, lags::Int=4, horizons::Int=20,
 
     report(bfevd)
 
-    mean_props = bfevd.mean
-
-    for vi in 1:n
-        fevd_df = DataFrame()
-        fevd_df.horizon = 1:horizons
-        for si in 1:n
-            shock_name = si <= length(varnames) ? varnames[si] : "shock_$si"
-            fevd_df[!, shock_name] = mean_props[vi, si, :]
-        end
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-        output_result(fevd_df; format=Symbol(format),
-                      output=isempty(output) ? "" : replace(output, "." => "_$(vname)."),
-                      title="Bayesian FEVD for $vname ($id, posterior mean)")
-        println()
-    end
+    _output_fevd_tables(bfevd.mean, varnames, horizons;
+                        id=id, title_prefix="Bayesian FEVD", format=format, output=output)
 
     storage_save_auto!("fevd", Dict{String,Any}("type" => "bvar", "id" => id,
         "horizons" => horizons, "n_vars" => n),
@@ -142,23 +132,39 @@ function _fevd_lp(; data::String, horizons::Int=20, lags::Int=4, var_lags=nothin
     println()
 
     fevd_result = lp_fevd(slp, horizons)
-    proportions = fevd_result.bias_corrected  # n_vars x n_shocks x H
 
-    for vi in 1:n
-        fevd_df = DataFrame()
-        fevd_df.horizon = 1:horizons
-        for si in 1:n
-            shock_name = si <= length(varnames) ? varnames[si] : "shock_$si"
-            fevd_df[!, shock_name] = proportions[vi, si, :]
-        end
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-        output_result(fevd_df; format=Symbol(format),
-                      output=isempty(output) ? "" : replace(output, "." => "_$(vname)."),
-                      title="LP FEVD for $vname ($id identification)")
-        println()
-    end
+    _output_fevd_tables(fevd_result.bias_corrected, varnames, horizons;
+                        id=id, title_prefix="LP FEVD", format=format, output=output)
 
     storage_save_auto!("fevd", Dict{String,Any}("type" => "lp", "id" => id,
         "horizons" => horizons, "n_vars" => n),
         Dict{String,Any}("command" => "fevd lp", "data" => data))
+end
+
+# ── VECM FEVD ───────────────────────────────────────────
+
+function _fevd_vecm(; data::String, lags::Int=2, rank::String="auto",
+                     deterministic::String="constant", horizons::Int=20,
+                     id::String="cholesky", config::String="",
+                     from_tag::String="",
+                     output::String="", format::String="table")
+    vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
+    var_model = to_var(vecm)
+    n = size(Y, 2)
+    r = cointegrating_rank(vecm)
+
+    println("Computing VECM FEVD: rank=$r, VAR($p), horizons=$horizons, id=$id")
+    println()
+
+    kwargs = _build_identification_kwargs(id, config)
+    fevd_result = fevd(var_model, horizons; kwargs...)
+
+    report(fevd_result)
+
+    _output_fevd_tables(fevd_result.proportions, varnames, horizons;
+                        id=id, title_prefix="VECM FEVD", format=format, output=output)
+
+    storage_save_auto!("fevd", Dict{String,Any}("type" => "vecm", "id" => id,
+        "horizons" => horizons, "n_vars" => n, "rank" => r),
+        Dict{String,Any}("command" => "fevd vecm", "data" => data))
 end

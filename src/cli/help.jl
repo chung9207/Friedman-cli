@@ -40,7 +40,7 @@ function print_help(io::IO, node::NodeCommand; prog::String=node.name, version::
     names = sort(collect(keys(node.subcmds)))
     for name in names
         cmd = node.subcmds[name]
-        desc = cmd isa NodeCommand ? cmd.description : cmd.description
+        desc = cmd.description
         print_entry_line(io, name, desc)
     end
 
@@ -122,7 +122,13 @@ Print a single help entry: `  label    description` with column alignment.
 function print_entry_line(io::IO, label::String, description::String)
     print(io, INDENT)
     printstyled(io, label; color=:green)
-    padding = max(2, COL_WIDTH - length(label))
-    print(io, " "^padding)
+    if length(label) >= COL_WIDTH
+        # Label too long — wrap description to next line
+        println(io)
+        print(io, INDENT, " "^COL_WIDTH)
+    else
+        padding = max(2, COL_WIDTH - length(label))
+        print(io, " "^padding)
+    end
     println(io, description)
 end

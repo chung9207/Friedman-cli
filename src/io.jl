@@ -13,12 +13,20 @@ function load_data(path::String)
 end
 
 """
+    _numeric_column_names(df) → Vector{String}
+
+Return the names of numeric columns in a DataFrame.
+"""
+_numeric_column_names(df::DataFrame) =
+    [n for n in names(df) if eltype(df[!, n]) <: Union{Number, Missing}]
+
+"""
     df_to_matrix(df) → Matrix{Float64}
 
 Convert a DataFrame to a numeric matrix, selecting only numeric columns.
 """
 function df_to_matrix(df::DataFrame)
-    numeric_cols = [n for n in names(df) if eltype(df[!, n]) <: Union{Number, Missing}]
+    numeric_cols = _numeric_column_names(df)
     isempty(numeric_cols) && error("no numeric columns found in data")
     mat = Matrix{Float64}(df[!, numeric_cols])
     return mat
@@ -29,9 +37,7 @@ end
 
 Extract numeric column names from a DataFrame.
 """
-function variable_names(df::DataFrame)
-    return [n for n in names(df) if eltype(df[!, n]) <: Union{Number, Missing}]
-end
+variable_names(df::DataFrame) = _numeric_column_names(df)
 
 """
     output_result(result, varnames; format, output, title)
