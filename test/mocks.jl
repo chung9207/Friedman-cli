@@ -280,6 +280,14 @@ loglikelihood(m::Union{ARModel,MAModel,ARMAModel,ARIMAModel}) = m.ll
 stderror(m::GMMModel) = fill(0.1, length(m.theta))
 stderror(m::Union{ARModel,MAModel,ARMAModel,ARIMAModel}) = fill(0.01, length(m.coefficients))
 
+# predict: return fitted values
+predict(m::VARModel) = m.Y[m.p+1:end, :]
+predict(m::Union{ARModel,MAModel,ARMAModel,ARIMAModel}) = zeros(Float64, 50)
+
+# residuals: return residuals
+residuals(m::VARModel) = m.U
+residuals(m::Union{ARModel,MAModel,ARMAModel,ARIMAModel}) = fill(0.01, 50)
+
 report(::VARModel) = nothing
 report(::ImpulseResponse) = nothing
 report(::BayesianImpulseResponse) = nothing
@@ -726,7 +734,7 @@ export ARCHModel, GARCHModel, EGARCHModel, GJRGARCHModel, SVModel, VolatilityFor
 export VECMModel, VECMForecast, VECMGrangerResult
 
 export select_lag_order, estimate_var, estimate_bvar, posterior_mean_model, posterior_median_model
-export optimize_hyperparameters, coef, loglikelihood, stderror, report
+export optimize_hyperparameters, coef, loglikelihood, stderror, predict, residuals, report
 export is_stationary, companion_matrix, companion_matrix_factors, nvars
 export irf, fevd, historical_decomposition, verify_decomposition, contribution
 export zero_restriction, sign_restriction, identify_arias, irf_mean

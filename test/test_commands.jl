@@ -49,6 +49,8 @@ include(joinpath(project_root, "src", "commands", "irf.jl"))
 include(joinpath(project_root, "src", "commands", "fevd.jl"))
 include(joinpath(project_root, "src", "commands", "hd.jl"))
 include(joinpath(project_root, "src", "commands", "forecast.jl"))
+include(joinpath(project_root, "src", "commands", "predict.jl"))
+include(joinpath(project_root, "src", "commands", "residuals.jl"))
 include(joinpath(project_root, "src", "commands", "list.jl"))
 include(joinpath(project_root, "src", "commands", "rename.jl"))
 include(joinpath(project_root, "src", "commands", "project.jl"))
@@ -2874,6 +2876,332 @@ end  # Storage operations
     end
 
 end  # Settings operations
+
+# ═══════════════════════════════════════════════════════════════
+# Predict handlers (predict.jl)
+# ═══════════════════════════════════════════════════════════════
+
+@testset "Predict handlers" begin
+
+    @testset "register_predict_commands!" begin
+        node = register_predict_commands!()
+        @test node isa NodeCommand
+        @test node.name == "predict"
+        @test length(node.subcmds) == 4
+        for cmd in ["var", "bvar", "arima", "vecm"]
+            @test haskey(node.subcmds, cmd)
+        end
+    end
+
+    @testset "_predict_var" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _predict_var(; data=csv, lags=2, format="table")
+                end
+            end
+            @test occursin("In-Sample Predictions", out)
+            @test occursin("VAR(2)", out)
+        end
+    end
+
+    @testset "_predict_var — auto lags" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _predict_var(; data=csv, lags=nothing, format="table")
+                end
+            end
+            @test occursin("In-Sample Predictions", out)
+        end
+    end
+
+    @testset "_predict_var — json output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "pred.json")
+            out = cd(dir) do
+                _capture() do
+                    _predict_var(; data=csv, lags=2, format="json", output=outfile)
+                end
+            end
+            @test isfile(outfile)
+            json_data = JSON3.read(read(outfile, String))
+            @test length(json_data) > 0
+        end
+    end
+
+    @testset "_predict_var — csv output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "pred.csv")
+            out = cd(dir) do
+                _capture() do
+                    _predict_var(; data=csv, lags=2, format="csv", output=outfile)
+                end
+            end
+            @test isfile(outfile)
+            result_df = CSV.read(outfile, DataFrame)
+            @test "t" in names(result_df)
+            @test nrow(result_df) > 0
+        end
+    end
+
+    @testset "_predict_bvar" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _predict_bvar(; data=csv, lags=2, draws=100, sampler="nuts",
+                                   config="", format="table")
+                end
+            end
+            @test occursin("BVAR(2)", out)
+            @test occursin("In-Sample Predictions", out)
+        end
+    end
+
+    @testset "_predict_bvar — json" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _predict_bvar(; data=csv, lags=2, draws=100, sampler="nuts",
+                                   config="", format="json")
+                end
+            end
+            @test !isempty(out)
+        end
+    end
+
+    @testset "_predict_arima — auto" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _predict_arima(; data=csv, column=1, format="table")
+                end
+            end
+            @test occursin("In-Sample Predictions", out)
+        end
+    end
+
+    @testset "_predict_arima — explicit order" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _predict_arima(; data=csv, column=1, p=2, d=1, q=1, format="table")
+                end
+            end
+            @test occursin("ARIMA(2,1,1)", out)
+            @test occursin("In-Sample Predictions", out)
+        end
+    end
+
+    @testset "_predict_arima — json" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _predict_arima(; data=csv, column=1, format="json")
+                end
+            end
+            @test !isempty(out)
+        end
+    end
+
+    @testset "_predict_vecm" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _predict_vecm(; data=csv, lags=2, rank="1", format="table")
+                end
+            end
+            @test occursin("VECM", out)
+            @test occursin("In-Sample Predictions", out)
+        end
+    end
+
+    @testset "_predict_vecm — auto rank" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _predict_vecm(; data=csv, lags=2, rank="auto", format="table")
+                end
+            end
+            @test occursin("VECM", out)
+        end
+    end
+
+end  # Predict handlers
+
+# ═══════════════════════════════════════════════════════════════
+# Residuals handlers (residuals.jl)
+# ═══════════════════════════════════════════════════════════════
+
+@testset "Residuals handlers" begin
+
+    @testset "register_residuals_commands!" begin
+        node = register_residuals_commands!()
+        @test node isa NodeCommand
+        @test node.name == "residuals"
+        @test length(node.subcmds) == 4
+        for cmd in ["var", "bvar", "arima", "vecm"]
+            @test haskey(node.subcmds, cmd)
+        end
+    end
+
+    @testset "_residuals_var" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_var(; data=csv, lags=2, format="table")
+                end
+            end
+            @test occursin("Residuals", out)
+            @test occursin("VAR(2)", out)
+        end
+    end
+
+    @testset "_residuals_var — auto lags" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_var(; data=csv, lags=nothing, format="table")
+                end
+            end
+            @test occursin("Residuals", out)
+        end
+    end
+
+    @testset "_residuals_var — json output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "resid.json")
+            out = cd(dir) do
+                _capture() do
+                    _residuals_var(; data=csv, lags=2, format="json", output=outfile)
+                end
+            end
+            @test isfile(outfile)
+            json_data = JSON3.read(read(outfile, String))
+            @test length(json_data) > 0
+        end
+    end
+
+    @testset "_residuals_var — csv output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "resid.csv")
+            out = cd(dir) do
+                _capture() do
+                    _residuals_var(; data=csv, lags=2, format="csv", output=outfile)
+                end
+            end
+            @test isfile(outfile)
+            result_df = CSV.read(outfile, DataFrame)
+            @test "t" in names(result_df)
+            @test nrow(result_df) > 0
+        end
+    end
+
+    @testset "_residuals_bvar" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_bvar(; data=csv, lags=2, draws=100, sampler="nuts",
+                                     config="", format="table")
+                end
+            end
+            @test occursin("BVAR(2)", out)
+            @test occursin("Residuals", out)
+        end
+    end
+
+    @testset "_residuals_bvar — json" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_bvar(; data=csv, lags=2, draws=100, sampler="nuts",
+                                     config="", format="json")
+                end
+            end
+            @test !isempty(out)
+        end
+    end
+
+    @testset "_residuals_arima — auto" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_arima(; data=csv, column=1, format="table")
+                end
+            end
+            @test occursin("Residuals", out)
+        end
+    end
+
+    @testset "_residuals_arima — explicit order" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_arima(; data=csv, column=1, p=2, d=1, q=1, format="table")
+                end
+            end
+            @test occursin("ARIMA(2,1,1)", out)
+            @test occursin("Residuals", out)
+        end
+    end
+
+    @testset "_residuals_arima — json" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_arima(; data=csv, column=1, format="json")
+                end
+            end
+            @test !isempty(out)
+        end
+    end
+
+    @testset "_residuals_vecm" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_vecm(; data=csv, lags=2, rank="1", format="table")
+                end
+            end
+            @test occursin("VECM", out)
+            @test occursin("Residuals", out)
+        end
+    end
+
+    @testset "_residuals_vecm — auto rank" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_vecm(; data=csv, lags=2, rank="auto", format="table")
+                end
+            end
+            @test occursin("VECM", out)
+        end
+    end
+
+end  # Residuals handlers
 
 # ═══════════════════════════════════════════════════════════════
 # Output format tests
