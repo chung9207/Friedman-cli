@@ -43,12 +43,6 @@ julia --project bin/friedman [command] [subcommand] [args...] [options...]
 
 All commands support `--format` (`table`|`csv`|`json`) and `--output` (file path) options.
 
-### Backward Compatibility
-
-The old model-first syntax (e.g., `friedman var irf`) is still accepted and automatically rewritten to the new action-first syntax (e.g., `friedman irf var`) with a deprecation warning.
-
----
-
 ### Estimation
 
 ```bash
