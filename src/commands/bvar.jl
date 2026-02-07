@@ -133,18 +133,18 @@ function _bvar_estimate(; data::String, lags::Int=4, prior::String="minnesota",
     summary(mean_model)
 
     coef_mat = coef(mean_model)
-    n_cols = size(coef_mat, 2)
-    col_names = String[]
+    n_rows = size(coef_mat, 1)
+    row_names = String[]
     for lag in 1:p
         for v in varnames
-            push!(col_names, "$(v)_L$(lag)")
+            push!(row_names, "$(v)_L$(lag)")
         end
     end
-    if n_cols > n * p
-        push!(col_names, "const")
+    if n_rows > n * p
+        push!(row_names, "const")
     end
 
-    coef_df = DataFrame(coef_mat, col_names)
+    coef_df = DataFrame(permutedims(coef_mat), row_names)
     insertcols!(coef_df, 1, :equation => varnames)
 
     output_result(coef_df; format=Symbol(format), output=output, title="BVAR($p) Posterior Mean Coefficients")
@@ -180,18 +180,18 @@ function _bvar_posterior(; data::String, lags::Int=4, draws::Int=2000,
     summary(model)
 
     coef_mat = coef(model)
-    n_cols = size(coef_mat, 2)
-    col_names = String[]
+    n_rows = size(coef_mat, 1)
+    row_names = String[]
     for lag in 1:p
         for v in varnames
-            push!(col_names, "$(v)_L$(lag)")
+            push!(row_names, "$(v)_L$(lag)")
         end
     end
-    if n_cols > n * p
-        push!(col_names, "const")
+    if n_rows > n * p
+        push!(row_names, "const")
     end
 
-    coef_df = DataFrame(coef_mat, col_names)
+    coef_df = DataFrame(permutedims(coef_mat), row_names)
     insertcols!(coef_df, 1, :equation => varnames)
 
     output_result(coef_df; format=Symbol(format), output=output, title="BVAR($p) Posterior $(titlecase(method)) Coefficients")

@@ -1744,3 +1744,8 @@ using TOML
         end
     end
 end
+
+# ──────────────────────────────────────────────────────────────
+# Command handler tests (uses mock MacroEconometricModels)
+# ──────────────────────────────────────────────────────────────
+include(joinpath(@__DIR__, "test_commands.jl"))

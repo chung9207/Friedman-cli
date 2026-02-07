@@ -1,5 +1,8 @@
 # Friedman
 
+[![CI](https://github.com/chung9207/Friedman-cli/actions/workflows/CI.yml/badge.svg)](https://github.com/chung9207/Friedman-cli/actions/workflows/CI.yml)
+[![codecov](https://codecov.io/gh/chung9207/Friedman-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/chung9207/Friedman-cli)
+
 Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl).
 
 ## Installation
