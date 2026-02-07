@@ -30,7 +30,7 @@ jobs:
           julia --project=docs -e '
             using Pkg
             Pkg.develop(path=".")
-            Pkg.add(url="https://github.com/chung9207/MacroEconometricModels.jl.git")
+            Pkg.add(url="https://github.com/chung9207/MacroEconometricModels.jl.git", rev="v0.1.4")
             Pkg.instantiate()
           '
       - name: Build and deploy docs
