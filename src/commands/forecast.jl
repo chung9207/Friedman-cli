@@ -253,13 +253,13 @@ function _forecast_bvar(; data::String, lags::Int=4, horizons::Int=12,
                          draws::Int=2000, sampler::String="nuts",
                          config::String="", from_tag::String="",
                          output::String="", format::String="table")
-    chain, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
+    post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
 
     println("Computing Bayesian forecast: BVAR($p), horizons=$horizons")
     println("  Sampler: $sampler, Draws: $draws")
     println()
 
-    b_vecs, sigmas = MacroEconometricModels.extract_chain_parameters(chain)
+    b_vecs, sigmas = MacroEconometricModels.extract_chain_parameters(post)
     n_draws = length(b_vecs)
     all_forecasts = zeros(n_draws, horizons, n)
 

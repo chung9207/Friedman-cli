@@ -85,7 +85,7 @@ function _irf_var(; data::String, lags=nothing, shock::Int=1, horizons::Int=20,
 
     irf_result = irf(model, horizons; kwargs...)
 
-    MacroEconometricModels.summary(irf_result)
+    report(irf_result)
 
     irf_vals = irf_result.values  # H x n x n
     n_h = size(irf_vals, 1)
@@ -149,7 +149,7 @@ function _irf_bvar(; data::String, lags::Int=4, shock::Int=1, horizons::Int=20,
                     id::String="cholesky", draws::Int=2000, sampler::String="nuts",
                     config::String="", from_tag::String="",
                     output::String="", format::String="table")
-    chain, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
+    post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
     method = get(ID_METHOD_MAP, id, :cholesky)
 
     println("Computing Bayesian IRFs: BVAR($p), shock=$shock, horizons=$horizons, id=$id")
@@ -160,7 +160,6 @@ function _irf_bvar(; data::String, lags::Int=4, shock::Int=1, horizons::Int=20,
 
     kwargs = Dict{Symbol,Any}(
         :method => method,
-        :data => Y,
         :quantiles => [0.16, 0.5, 0.84],
     )
     if !isnothing(check_func)
@@ -170,9 +169,9 @@ function _irf_bvar(; data::String, lags::Int=4, shock::Int=1, horizons::Int=20,
         kwargs[:narrative_check] = narrative_check
     end
 
-    birf = irf(chain, p, n, horizons; kwargs...)
+    birf = irf(post, horizons; kwargs...)
 
-    MacroEconometricModels.summary(birf)
+    report(birf)
 
     irf_mean_vals = birf.mean
     n_h = size(irf_mean_vals, 1)

@@ -67,7 +67,7 @@ function _fevd_var(; data::String, lags=nothing, horizons::Int=20,
     kwargs = _build_identification_kwargs(id, config)
     fevd_result = fevd(model, horizons; kwargs...)
 
-    MacroEconometricModels.summary(fevd_result)
+    report(fevd_result)
 
     proportions = fevd_result.proportions  # n_vars x n_shocks x H
 
@@ -96,16 +96,16 @@ function _fevd_bvar(; data::String, lags::Int=4, horizons::Int=20,
                      id::String="cholesky", draws::Int=2000, sampler::String="nuts",
                      config::String="", from_tag::String="",
                      output::String="", format::String="table")
-    chain, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
+    post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
 
     println("Computing Bayesian FEVD: BVAR($p), horizons=$horizons, id=$id")
     println("  Sampler: $sampler, Draws: $draws")
     println()
 
-    bfevd = fevd(chain, p, n, horizons;
-        data=Y, quantiles=[0.16, 0.5, 0.84])
+    bfevd = fevd(post, horizons;
+        quantiles=[0.16, 0.5, 0.84])
 
-    MacroEconometricModels.summary(bfevd)
+    report(bfevd)
 
     mean_props = bfevd.mean
 

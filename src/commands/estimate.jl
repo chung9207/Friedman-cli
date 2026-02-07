@@ -218,7 +218,7 @@ function _estimate_var(; data::String, lags=nothing, trend::String="constant",
     println()
 
     model = estimate_var(Y, p)
-    MacroEconometricModels.summary(model)
+    report(model)
 
     coef_mat = coef(model)
     n_rows = size(coef_mat, 1)
@@ -269,17 +269,17 @@ function _estimate_bvar(; data::String, lags::Int=4, prior::String="minnesota",
     prior_obj = _build_prior(config, Y, p)
     prior_sym = isnothing(prior_obj) ? Symbol(prior) : :minnesota
 
-    chain = estimate_bvar(Y, p;
+    post = estimate_bvar(Y, p;
         sampler=Symbol(sampler), n_samples=draws,
         prior=prior_sym, hyper=prior_obj)
 
     model = if method == "median"
-        posterior_median_model(chain, p, n; data=Y)
+        posterior_median_model(post)
     else
-        posterior_mean_model(chain, p, n; data=Y)
+        posterior_mean_model(post)
     end
 
-    summary(model)
+    report(model)
 
     coef_mat = coef(model)
     n_rows = size(coef_mat, 1)

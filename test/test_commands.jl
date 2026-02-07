@@ -262,8 +262,8 @@ end
             cfg = _make_prior_config(dir; optimize=false)
 
             out = _capture() do
-                chain, Y, varnames, p, n = _load_and_estimate_bvar(csv, 2, cfg, 500, "nuts")
-                @test chain isa MockChains
+                post, Y, varnames, p, n = _load_and_estimate_bvar(csv, 2, cfg, 500, "nuts")
+                @test post isa BVARPosterior
                 @test size(Y) == (100, 3)
                 @test n == 3
                 @test p == 2
@@ -271,8 +271,8 @@ end
 
             # With empty config (no prior)
             out = _capture() do
-                chain, Y, varnames, p, n = _load_and_estimate_bvar(csv, 2, "", 500, "hmc")
-                @test chain isa MockChains
+                post, Y, varnames, p, n = _load_and_estimate_bvar(csv, 2, "", 500, "hmc")
+                @test post isa BVARPosterior
             end
         end
     end

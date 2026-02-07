@@ -63,7 +63,7 @@ function _hd_var(; data::String, lags=nothing, id::String="cholesky",
     kwargs = _build_identification_kwargs(id, config)
     hd_result = historical_decomposition(model, size(Y, 1) - p; kwargs...)
 
-    MacroEconometricModels.summary(hd_result)
+    report(hd_result)
 
     is_valid = verify_decomposition(hd_result)
     if is_valid
@@ -102,7 +102,7 @@ function _hd_bvar(; data::String, lags::Int=4, id::String="cholesky",
                    draws::Int=2000, sampler::String="nuts",
                    config::String="", from_tag::String="",
                    output::String="", format::String="table")
-    chain, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
+    post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
     method = get(ID_METHOD_MAP, id, :cholesky)
 
     println("Computing Bayesian Historical Decomposition: BVAR($p), id=$id")
@@ -111,10 +111,10 @@ function _hd_bvar(; data::String, lags::Int=4, id::String="cholesky",
 
     horizon = size(Y, 1) - p
 
-    bhd = historical_decomposition(chain, p, n, horizon;
-        data=Y, method=method, quantiles=[0.16, 0.5, 0.84])
+    bhd = historical_decomposition(post, horizon;
+        method=method, quantiles=[0.16, 0.5, 0.84])
 
-    MacroEconometricModels.summary(bhd)
+    report(bhd)
 
     mean_contrib = bhd.mean
     initial_mean = bhd.initial_mean

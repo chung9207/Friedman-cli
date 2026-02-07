@@ -3,7 +3,6 @@
 
 module MacroEconometricModels
 
-import Base: summary
 using LinearAlgebra: I, diagm
 
 # ─── Core Types ───────────────────────────────────────────
@@ -14,6 +13,15 @@ struct VARModel{T<:Real}
 end
 
 struct MockChains end
+
+struct BVARPosterior{T}
+    B_draws::Array{T,3}
+    Sigma_draws::Array{T,3}
+    n_draws::Int
+    p::Int
+    n::Int
+    data::Matrix{T}
+end
 
 struct MinnesotaHyperparameters
     tau::Float64; decay::Float64; lambda::Float64; mu::Float64; omega::Vector{Float64}
@@ -228,7 +236,12 @@ end
 select_lag_order(Y, max_p; criterion=:aic) = min(2, max(1, max_p))
 estimate_var(Y, p; check_stability=true) = _mock_var(Y, p)
 
-estimate_bvar(Y, p; sampler=:nuts, n_samples=1000, prior=:normal, hyper=nothing) = MockChains()
+estimate_bvar(Y, p; sampler=:nuts, n_samples=1000, n_draws=1000, prior=:normal, hyper=nothing) =
+    BVARPosterior(zeros(10, size(Y,2)*p+1, size(Y,2)), zeros(10, size(Y,2), size(Y,2)),
+                  10, p, size(Y,2), Y)
+posterior_mean_model(post::BVARPosterior; data=nothing) = _mock_var(post.data, post.p)
+posterior_median_model(post::BVARPosterior; data=nothing) = _mock_var(post.data, post.p)
+# Keep old (chain, p, n) signatures for backward compat
 posterior_mean_model(chain::MockChains, p, n; data=nothing) =
     _mock_var(isnothing(data) ? ones(100, n) : data, p)
 posterior_median_model(chain::MockChains, p, n; data=nothing) =
@@ -243,13 +256,13 @@ loglikelihood(m::Union{ARModel,MAModel,ARMAModel,ARIMAModel}) = m.ll
 stderror(m::GMMModel) = fill(0.1, length(m.theta))
 stderror(m::Union{ARModel,MAModel,ARMAModel,ARIMAModel}) = fill(0.01, length(m.coefficients))
 
-summary(::VARModel) = nothing
-summary(::ImpulseResponse) = nothing
-summary(::BayesianImpulseResponse) = nothing
-summary(::FEVD) = nothing
-summary(::BayesianFEVD) = nothing
-summary(::HistoricalDecomposition) = nothing
-summary(::BayesianHistoricalDecomposition) = nothing
+report(::VARModel) = nothing
+report(::ImpulseResponse) = nothing
+report(::BayesianImpulseResponse) = nothing
+report(::FEVD) = nothing
+report(::BayesianFEVD) = nothing
+report(::HistoricalDecomposition) = nothing
+report(::BayesianHistoricalDecomposition) = nothing
 
 is_stationary(m::VARModel) = (is_stationary=true, eigenvalues=[0.5+0.1im, 0.5-0.1im, 0.3+0.0im])
 is_stationary(m::DynamicFactorModel) = (is_stationary=true,)
@@ -284,6 +297,14 @@ function irf(chain::MockChains, p::Int, n::Int, horizon::Int;
     q_vals = ones(horizon + 1, n, n, length(quantiles)) * 0.1
     BayesianImpulseResponse(vals, q_vals, Float64.(quantiles))
 end
+function irf(post::BVARPosterior, horizon::Int;
+             method=:cholesky, quantiles=[0.16, 0.5, 0.84],
+             check_func=nothing, narrative_check=nothing)
+    n = post.n
+    vals = ones(horizon + 1, n, n) * 0.1
+    q_vals = ones(horizon + 1, n, n, length(quantiles)) * 0.1
+    BayesianImpulseResponse(vals, q_vals, Float64.(quantiles))
+end
 
 # FEVD
 function fevd(model::VARModel, horizon::Int; method=:cholesky, check_func=nothing, narrative_check=nothing)
@@ -293,6 +314,13 @@ function fevd(model::VARModel, horizon::Int; method=:cholesky, check_func=nothin
 end
 function fevd(chain::MockChains, p::Int, n::Int, horizon::Int;
               data=nothing, quantiles=[0.16, 0.5, 0.84])
+    props = ones(n, n, horizon) / n
+    q = ones(n, n, horizon, length(quantiles)) / n
+    BayesianFEVD(props, q, Float64.(quantiles))
+end
+function fevd(post::BVARPosterior, horizon::Int;
+              quantiles=[0.16, 0.5, 0.84])
+    n = post.n
     props = ones(n, n, horizon) / n
     q = ones(n, n, horizon, length(quantiles)) / n
     BayesianFEVD(props, q, Float64.(quantiles))
@@ -312,6 +340,15 @@ end
 function historical_decomposition(chain::MockChains, p::Int, n::Int, horizon::Int;
                                    data=nothing, method=:cholesky, quantiles=[0.16, 0.5, 0.84])
     T_eff = isnothing(data) ? horizon : size(data, 1) - p
+    mean_c = ones(T_eff, n, n) * 0.1
+    initial_m = ones(T_eff, n) * 0.01
+    q = ones(T_eff, n, n, length(quantiles)) * 0.1
+    BayesianHistoricalDecomposition(mean_c, initial_m, q, Float64.(quantiles))
+end
+function historical_decomposition(post::BVARPosterior, horizon::Int;
+                                   method=:cholesky, quantiles=[0.16, 0.5, 0.84])
+    n = post.n; p = post.p; data = post.data
+    T_eff = size(data, 1) - p
     mean_c = ones(T_eff, n, n) * 0.1
     initial_m = ones(T_eff, n) * 0.01
     q = ones(T_eff, n, n, length(quantiles)) * 0.1
@@ -349,6 +386,13 @@ function extract_chain_parameters(chain::MockChains)
     n_draws = 10
     b_vecs = [ones(9) * 0.1 for _ in 1:n_draws]
     sigmas = [ones(6) * 0.01 for _ in 1:n_draws]
+    (b_vecs, sigmas)
+end
+function extract_chain_parameters(post::BVARPosterior)
+    nd = post.n_draws
+    k = post.n * post.p + 1
+    b_vecs = [ones(k * post.n) * 0.1 for _ in 1:nd]
+    sigmas = [ones(post.n * (post.n + 1) ÷ 2) * 0.01 for _ in 1:nd]
     (b_vecs, sigmas)
 end
 function parameters_to_model(b_vec, sigma_vec, p, n; data=nothing)
@@ -594,7 +638,7 @@ test_gaussian_vs_nongaussian(model::VARModel) = (statistic=18.0, pvalue=0.001)
 
 # ─── Exports ──────────────────────────────────────────────
 
-export VARModel, MockChains, MinnesotaHyperparameters
+export VARModel, MockChains, BVARPosterior, MinnesotaHyperparameters
 export ImpulseResponse, BayesianImpulseResponse, FEVD, BayesianFEVD
 export HistoricalDecomposition, BayesianHistoricalDecomposition
 export ZeroRestriction, SignRestriction, SVARRestrictions, AriasSVARResult
@@ -610,7 +654,7 @@ export GMMModel
 export ARCHModel, GARCHModel, EGARCHModel, GJRGARCHModel, SVModel, VolatilityForecast
 
 export select_lag_order, estimate_var, estimate_bvar, posterior_mean_model, posterior_median_model
-export optimize_hyperparameters, coef, loglikelihood, stderror
+export optimize_hyperparameters, coef, loglikelihood, stderror, report
 export is_stationary, companion_matrix, companion_matrix_factors, nvars
 export irf, fevd, historical_decomposition, verify_decomposition, contribution
 export zero_restriction, sign_restriction, identify_arias, irf_mean

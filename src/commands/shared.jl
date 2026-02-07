@@ -45,9 +45,10 @@ function _load_and_estimate_var(data::String, lags)
 end
 
 """
-    _load_and_estimate_bvar(data, lags, config, draws, sampler) -> (chain, Y, varnames, p, n)
+    _load_and_estimate_bvar(data, lags, config, draws, sampler) -> (post, Y, varnames, p, n)
 
-Load data from CSV, build prior, and estimate a Bayesian VAR via MCMC.
+Load data from CSV, build prior, and estimate a Bayesian VAR.
+Returns a BVARPosterior (which carries p, n, data internally).
 """
 function _load_and_estimate_bvar(data::String, lags::Int, config::String,
                                   draws::Int, sampler::String)
@@ -60,11 +61,11 @@ function _load_and_estimate_bvar(data::String, lags::Int, config::String,
     prior_obj = _build_prior(config, Y, p)
     prior_sym = isnothing(prior_obj) ? :normal : :minnesota
 
-    chain = estimate_bvar(Y, p;
+    post = estimate_bvar(Y, p;
         sampler=Symbol(sampler), n_samples=draws,
         prior=prior_sym, hyper=prior_obj)
 
-    return chain, Y, varnames, p, n
+    return post, Y, varnames, p, n
 end
 
 """
