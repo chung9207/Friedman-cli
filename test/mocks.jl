@@ -188,6 +188,27 @@ struct GMMModel{T}
     W::Matrix{T}; g_bar::Vector{T}; J_stat::T; J_pvalue::T
 end
 
+# ─── Volatility Types ────────────────────────────────────
+
+struct ARCHModel{T<:Real}
+    coefficients::Vector{T}
+end
+struct GARCHModel{T<:Real}
+    coefficients::Vector{T}
+end
+struct EGARCHModel{T<:Real}
+    coefficients::Vector{T}
+end
+struct GJRGARCHModel{T<:Real}
+    coefficients::Vector{T}
+end
+struct SVModel{T<:Real}
+    coefficients::Vector{T}
+end
+struct VolatilityForecast{T<:Real}
+    forecast::Vector{T}; horizon::Int
+end
+
 # ─── Mock Helper ──────────────────────────────────────────
 
 function _mock_var(Y::Matrix{Float64}, p::Int)
@@ -508,6 +529,24 @@ function forecast(m::Union{ARModel,MAModel,ARMAModel,ARIMAModel}, h::Int; conf_l
     ARIMAForecast(fc, fc .- 0.5, fc .+ 0.5, ones(h) * 0.1, h)
 end
 
+# Volatility model functions
+estimate_arch(y, q) = ARCHModel(ones(q+1) * 0.1)
+estimate_garch(y, p, q) = GARCHModel(ones(p+q+1) * 0.1)
+estimate_egarch(y, p, q) = EGARCHModel(ones(2*q+p+1) * 0.1)
+estimate_gjr_garch(y, p, q) = GJRGARCHModel(ones(2*q+p+1) * 0.1)
+estimate_sv(y; n_draws=5000) = SVModel(ones(3) * 0.1)
+coef(m::Union{ARCHModel,GARCHModel,EGARCHModel,GJRGARCHModel,SVModel}) = m.coefficients
+persistence(m::Union{ARCHModel,GARCHModel,EGARCHModel,GJRGARCHModel,SVModel}) = 0.85
+halflife(m::Union{GARCHModel,GJRGARCHModel}) = 4.3
+unconditional_variance(m::Union{ARCHModel,GARCHModel}) = 0.02
+function forecast(m::Union{ARCHModel,GARCHModel,EGARCHModel,GJRGARCHModel,SVModel}, h::Int)
+    VolatilityForecast(ones(h) * 0.01, h)
+end
+
+# Volatility test functions
+arch_lm_test(y, lags) = (statistic=15.0, pvalue=0.01)
+ljung_box_squared(y, lags) = (statistic=20.0, pvalue=0.005)
+
 # Non-Gaussian identification
 function _mock_ica(model::VARModel, method_sym::Symbol)
     n = size(model.Y, 2); T_u = size(model.U, 1)
@@ -568,6 +607,7 @@ export MarkovSwitchingSVARResult, GARCHSVARResult, SmoothTransitionSVARResult, E
 export NormalityTestResult, NormalityTestSuite
 export ADFResult, KPSSResult, PPResult, ZAResult, NgPerronResult, JohansenResult
 export GMMModel
+export ARCHModel, GARCHModel, EGARCHModel, GJRGARCHModel, SVModel, VolatilityForecast
 
 export select_lag_order, estimate_var, estimate_bvar, posterior_mean_model, posterior_median_model
 export optimize_hyperparameters, coef, loglikelihood, stderror
@@ -585,6 +625,9 @@ export adf_test, kpss_test, pp_test, za_test, ngperron_test, johansen_test
 export estimate_lp_gmm, gmm_summary, j_test
 export estimate_ar, estimate_ma, estimate_arma, estimate_arima, auto_arima
 export ar_order, ma_order, diff_order, aic, bic
+export estimate_arch, estimate_garch, estimate_egarch, estimate_gjr_garch, estimate_sv
+export persistence, halflife, unconditional_variance
+export arch_lm_test, ljung_box_squared
 export identify_fastica, identify_jade, identify_sobi, identify_dcov, identify_hsic
 export identify_nongaussian_ml, identify_mixture_normal, identify_pml, identify_skew_normal
 export identify_markov_switching, identify_garch, identify_smooth_transition, identify_external_volatility

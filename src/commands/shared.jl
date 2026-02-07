@@ -6,10 +6,21 @@
 Maps CLI identification method strings to MacroEconometricModels symbols.
 """
 const ID_METHOD_MAP = Dict(
-    "cholesky"  => :cholesky,
-    "sign"      => :sign,
-    "narrative" => :narrative,
-    "longrun"   => :long_run,
+    "cholesky"          => :cholesky,
+    "sign"              => :sign,
+    "narrative"         => :narrative,
+    "longrun"           => :long_run,
+    "fastica"           => :fastica,
+    "jade"              => :jade,
+    "sobi"              => :sobi,
+    "dcov"              => :dcov,
+    "hsic"              => :hsic,
+    "student_t"         => :student_t,
+    "mixture_normal"    => :mixture_normal,
+    "pml"               => :pml,
+    "skew_normal"       => :skew_normal,
+    "markov_switching"  => :markov_switching,
+    "garch_id"          => :garch,
 )
 
 """
