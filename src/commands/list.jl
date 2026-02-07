@@ -26,18 +26,16 @@ function register_list_commands!()
     return NodeCommand("list", subcmds, "List stored models and results")
 end
 
-function _list_models(; type::String="", format::String="table", output::String="")
-    model_types = ["var", "bvar", "lp", "arima", "gmm", "static", "dynamic", "gdfm",
-                   "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml"]
-
+function _list_entries(type_list::Vector{String}, not_found_msg::String, title::String;
+                       type::String="", format::String="table", output::String="")
     entries = if isempty(type)
-        vcat([storage_list(; type_filter=t) for t in model_types]...)
+        vcat([storage_list(; type_filter=t) for t in type_list]...)
     else
         storage_list(; type_filter=type)
     end
 
     if isempty(entries)
-        println("No stored models found.")
+        println(not_found_msg)
         return
     end
 
@@ -56,37 +54,18 @@ function _list_models(; type::String="", format::String="table", output::String=
         push!(list_df, (tag=tag, type=etype, timestamp=ts, info=info))
     end
 
-    output_result(list_df; format=Symbol(format), output=output, title="Stored Models")
+    output_result(list_df; format=Symbol(format), output=output, title=title)
+end
+
+function _list_models(; type::String="", format::String="table", output::String="")
+    model_types = ["var", "bvar", "lp", "arima", "gmm", "static", "dynamic", "gdfm",
+                   "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml"]
+    _list_entries(model_types, "No stored models found.", "Stored Models";
+                  type=type, format=format, output=output)
 end
 
 function _list_results(; type::String="", format::String="table", output::String="")
     result_types = ["irf", "fevd", "hd", "forecast"]
-
-    entries = if isempty(type)
-        vcat([storage_list(; type_filter=t) for t in result_types]...)
-    else
-        storage_list(; type_filter=type)
-    end
-
-    if isempty(entries)
-        println("No stored results found.")
-        return
-    end
-
-    list_df = DataFrame(
-        tag=String[],
-        type=String[],
-        timestamp=String[],
-        info=String[]
-    )
-    for entry in entries
-        tag = get(entry, "tag", "")
-        etype = get(entry, "type", "")
-        ts = get(entry, "timestamp", "")
-        meta = get(entry, "meta", Dict{String,Any}())
-        info = get(meta, "command", "")
-        push!(list_df, (tag=tag, type=etype, timestamp=ts, info=info))
-    end
-
-    output_result(list_df; format=Symbol(format), output=output, title="Stored Results")
+    _list_entries(result_types, "No stored results found.", "Stored Results";
+                  type=type, format=format, output=output)
 end

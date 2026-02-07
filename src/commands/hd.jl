@@ -73,24 +73,10 @@ function _hd_var(; data::String, lags=nothing, id::String="cholesky",
     end
     println()
 
-    for vi in 1:n
-        T_eff = hd_result.T_eff
-        hd_df = DataFrame()
-        hd_df.period = 1:T_eff
-        hd_df.actual = hd_result.actual[:, vi]
-        hd_df.initial = hd_result.initial_conditions[:, vi]
-
-        for si in 1:n
-            shock_name = si <= length(varnames) ? varnames[si] : "shock_$si"
-            hd_df[!, "contrib_$shock_name"] = contribution(hd_result, vi, si)
-        end
-
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-        output_result(hd_df; format=Symbol(format),
-                      output=isempty(output) ? "" : replace(output, "." => "_$(vname)."),
-                      title="Historical Decomposition: $vname ($id identification)")
-        println()
-    end
+    _output_hd_tables((vi, si) -> contribution(hd_result, vi, si), varnames, hd_result.T_eff;
+                      id=id, title_prefix="Historical Decomposition",
+                      format=format, output=output,
+                      actual=hd_result.actual, initial=hd_result.initial_conditions)
 
     storage_save_auto!("hd", Dict{String,Any}("type" => "var", "id" => id, "n_vars" => n),
         Dict{String,Any}("command" => "hd var", "data" => data))
@@ -117,25 +103,12 @@ function _hd_bvar(; data::String, lags::Int=4, id::String="cholesky",
     report(bhd)
 
     mean_contrib = bhd.mean
-    initial_mean = bhd.initial_mean
     T_eff = size(mean_contrib, 1)
 
-    for vi in 1:n
-        hd_df = DataFrame()
-        hd_df.period = 1:T_eff
-        hd_df.initial = initial_mean[:, vi]
-
-        for si in 1:n
-            shock_name = si <= length(varnames) ? varnames[si] : "shock_$si"
-            hd_df[!, "contrib_$shock_name"] = mean_contrib[:, vi, si]
-        end
-
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-        output_result(hd_df; format=Symbol(format),
-                      output=isempty(output) ? "" : replace(output, "." => "_$(vname)."),
-                      title="Bayesian HD: $vname ($id, posterior mean)")
-        println()
-    end
+    _output_hd_tables((vi, si) -> mean_contrib[:, vi, si], varnames, T_eff;
+                      id=id, title_prefix="Bayesian HD",
+                      format=format, output=output,
+                      initial=bhd.initial_mean)
 
     storage_save_auto!("hd", Dict{String,Any}("type" => "bvar", "id" => id, "n_vars" => n),
         Dict{String,Any}("command" => "hd bvar", "data" => data))
@@ -147,9 +120,7 @@ function _hd_lp(; data::String, lags::Int=4, var_lags=nothing,
                  id::String="cholesky", vcov::String="newey_west", config::String="",
                  from_tag::String="",
                  output::String="", format::String="table")
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
+    Y, varnames = load_multivariate_data(data)
     n = size(Y, 2)
     vp = isnothing(var_lags) ? lags : var_lags
     hd_horizon = size(Y, 1) - vp
@@ -178,24 +149,10 @@ function _hd_lp(; data::String, lags::Int=4, var_lags=nothing,
     end
     println()
 
-    for vi in 1:n
-        T_eff = hd_result.T_eff
-        hd_df = DataFrame()
-        hd_df.period = 1:T_eff
-        hd_df.actual = hd_result.actual[:, vi]
-        hd_df.initial = hd_result.initial_conditions[:, vi]
-
-        for si in 1:n
-            shock_name = si <= length(varnames) ? varnames[si] : "shock_$si"
-            hd_df[!, "contrib_$shock_name"] = contribution(hd_result, vi, si)
-        end
-
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-        output_result(hd_df; format=Symbol(format),
-                      output=isempty(output) ? "" : replace(output, "." => "_$(vname)."),
-                      title="LP Historical Decomposition: $vname ($id identification)")
-        println()
-    end
+    _output_hd_tables((vi, si) -> contribution(hd_result, vi, si), varnames, hd_result.T_eff;
+                      id=id, title_prefix="LP Historical Decomposition",
+                      format=format, output=output,
+                      actual=hd_result.actual, initial=hd_result.initial_conditions)
 
     storage_save_auto!("hd", Dict{String,Any}("type" => "lp", "id" => id, "n_vars" => n),
         Dict{String,Any}("command" => "hd lp", "data" => data))

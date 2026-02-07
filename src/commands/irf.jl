@@ -103,7 +103,7 @@ function _irf_var(; data::String, lags=nothing, shock::Int=1, horizons::Int=20,
         end
     end
 
-    shock_name = shock <= length(varnames) ? varnames[shock] : "shock_$shock"
+    shock_name = _shock_name(varnames, shock)
     output_result(irf_df; format=Symbol(format), output=output,
                   title="IRF to $shock_name shock ($id identification)")
 
@@ -138,7 +138,7 @@ function _var_irf_arias(model, config::String, horizons::Int,
         irf_df[!, vname] = irf_vals[:, vi, shock]
     end
 
-    shock_name = shock <= length(varnames) ? varnames[shock] : "shock_$shock"
+    shock_name = _shock_name(varnames, shock)
     output_result(irf_df; format=Symbol(format), output=output,
                   title="IRF to $shock_name shock (Arias et al. identification)")
 end
@@ -197,7 +197,7 @@ function _irf_bvar(; data::String, lags::Int=4, shock::Int=1, horizons::Int=20,
         end
     end
 
-    shock_name = shock <= length(varnames) ? varnames[shock] : "shock_$shock"
+    shock_name = _shock_name(varnames, shock)
     output_result(irf_df; format=Symbol(format), output=output,
                   title="Bayesian IRF to $shock_name shock ($id, 68% credible interval)")
 
@@ -233,7 +233,7 @@ function _irf_lp(; data::String, shock::Int=1, shocks::String="",
 
     for shock_idx in shock_indices
         (shock_idx < 1 || shock_idx > n) && error("shock index $shock_idx out of range (data has $n variables)")
-        shock_name = shock_idx <= length(varnames) ? varnames[shock_idx] : "shock_$shock_idx"
+        shock_name = _shock_name(varnames, shock_idx)
 
         irf_vals = irf_result.values  # H x n x n
         n_h = size(irf_vals, 1)

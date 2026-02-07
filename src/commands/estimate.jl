@@ -202,9 +202,7 @@ end
 
 function _estimate_var(; data::String, lags=nothing, trend::String="constant",
                         output::String="", format::String="table")
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
+    Y, varnames = load_multivariate_data(data)
     n = size(Y, 2)
 
     p = if isnothing(lags)
@@ -220,33 +218,12 @@ function _estimate_var(; data::String, lags=nothing, trend::String="constant",
     model = estimate_var(Y, p)
     report(model)
 
-    coef_mat = coef(model)
-    n_rows = size(coef_mat, 1)
-
-    row_names = String[]
-    for lag in 1:p
-        for v in varnames
-            push!(row_names, "$(v)_L$(lag)")
-        end
-    end
-    if n_rows > n * p
-        push!(row_names, "const")
-    end
-
-    coef_df = DataFrame(permutedims(coef_mat), row_names)
-    insertcols!(coef_df, 1, :equation => varnames)
-
+    coef_df = _build_var_coef_table(coef(model), varnames, p)
     output_result(coef_df; format=Symbol(format), output=output, title="VAR($p) Coefficients")
 
     println()
-    output_kv([
-        "AIC" => model.aic,
-        "BIC" => model.bic,
-        "HQC" => model.hqic,
-        "Log-likelihood" => loglikelihood(model),
-    ]; format=format, title="Information Criteria")
+    output_model_criteria(model; format=format, title="Information Criteria")
 
-    # Auto-save
     storage_save_auto!("var", serialize_model(model),
         Dict{String,Any}("command" => "estimate var", "data" => data, "lags" => p))
 end
@@ -256,9 +233,7 @@ end
 function _estimate_bvar(; data::String, lags::Int=4, prior::String="minnesota",
                          draws::Int=2000, sampler::String="nuts", method::String="mean",
                          config::String="", output::String="", format::String="table")
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
+    Y, varnames = load_multivariate_data(data)
     n = size(Y, 2)
     p = lags
 
@@ -281,32 +256,13 @@ function _estimate_bvar(; data::String, lags::Int=4, prior::String="minnesota",
 
     report(model)
 
-    coef_mat = coef(model)
-    n_rows = size(coef_mat, 1)
-    row_names = String[]
-    for lag in 1:p
-        for v in varnames
-            push!(row_names, "$(v)_L$(lag)")
-        end
-    end
-    if n_rows > n * p
-        push!(row_names, "const")
-    end
-
-    coef_df = DataFrame(permutedims(coef_mat), row_names)
-    insertcols!(coef_df, 1, :equation => varnames)
-
+    coef_df = _build_var_coef_table(coef(model), varnames, p)
     output_result(coef_df; format=Symbol(format), output=output,
                   title="BVAR($p) Posterior $(titlecase(method)) Coefficients")
 
     println()
-    output_kv([
-        "AIC" => model.aic,
-        "BIC" => model.bic,
-        "HQC" => model.hqic,
-    ]; format=format, title="Information Criteria (Posterior $(titlecase(method)))")
+    output_model_criteria(model; format=format, title="Information Criteria (Posterior $(titlecase(method)))")
 
-    # Auto-save
     storage_save_auto!("bvar", serialize_model(model),
         Dict{String,Any}("command" => "estimate bvar", "data" => data, "lags" => p,
                           "draws" => draws, "sampler" => sampler, "method" => method))
@@ -320,27 +276,24 @@ function _estimate_lp(; data::String, method::String="standard", shock::Int=1,
                        state_var=nothing, gamma::Float64=1.5, transition::String="logistic",
                        treatment::Int=1, score_method::String="logit",
                        output::String="", format::String="table")
+    validate_method(method, ["standard", "iv", "smooth", "state", "propensity", "robust"], "LP method")
     if method == "standard"
-        _lp_estimate_standard(data, shock, horizons, control_lags, vcov, output, format)
+        _estimate_lp_standard(data, shock, horizons, control_lags, vcov, output, format)
     elseif method == "iv"
-        _lp_estimate_iv(data, shock, horizons, control_lags, vcov, instruments, output, format)
+        _estimate_lp_iv(data, shock, horizons, control_lags, vcov, instruments, output, format)
     elseif method == "smooth"
-        _lp_estimate_smooth(data, shock, horizons, knots, lambda, output, format)
+        _estimate_lp_smooth(data, shock, horizons, knots, lambda, output, format)
     elseif method == "state"
-        _lp_estimate_state(data, shock, horizons, state_var, gamma, transition, output, format)
+        _estimate_lp_state(data, shock, horizons, state_var, gamma, transition, output, format)
     elseif method == "propensity"
-        _lp_estimate_propensity(data, treatment, horizons, score_method, output, format)
+        _estimate_lp_propensity(data, treatment, horizons, score_method, output, format)
     elseif method == "robust"
-        _lp_estimate_robust(data, treatment, horizons, score_method, output, format)
-    else
-        error("unknown LP method: $method (expected standard|iv|smooth|state|propensity|robust)")
+        _estimate_lp_robust(data, treatment, horizons, score_method, output, format)
     end
 end
 
-function _lp_estimate_standard(data, shock, horizons, control_lags, vcov, output, format)
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
+function _estimate_lp_standard(data, shock, horizons, control_lags, vcov, output, format)
+    Y, varnames = load_multivariate_data(data)
 
     println("Estimating Local Projections: shock=$shock, horizons=$horizons, vcov=$vcov")
     println()
@@ -348,7 +301,7 @@ function _lp_estimate_standard(data, shock, horizons, control_lags, vcov, output
     model = estimate_lp(Y, shock, horizons; lags=control_lags, cov_type=Symbol(vcov))
     irf_result = lp_irf(model)
 
-    shock_name = shock <= length(varnames) ? varnames[shock] : "shock_$shock"
+    shock_name = _shock_name(varnames, shock)
 
     irf_df = DataFrame()
     irf_df.horizon = 0:horizons
@@ -364,15 +317,11 @@ function _lp_estimate_standard(data, shock, horizons, control_lags, vcov, output
                   title="LP IRF to $shock_name shock")
 end
 
-function _lp_estimate_iv(data, shock, horizons, control_lags, vcov, instruments, output, format)
+function _estimate_lp_iv(data, shock, horizons, control_lags, vcov, instruments, output, format)
     isempty(instruments) && error("LP-IV requires --instruments=<file.csv>")
 
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
-
-    iv_df = load_data(instruments)
-    Z = df_to_matrix(iv_df)
+    Y, varnames = load_multivariate_data(data)
+    Z, _ = load_multivariate_data(instruments)
 
     println("Estimating LP-IV: shock=$shock, horizons=$horizons, instruments=$(size(Z, 2))")
     println()
@@ -387,7 +336,7 @@ function _lp_estimate_iv(data, shock, horizons, control_lags, vcov, instruments,
     end
     println()
 
-    shock_name = shock <= length(varnames) ? varnames[shock] : "shock_$shock"
+    shock_name = _shock_name(varnames, shock)
 
     irf_df = DataFrame()
     irf_df.horizon = 0:horizons
@@ -403,10 +352,8 @@ function _lp_estimate_iv(data, shock, horizons, control_lags, vcov, instruments,
                   title="LP-IV IRF to $shock_name shock")
 end
 
-function _lp_estimate_smooth(data, shock, horizons, knots, lambda, output, format)
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
+function _estimate_lp_smooth(data, shock, horizons, knots, lambda, output, format)
+    Y, varnames = load_multivariate_data(data)
 
     lam = if lambda == 0.0
         println("Cross-validating smoothing parameter...")
@@ -421,7 +368,7 @@ function _lp_estimate_smooth(data, shock, horizons, knots, lambda, output, forma
     model = estimate_smooth_lp(Y, shock, horizons; n_knots=knots, lambda=lam)
     irf_result = smooth_lp_irf(model)
 
-    shock_name = shock <= length(varnames) ? varnames[shock] : "shock_$shock"
+    shock_name = _shock_name(varnames, shock)
 
     irf_df = DataFrame()
     irf_df.horizon = 0:horizons
@@ -437,12 +384,10 @@ function _lp_estimate_smooth(data, shock, horizons, knots, lambda, output, forma
                   title="Smooth LP IRF to $shock_name shock")
 end
 
-function _lp_estimate_state(data, shock, horizons, state_var, gamma, transition, output, format)
+function _estimate_lp_state(data, shock, horizons, state_var, gamma, transition, output, format)
     isnothing(state_var) && error("state-dependent LP requires --state-var=<idx>")
 
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
+    Y, varnames = load_multivariate_data(data)
 
     println("Estimating State-Dependent LP: shock=$shock, state=$state_var, gamma=$gamma, transition=$transition")
     println()
@@ -451,7 +396,7 @@ function _lp_estimate_state(data, shock, horizons, state_var, gamma, transition,
     model = estimate_state_lp(Y, shock, state_vec, horizons; gamma=gamma)
     results = state_irf(model)
 
-    shock_name = shock <= length(varnames) ? varnames[shock] : "shock_$shock"
+    shock_name = _shock_name(varnames, shock)
 
     for (regime, label) in [(:expansion, "Expansion"), (:recession, "Recession")]
         irf_result = getfield(results, regime)
@@ -475,10 +420,8 @@ function _lp_estimate_state(data, shock, horizons, state_var, gamma, transition,
     println("  p-value: $(round(jt.p_value; digits=4))")
 end
 
-function _lp_estimate_propensity(data, treatment, horizons, score_method, output, format)
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
+function _estimate_lp_propensity(data, treatment, horizons, score_method, output, format)
+    Y, varnames = load_multivariate_data(data)
 
     println("Estimating Propensity Score LP: treatment=$treatment, horizons=$horizons, method=$score_method")
     println()
@@ -509,15 +452,13 @@ function _lp_estimate_propensity(data, treatment, horizons, score_method, output
         irf_df[!, "$(vname)_upper"] = irf_result.ci_upper[:, vi]
     end
 
-    treat_name = treatment <= length(varnames) ? varnames[treatment] : "treatment_$treatment"
+    treat_name = _var_name(varnames, treatment)
     output_result(irf_df; format=Symbol(format), output=output,
                   title="Propensity Score LP: ATE of $treat_name")
 end
 
-function _lp_estimate_robust(data, treatment, horizons, score_method, output, format)
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
+function _estimate_lp_robust(data, treatment, horizons, score_method, output, format)
+    Y, varnames = load_multivariate_data(data)
 
     println("Estimating Doubly Robust LP: treatment=$treatment, horizons=$horizons, method=$score_method")
     println()
@@ -548,7 +489,7 @@ function _lp_estimate_robust(data, treatment, horizons, score_method, output, fo
         irf_df[!, "$(vname)_upper"] = irf_result.ci_upper[:, vi]
     end
 
-    treat_name = treatment <= length(varnames) ? varnames[treatment] : "treatment_$treatment"
+    treat_name = _var_name(varnames, treatment)
     output_result(irf_df; format=Symbol(format), output=output,
                   title="Doubly Robust LP: ATE of $treat_name")
 end
@@ -559,7 +500,7 @@ function _estimate_arima(; data::String, column::Int=1, p=nothing, d::Int=0, q::
                           max_p::Int=5, max_d::Int=2, max_q::Int=5,
                           criterion::String="bic", method::String="css_mle",
                           format::String="table", output::String="")
-    y, vname = _extract_series(data, column)
+    y, vname = load_univariate_series(data, column)
     method_sym = Symbol(method)
     safe_method = method_sym == :css_mle ? :mle : method_sym
 
@@ -654,9 +595,7 @@ function _estimate_gmm(; data::String, config::String="",
                         output::String="", format::String="table")
     isempty(config) && error("GMM requires a --config=<file.toml> specifying moment conditions and instruments")
 
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
+    Y, varnames = load_multivariate_data(data)
 
     cfg = load_config(config)
     gmm_cfg = get_gmm(cfg)
@@ -708,9 +647,7 @@ end
 
 function _estimate_static(; data::String, nfactors=nothing, criterion::String="ic1",
                            output::String="", format::String="table")
-    df = load_data(data)
-    X = df_to_matrix(df)
-    varnames = variable_names(df)
+    X, varnames = load_multivariate_data(data)
 
     r = if isnothing(nfactors)
         println("Selecting number of factors via Bai-Ng information criteria...")
@@ -742,9 +679,7 @@ end
 
 function _estimate_dynamic(; data::String, nfactors=nothing, factor_lags::Int=1,
                             method::String="twostep", output::String="", format::String="table")
-    df = load_data(data)
-    X = df_to_matrix(df)
-    varnames = variable_names(df)
+    X, varnames = load_multivariate_data(data)
 
     r = if isnothing(nfactors)
         println("Selecting number of factors...")
@@ -786,9 +721,7 @@ end
 
 function _estimate_gdfm(; data::String, nfactors=nothing, dynamic_rank=nothing,
                          output::String="", format::String="table")
-    df = load_data(data)
-    X = df_to_matrix(df)
-    varnames = variable_names(df)
+    X, varnames = load_multivariate_data(data)
 
     q = if isnothing(dynamic_rank)
         println("Selecting dynamic rank...")
@@ -828,42 +761,24 @@ end
 
 function _estimate_arch(; data::String, column::Int=1, q::Int=1,
                          output::String="", format::String="table")
-    y, vname = _extract_series(data, column)
-
+    y, vname = load_univariate_series(data, column)
     println("Estimating ARCH($q): variable=$vname, observations=$(length(y))")
     println()
-
     model = estimate_arch(y, q)
-
-    c = coef(model)
     param_names = ["mu"; "omega"; ["alpha$i" for i in 1:q]]
-    coef_df = DataFrame(parameter=param_names[1:length(c)], estimate=round.(c; digits=6))
-    output_result(coef_df; format=Symbol(format), output=output, title="ARCH($q) Coefficients ($vname)")
-
-    println()
-    p_val = persistence(model)
-    println("Persistence: $(round(p_val; digits=4))")
+    _vol_estimate_output(model, vname, param_names, "ARCH($q)"; format=format, output=output)
     uc = unconditional_variance(model)
     println("Unconditional variance: $(round(uc; digits=4))")
 end
 
 function _estimate_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
                           output::String="", format::String="table")
-    y, vname = _extract_series(data, column)
-
+    y, vname = load_univariate_series(data, column)
     println("Estimating GARCH($p,$q): variable=$vname, observations=$(length(y))")
     println()
-
     model = estimate_garch(y, p, q)
-
-    c = coef(model)
     param_names = ["mu"; "omega"; ["alpha$i" for i in 1:q]; ["beta$i" for i in 1:p]]
-    coef_df = DataFrame(parameter=param_names[1:length(c)], estimate=round.(c; digits=6))
-    output_result(coef_df; format=Symbol(format), output=output, title="GARCH($p,$q) Coefficients ($vname)")
-
-    println()
-    p_val = persistence(model)
-    println("Persistence: $(round(p_val; digits=4))")
+    _vol_estimate_output(model, vname, param_names, "GARCH($p,$q)"; format=format, output=output)
     hl = halflife(model)
     println("Half-life: $(round(hl; digits=2)) periods")
     uc = unconditional_variance(model)
@@ -872,68 +787,41 @@ end
 
 function _estimate_egarch(; data::String, column::Int=1, p::Int=1, q::Int=1,
                            output::String="", format::String="table")
-    y, vname = _extract_series(data, column)
-
+    y, vname = load_univariate_series(data, column)
     println("Estimating EGARCH($p,$q): variable=$vname, observations=$(length(y))")
     println()
-
     model = estimate_egarch(y, p, q)
-
-    c = coef(model)
     param_names = ["mu"; "omega"; ["alpha$i" for i in 1:q]; ["gamma$i" for i in 1:q]; ["beta$i" for i in 1:p]]
-    coef_df = DataFrame(parameter=param_names[1:length(c)], estimate=round.(c; digits=6))
-    output_result(coef_df; format=Symbol(format), output=output, title="EGARCH($p,$q) Coefficients ($vname)")
-
-    println()
-    p_val = persistence(model)
-    println("Persistence: $(round(p_val; digits=4))")
+    _vol_estimate_output(model, vname, param_names, "EGARCH($p,$q)"; format=format, output=output)
 end
 
 function _estimate_gjr_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
                               output::String="", format::String="table")
-    y, vname = _extract_series(data, column)
-
+    y, vname = load_univariate_series(data, column)
     println("Estimating GJR-GARCH($p,$q): variable=$vname, observations=$(length(y))")
     println()
-
     model = estimate_gjr_garch(y, p, q)
-
-    c = coef(model)
     param_names = ["mu"; "omega"; ["alpha$i" for i in 1:q]; ["gamma$i" for i in 1:q]; ["beta$i" for i in 1:p]]
-    coef_df = DataFrame(parameter=param_names[1:length(c)], estimate=round.(c; digits=6))
-    output_result(coef_df; format=Symbol(format), output=output, title="GJR-GARCH($p,$q) Coefficients ($vname)")
-
-    println()
-    p_val = persistence(model)
-    println("Persistence: $(round(p_val; digits=4))")
+    _vol_estimate_output(model, vname, param_names, "GJR-GARCH($p,$q)"; format=format, output=output)
     hl = halflife(model)
     println("Half-life: $(round(hl; digits=2)) periods")
 end
 
 function _estimate_sv(; data::String, column::Int=1, draws::Int=5000,
                        output::String="", format::String="table")
-    y, vname = _extract_series(data, column)
-
+    y, vname = load_univariate_series(data, column)
     println("Estimating Stochastic Volatility: variable=$vname, observations=$(length(y)), draws=$draws")
     println()
-
     model = estimate_sv(y; n_samples=draws)
-
-    c = coef(model)
     param_names = ["mu", "phi", "sigma_eta"]
-    coef_df = DataFrame(parameter=param_names[1:length(c)], estimate=round.(c; digits=6))
-    output_result(coef_df; format=Symbol(format), output=output, title="SV Coefficients ($vname)")
-
-    println()
-    p_val = persistence(model)
-    println("Persistence (phi): $(round(p_val; digits=4))")
+    _vol_estimate_output(model, vname, param_names, "SV"; format=format, output=output)
 end
 
 # ── Non-Gaussian ICA ──────────────────────────────────────
 
 function _estimate_fastica(; data::String, lags=nothing, method::String="fastica",
                              contrast::String="logcosh", output::String="", format::String="table")
-    model, Y, varnames, p = _ng_estimate_var(data, lags)
+    model, Y, varnames, p = _load_and_estimate_var(data, lags)
     n = length(varnames)
 
     println("Non-Gaussian SVAR: method=$method, contrast=$contrast, VAR($p), $n variables")
@@ -978,7 +866,7 @@ end
 
 function _estimate_ml(; data::String, lags=nothing, distribution::String="student_t",
                         output::String="", format::String="table")
-    model, Y, varnames, p = _ng_estimate_var(data, lags)
+    model, Y, varnames, p = _load_and_estimate_var(data, lags)
     n = length(varnames)
 
     println("Non-Gaussian ML SVAR: distribution=$distribution, VAR($p), $n variables")
@@ -1031,20 +919,3 @@ function _estimate_ml(; data::String, lags=nothing, distribution::String="studen
     end
 end
 
-# ── Non-Gaussian helper ───────────────────────────────────
-
-function _ng_estimate_var(data::String, lags)
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
-    n = size(Y, 2)
-
-    p = if isnothing(lags)
-        select_lag_order(Y, min(12, size(Y, 1) ÷ (3 * n)); criterion=:aic)
-    else
-        lags
-    end
-
-    model = estimate_var(Y, p)
-    return model, Y, varnames, p
-end

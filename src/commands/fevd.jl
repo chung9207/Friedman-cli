@@ -69,21 +69,8 @@ function _fevd_var(; data::String, lags=nothing, horizons::Int=20,
 
     report(fevd_result)
 
-    proportions = fevd_result.proportions  # n_vars x n_shocks x H
-
-    for vi in 1:n
-        fevd_df = DataFrame()
-        fevd_df.horizon = 1:horizons
-        for si in 1:n
-            shock_name = si <= length(varnames) ? varnames[si] : "shock_$si"
-            fevd_df[!, shock_name] = proportions[vi, si, :]
-        end
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-        output_result(fevd_df; format=Symbol(format),
-                      output=isempty(output) ? "" : replace(output, "." => "_$(vname)."),
-                      title="FEVD for $vname ($id identification)")
-        println()
-    end
+    _output_fevd_tables(fevd_result.proportions, varnames, horizons;
+                        id=id, title_prefix="FEVD", format=format, output=output)
 
     storage_save_auto!("fevd", Dict{String,Any}("type" => "var", "id" => id,
         "horizons" => horizons, "n_vars" => n),
@@ -107,21 +94,8 @@ function _fevd_bvar(; data::String, lags::Int=4, horizons::Int=20,
 
     report(bfevd)
 
-    mean_props = bfevd.mean
-
-    for vi in 1:n
-        fevd_df = DataFrame()
-        fevd_df.horizon = 1:horizons
-        for si in 1:n
-            shock_name = si <= length(varnames) ? varnames[si] : "shock_$si"
-            fevd_df[!, shock_name] = mean_props[vi, si, :]
-        end
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-        output_result(fevd_df; format=Symbol(format),
-                      output=isempty(output) ? "" : replace(output, "." => "_$(vname)."),
-                      title="Bayesian FEVD for $vname ($id, posterior mean)")
-        println()
-    end
+    _output_fevd_tables(bfevd.mean, varnames, horizons;
+                        id=id, title_prefix="Bayesian FEVD", format=format, output=output)
 
     storage_save_auto!("fevd", Dict{String,Any}("type" => "bvar", "id" => id,
         "horizons" => horizons, "n_vars" => n),
@@ -142,21 +116,9 @@ function _fevd_lp(; data::String, horizons::Int=20, lags::Int=4, var_lags=nothin
     println()
 
     fevd_result = lp_fevd(slp, horizons)
-    proportions = fevd_result.bias_corrected  # n_vars x n_shocks x H
 
-    for vi in 1:n
-        fevd_df = DataFrame()
-        fevd_df.horizon = 1:horizons
-        for si in 1:n
-            shock_name = si <= length(varnames) ? varnames[si] : "shock_$si"
-            fevd_df[!, shock_name] = proportions[vi, si, :]
-        end
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-        output_result(fevd_df; format=Symbol(format),
-                      output=isempty(output) ? "" : replace(output, "." => "_$(vname)."),
-                      title="LP FEVD for $vname ($id identification)")
-        println()
-    end
+    _output_fevd_tables(fevd_result.bias_corrected, varnames, horizons;
+                        id=id, title_prefix="LP FEVD", format=format, output=output)
 
     storage_save_auto!("fevd", Dict{String,Any}("type" => "lp", "id" => id,
         "horizons" => horizons, "n_vars" => n),

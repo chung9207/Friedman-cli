@@ -170,6 +170,10 @@ using Test
         # Symbol conversion
         @test convert_value(Symbol, "foo", "x") == :foo
         @test convert_value(Symbol, "bar_baz", "x") == :bar_baz
+
+        # Fallback convert_value for arbitrary types (uses tryparse)
+        @test convert_value(Float32, "3.14", "x") isa Float32
+        @test_throws ParseError convert_value(Float32, "notanumber", "x")
     end
 
     @testset "Argument binding" begin
@@ -531,6 +535,38 @@ using Test
         # -V short flag triggers version
         v_output = strip(capture_stdout(() -> dispatch(entry, ["-V"])))
         @test contains(v_output, "0.1.4")
+    end
+
+    @testset "DispatchError on unknown command" begin
+        handler = (; kwargs...) -> nothing
+        leaf = LeafCommand("run", handler; description="Run")
+        node = NodeCommand("top";
+            subcmds=Dict{String,Union{NodeCommand,LeafCommand}}("run" => leaf),
+            description="Top group")
+
+        # Unknown subcommand throws DispatchError
+        @test_throws DispatchError dispatch_node(node, ["nonexistent"]; prog="friedman top")
+
+        # Verify error message includes prog and bad command
+        try
+            dispatch_node(node, ["nonexistent"]; prog="friedman top")
+        catch e
+            @test e isa DispatchError
+            @test contains(e.message, "nonexistent")
+            @test contains(e.message, "friedman top")
+        end
+
+        # ParseError from leaf includes command context
+        cmd_req = LeafCommand("check", handler;
+            args=[Argument("data"; required=true, description="Data")],
+            description="Check")
+        try
+            dispatch_leaf(cmd_req, String[]; prog="friedman check")
+            @test false  # should not reach here
+        catch e
+            @test e isa ParseError
+            @test contains(e.message, "friedman check")
+        end
     end
 
     # ──────────────────────────────────────────────────────────────

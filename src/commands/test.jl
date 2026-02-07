@@ -161,24 +161,14 @@ function register_test_commands!()
     return NodeCommand("test", subcmds, "Statistical tests (unit root, cointegration, diagnostics)")
 end
 
-# ── Helper ───────────────────────────────────────────────
-
-function _extract_series(data::String, column::Int)
-    df = load_data(data)
-    varnames = variable_names(df)
-    column > length(varnames) && error("column $column out of range (data has $(length(varnames)) numeric columns)")
-    y = Vector{Float64}(df[!, varnames[column]])
-    return y, varnames[column]
-end
-
 # ── Unit Root Tests ──────────────────────────────────────
 
 function _test_adf(; data::String, column::Int=1, max_lags=nothing,
                     trend::String="constant", format::String="table", output::String="")
-    y, vname = _extract_series(data, column)
+    y, vname = load_univariate_series(data, column)
 
     lags_arg = isnothing(max_lags) ? :aic : max_lags
-    regression = Symbol(trend == "none" ? :none : trend == "both" ? :both : trend)
+    regression = to_regression_symbol(trend)
 
     println("ADF Test: variable=$vname, observations=$(length(y)), trend=$trend")
     println()
@@ -193,19 +183,16 @@ function _test_adf(; data::String, column::Int=1, max_lags=nothing,
 
     output_kv(pairs; format=format, output=output, title="ADF Test: $vname")
 
-    println()
-    if result.pvalue < 0.05
-        printstyled("-> Reject H0 (unit root) at 5% level -- series appears stationary\n"; color=:green)
-    else
-        printstyled("-> Cannot reject H0 (unit root) at 5% level -- series appears non-stationary\n"; color=:yellow)
-    end
+    interpret_test_result(result.pvalue,
+        "Reject H0 (unit root) at 5% level -- series appears stationary",
+        "Cannot reject H0 (unit root) at 5% level -- series appears non-stationary")
 end
 
 function _test_kpss(; data::String, column::Int=1, trend::String="constant",
                      format::String="table", output::String="")
-    y, vname = _extract_series(data, column)
+    y, vname = load_univariate_series(data, column)
 
-    regression = Symbol(trend)
+    regression = to_regression_symbol(trend)
 
     println("KPSS Test: variable=$vname, observations=$(length(y)), trend=$trend")
     println()
@@ -218,8 +205,10 @@ function _test_kpss(; data::String, column::Int=1, trend::String="constant",
 
     output_kv(pairs; format=format, output=output, title="KPSS Test: $vname")
 
+    # KPSS: reversed interpretation (H0 = stationarity)
+    pval = hasproperty(result, :pvalue) ? result.pvalue : 1.0
     println()
-    if hasproperty(result, :pvalue) && result.pvalue < 0.05
+    if pval < 0.05
         printstyled("-> Reject H0 (stationarity) at 5% -- series appears non-stationary\n"; color=:yellow)
     else
         printstyled("-> Cannot reject H0 (stationarity) -- series appears stationary\n"; color=:green)
@@ -228,8 +217,8 @@ end
 
 function _test_pp(; data::String, column::Int=1, trend::String="constant",
                    format::String="table", output::String="")
-    y, vname = _extract_series(data, column)
-    regression = Symbol(trend == "none" ? :none : trend)
+    y, vname = load_univariate_series(data, column)
+    regression = to_regression_symbol(trend)
 
     println("Phillips-Perron Test: variable=$vname, observations=$(length(y)), trend=$trend")
     println()
@@ -243,18 +232,15 @@ function _test_pp(; data::String, column::Int=1, trend::String="constant",
 
     output_kv(pairs; format=format, output=output, title="Phillips-Perron Test: $vname")
 
-    println()
-    if result.pvalue < 0.05
-        printstyled("-> Reject H0 (unit root) at 5% -- series appears stationary\n"; color=:green)
-    else
-        printstyled("-> Cannot reject H0 (unit root) at 5% -- series appears non-stationary\n"; color=:yellow)
-    end
+    interpret_test_result(result.pvalue,
+        "Reject H0 (unit root) at 5% -- series appears stationary",
+        "Cannot reject H0 (unit root) at 5% -- series appears non-stationary")
 end
 
 function _test_za(; data::String, column::Int=1, trend::String="both",
                    trim::Float64=0.15, format::String="table", output::String="")
-    y, vname = _extract_series(data, column)
-    regression = Symbol(trend)
+    y, vname = load_univariate_series(data, column)
+    regression = to_regression_symbol(trend)
 
     println("Zivot-Andrews Test: variable=$vname, observations=$(length(y)), model=$trend")
     println()
@@ -274,8 +260,8 @@ end
 
 function _test_np(; data::String, column::Int=1, trend::String="constant",
                    format::String="table", output::String="")
-    y, vname = _extract_series(data, column)
-    regression = Symbol(trend)
+    y, vname = load_univariate_series(data, column)
+    regression = to_regression_symbol(trend)
 
     println("Ng-Perron Test: variable=$vname, observations=$(length(y)), trend=$trend")
     println()
@@ -296,10 +282,8 @@ end
 
 function _test_johansen(; data::String, lags::Int=2, trend::String="constant",
                          format::String="table", output::String="")
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
-    det = Symbol(trend == "none" ? :none : trend)
+    Y, varnames = load_multivariate_data(data)
+    det = to_regression_symbol(trend)
 
     println("Johansen Cointegration Test: $(size(Y, 2)) variables, lags=$lags, trend=$trend")
     println()
@@ -340,7 +324,7 @@ end
 
 function _test_normality(; data::String, lags=nothing,
                            output::String="", format::String="table")
-    model, Y, varnames, p = _ng_estimate_var(data, lags)
+    model, Y, varnames, p = _load_and_estimate_var(data, lags)
     n = length(varnames)
 
     println("Normality Test Suite: VAR($p), $n variables")
@@ -381,7 +365,7 @@ end
 function _test_identifiability(; data::String, lags=nothing, test::String="all",
                                   method::String="fastica", contrast::String="logcosh",
                                   output::String="", format::String="table")
-    model, Y, varnames, p = _ng_estimate_var(data, lags)
+    model, Y, varnames, p = _load_and_estimate_var(data, lags)
     n = length(varnames)
 
     println("Identifiability Tests: VAR($p), $n variables")
@@ -482,7 +466,7 @@ end
 function _test_heteroskedasticity(; data::String, lags=nothing, method::String="markov",
                                      config::String="", regimes::Int=2,
                                      output::String="", format::String="table")
-    model, Y, varnames, p = _ng_estimate_var(data, lags)
+    model, Y, varnames, p = _load_and_estimate_var(data, lags)
     n = length(varnames)
     df = load_data(data)
 
@@ -527,7 +511,7 @@ end
 
 function _test_arch_lm(; data::String, column::Int=1, lags::Int=4,
                          format::String="table", output::String="")
-    y, vname = _extract_series(data, column)
+    y, vname = load_univariate_series(data, column)
 
     println("ARCH-LM Test: variable=$vname, observations=$(length(y)), lags=$lags")
     println()
@@ -542,19 +526,16 @@ function _test_arch_lm(; data::String, column::Int=1, lags::Int=4,
 
     output_kv(pairs; format=format, output=output, title="ARCH-LM Test: $vname")
 
-    println()
-    if result.pvalue < 0.05
-        printstyled("-> Reject H0 (no ARCH effects) at 5% -- ARCH effects detected\n"; color=:yellow)
-    else
-        printstyled("-> Cannot reject H0 (no ARCH effects) at 5%\n"; color=:green)
-    end
+    interpret_test_result(result.pvalue,
+        "Reject H0 (no ARCH effects) at 5% -- ARCH effects detected",
+        "Cannot reject H0 (no ARCH effects) at 5%")
 end
 
 # ── Ljung-Box Squared Test ───────────────────────────────
 
 function _test_ljung_box(; data::String, column::Int=1, lags::Int=10,
                            format::String="table", output::String="")
-    y, vname = _extract_series(data, column)
+    y, vname = load_univariate_series(data, column)
 
     println("Ljung-Box Squared Residuals Test: variable=$vname, observations=$(length(y)), lags=$lags")
     println()
@@ -569,20 +550,16 @@ function _test_ljung_box(; data::String, column::Int=1, lags::Int=10,
 
     output_kv(pairs; format=format, output=output, title="Ljung-Box Squared Test: $vname")
 
-    println()
-    if result.pvalue < 0.05
-        printstyled("-> Reject H0 (no serial correlation in squared residuals) at 5%\n"; color=:yellow)
-    else
-        printstyled("-> Cannot reject H0 at 5% -- no significant ARCH effects\n"; color=:green)
-    end
+    interpret_test_result(result.pvalue,
+        "Reject H0 (no serial correlation in squared residuals) at 5%",
+        "Cannot reject H0 at 5% -- no significant ARCH effects")
 end
 
 # ── VAR Lag Selection ────────────────────────────────────
 
 function _test_var_lagselect(; data::String, max_lags::Int=12, criterion::String="aic",
                                format::String="table", output::String="")
-    df = load_data(data)
-    Y = df_to_matrix(df)
+    Y, _ = load_multivariate_data(data)
     n = size(Y, 2)
 
     max_p = min(max_lags, size(Y,1) ÷ (3*n))
@@ -623,9 +600,7 @@ end
 # ── VAR Stability Check ─────────────────────────────────
 
 function _test_var_stability(; data::String, lags=nothing, format::String="table", output::String="")
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
+    Y, varnames = load_multivariate_data(data)
     n = size(Y, 2)
 
     p = if isnothing(lags)

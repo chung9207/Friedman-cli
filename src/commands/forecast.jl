@@ -305,9 +305,7 @@ function _forecast_lp(; data::String, shock::Int=1, horizons::Int=12,
                        ci_method::String="analytical", conf_level::Float64=0.95,
                        n_boot::Int=500, from_tag::String="",
                        output::String="", format::String="table")
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    varnames = variable_names(df)
+    Y, varnames = load_multivariate_data(data)
 
     println("Computing LP forecast: shock=$shock, horizons=$horizons, shock_size=$shock_size, ci=$ci_method")
     println()
@@ -320,13 +318,13 @@ function _forecast_lp(; data::String, shock::Int=1, horizons::Int=12,
     fc = forecast(model, shock_path;
         ci_method=Symbol(ci_method), conf_level=conf_level, n_boot=n_boot)
 
-    shock_name = shock <= length(varnames) ? varnames[shock] : "shock_$shock"
+    shock_name = _shock_name(varnames, shock)
 
     fc_df = DataFrame()
     fc_df.horizon = 1:horizons
     n_resp = size(fc.forecasts, 2)
     for vi in 1:n_resp
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
+        vname = _var_name(varnames, vi)
         fc_df[!, vname] = fc.forecasts[:, vi]
         if ci_method != "none"
             fc_df[!, "$(vname)_lower"] = fc.ci_lower[:, vi]
@@ -350,7 +348,7 @@ function _forecast_arima(; data::String, column::Int=1, p=nothing, d::Int=0, q::
                            confidence::Float64=0.95, method::String="css_mle",
                            from_tag::String="",
                            format::String="table", output::String="")
-    y, vname = _extract_series(data, column)
+    y, vname = load_univariate_series(data, column)
     method_sym = Symbol(method)
     safe_method = method_sym == :css_mle ? :mle : method_sym
 
@@ -400,9 +398,7 @@ function _forecast_static(; data::String, nfactors=nothing, horizons::Int=12,
                             ci_method::String="none", conf_level::Float64=0.95,
                             from_tag::String="",
                             output::String="", format::String="table")
-    df = load_data(data)
-    X = df_to_matrix(df)
-    varnames = variable_names(df)
+    X, varnames = load_multivariate_data(data)
 
     r = if isnothing(nfactors)
         println("Selecting number of factors via Bai-Ng information criteria...")
@@ -454,9 +450,7 @@ function _forecast_dynamic(; data::String, nfactors=nothing, horizons::Int=12,
                              factor_lags::Int=1, method::String="twostep",
                              from_tag::String="",
                              output::String="", format::String="table")
-    df = load_data(data)
-    X = df_to_matrix(df)
-    varnames = variable_names(df)
+    X, varnames = load_multivariate_data(data)
 
     r = if isnothing(nfactors)
         println("Selecting number of factors...")
@@ -499,9 +493,7 @@ end
 function _forecast_gdfm(; data::String, nfactors=nothing, dynamic_rank=nothing,
                           horizons::Int=12, from_tag::String="",
                           output::String="", format::String="table")
-    df = load_data(data)
-    X = df_to_matrix(df)
-    varnames = variable_names(df)
+    X, varnames = load_multivariate_data(data)
 
     q = if isnothing(dynamic_rank)
         println("Selecting dynamic rank...")
@@ -573,22 +565,15 @@ end
 function _forecast_arch(; data::String, column::Int=1, q::Int=1, horizons::Int=12,
                           from_tag::String="",
                           output::String="", format::String="table")
-    y, vname = _extract_series(data, column)
+    y, vname = load_univariate_series(data, column)
+    label = "ARCH($q)"
 
-    println("ARCH($q) Volatility Forecast: variable=$vname, horizons=$horizons")
+    println("$label Volatility Forecast: variable=$vname, horizons=$horizons")
     println()
 
     model = estimate_arch(y, q)
     fc = forecast(model, horizons)
-
-    fc_df = DataFrame(
-        horizon=1:horizons,
-        variance=round.(fc.forecast; digits=6),
-        volatility=round.(sqrt.(fc.forecast); digits=6)
-    )
-
-    output_result(fc_df; format=Symbol(format), output=output,
-                  title="ARCH($q) Volatility Forecast ($vname, h=$horizons)")
+    _vol_forecast_output(fc, vname, label, horizons; format=format, output=output)
 
     storage_save_auto!("forecast", Dict{String,Any}("type" => "arch", "horizons" => horizons),
         Dict{String,Any}("command" => "forecast arch", "data" => data))
@@ -597,22 +582,15 @@ end
 function _forecast_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
                            horizons::Int=12, from_tag::String="",
                            output::String="", format::String="table")
-    y, vname = _extract_series(data, column)
+    y, vname = load_univariate_series(data, column)
+    label = "GARCH($p,$q)"
 
-    println("GARCH($p,$q) Volatility Forecast: variable=$vname, horizons=$horizons")
+    println("$label Volatility Forecast: variable=$vname, horizons=$horizons")
     println()
 
     model = estimate_garch(y, p, q)
     fc = forecast(model, horizons)
-
-    fc_df = DataFrame(
-        horizon=1:horizons,
-        variance=round.(fc.forecast; digits=6),
-        volatility=round.(sqrt.(fc.forecast); digits=6)
-    )
-
-    output_result(fc_df; format=Symbol(format), output=output,
-                  title="GARCH($p,$q) Volatility Forecast ($vname, h=$horizons)")
+    _vol_forecast_output(fc, vname, label, horizons; format=format, output=output)
 
     uc = unconditional_variance(model)
     println()
@@ -625,22 +603,15 @@ end
 function _forecast_egarch(; data::String, column::Int=1, p::Int=1, q::Int=1,
                             horizons::Int=12, from_tag::String="",
                             output::String="", format::String="table")
-    y, vname = _extract_series(data, column)
+    y, vname = load_univariate_series(data, column)
+    label = "EGARCH($p,$q)"
 
-    println("EGARCH($p,$q) Volatility Forecast: variable=$vname, horizons=$horizons")
+    println("$label Volatility Forecast: variable=$vname, horizons=$horizons")
     println()
 
     model = estimate_egarch(y, p, q)
     fc = forecast(model, horizons)
-
-    fc_df = DataFrame(
-        horizon=1:horizons,
-        variance=round.(fc.forecast; digits=6),
-        volatility=round.(sqrt.(fc.forecast); digits=6)
-    )
-
-    output_result(fc_df; format=Symbol(format), output=output,
-                  title="EGARCH($p,$q) Volatility Forecast ($vname, h=$horizons)")
+    _vol_forecast_output(fc, vname, label, horizons; format=format, output=output)
 
     storage_save_auto!("forecast", Dict{String,Any}("type" => "egarch", "horizons" => horizons),
         Dict{String,Any}("command" => "forecast egarch", "data" => data))
@@ -649,22 +620,15 @@ end
 function _forecast_gjr_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
                                horizons::Int=12, from_tag::String="",
                                output::String="", format::String="table")
-    y, vname = _extract_series(data, column)
+    y, vname = load_univariate_series(data, column)
+    label = "GJR-GARCH($p,$q)"
 
-    println("GJR-GARCH($p,$q) Volatility Forecast: variable=$vname, horizons=$horizons")
+    println("$label Volatility Forecast: variable=$vname, horizons=$horizons")
     println()
 
     model = estimate_gjr_garch(y, p, q)
     fc = forecast(model, horizons)
-
-    fc_df = DataFrame(
-        horizon=1:horizons,
-        variance=round.(fc.forecast; digits=6),
-        volatility=round.(sqrt.(fc.forecast); digits=6)
-    )
-
-    output_result(fc_df; format=Symbol(format), output=output,
-                  title="GJR-GARCH($p,$q) Volatility Forecast ($vname, h=$horizons)")
+    _vol_forecast_output(fc, vname, label, horizons; format=format, output=output)
 
     storage_save_auto!("forecast", Dict{String,Any}("type" => "gjr_garch", "horizons" => horizons),
         Dict{String,Any}("command" => "forecast gjr_garch", "data" => data))
@@ -673,22 +637,14 @@ end
 function _forecast_sv(; data::String, column::Int=1, draws::Int=5000,
                         horizons::Int=12, from_tag::String="",
                         output::String="", format::String="table")
-    y, vname = _extract_series(data, column)
+    y, vname = load_univariate_series(data, column)
 
     println("Stochastic Volatility Forecast: variable=$vname, horizons=$horizons, draws=$draws")
     println()
 
     model = estimate_sv(y; n_samples=draws)
     fc = forecast(model, horizons)
-
-    fc_df = DataFrame(
-        horizon=1:horizons,
-        variance=round.(fc.forecast; digits=6),
-        volatility=round.(sqrt.(fc.forecast); digits=6)
-    )
-
-    output_result(fc_df; format=Symbol(format), output=output,
-                  title="SV Volatility Forecast ($vname, h=$horizons)")
+    _vol_forecast_output(fc, vname, "SV", horizons; format=format, output=output)
 
     storage_save_auto!("forecast", Dict{String,Any}("type" => "sv", "horizons" => horizons),
         Dict{String,Any}("command" => "forecast sv", "data" => data))

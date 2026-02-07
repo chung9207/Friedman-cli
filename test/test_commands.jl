@@ -412,20 +412,88 @@ end
         @test quantile_normal(0.025) < 0
     end
 
-    @testset "_extract_series — valid column" begin
+    @testset "load_univariate_series — valid column" begin
         mktempdir() do dir
             csv = _make_csv(dir; T=50, n=3)
-            y, vname = _extract_series(csv, 1)
+            y, vname = load_univariate_series(csv, 1)
             @test length(y) == 50
             @test vname isa String
         end
     end
 
-    @testset "_extract_series — out of range" begin
+    @testset "load_univariate_series — out of range" begin
         mktempdir() do dir
             csv = _make_csv(dir; T=50, n=3)
-            @test_throws ErrorException _extract_series(csv, 10)
+            @test_throws ErrorException load_univariate_series(csv, 10)
         end
+    end
+
+    @testset "load_multivariate_data" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=50, n=3)
+            Y, varnames = load_multivariate_data(csv)
+            @test size(Y) == (50, 3)
+            @test length(varnames) == 3
+        end
+    end
+
+    @testset "_shock_name / _var_name" begin
+        varnames = ["gdp", "inf", "rate"]
+        @test _shock_name(varnames, 1) == "gdp"
+        @test _shock_name(varnames, 3) == "rate"
+        @test _shock_name(varnames, 5) == "shock_5"
+        @test _var_name(varnames, 2) == "inf"
+        @test _var_name(varnames, 10) == "var_10"
+    end
+
+    @testset "_per_var_output_path" begin
+        @test _per_var_output_path("", "gdp") == ""
+        @test _per_var_output_path("results.csv", "gdp") == "results_gdp.csv"
+        @test _per_var_output_path("out.json", "inf") == "out_inf.json"
+    end
+
+    @testset "validate_method" begin
+        @test validate_method("cholesky", ["cholesky", "sign"], "id") == "cholesky"
+        @test_throws ErrorException validate_method("unknown", ["cholesky", "sign"], "id")
+    end
+
+    @testset "interpret_test_result" begin
+        # Significant result
+        out = _capture() do
+            interpret_test_result(0.01, "Reject H0", "Fail to reject H0")
+        end
+        @test contains(out, "Reject H0")
+
+        # Non-significant result
+        out = _capture() do
+            interpret_test_result(0.10, "Reject H0", "Fail to reject H0")
+        end
+        @test contains(out, "Fail to reject H0")
+    end
+
+    @testset "to_regression_symbol" begin
+        @test to_regression_symbol("constant") == :constant
+        @test to_regression_symbol("none") == :none
+        @test to_regression_symbol("both") == :both
+        @test to_regression_symbol("trend") == :trend
+    end
+
+    @testset "_build_var_coef_table" begin
+        coef_mat = [0.5 0.1; 0.2 0.3; 0.01 0.02]
+        varnames = ["y1", "y2"]
+        df = _build_var_coef_table(coef_mat, varnames, 1)
+        @test size(df, 1) == 2
+        @test "equation" in names(df)
+        @test "y1_L1" in names(df)
+        @test "const" in names(df)
+    end
+
+    @testset "_vol_forecast_output" begin
+        fc = (forecast = [1.0, 2.0, 3.0],)
+        out = _capture() do
+            _vol_forecast_output(fc, "ret", "GARCH(1,1)", 3; format="table", output="")
+        end
+        @test contains(out, "GARCH(1,1)")
     end
 
 end  # Shared utilities
