@@ -365,11 +365,11 @@ using Test
         @test contains(help_text, "friedman var")
 
         # Entry help includes version number
-        entry = Entry("friedman", node; version=v"0.1.4")
+        entry = Entry("friedman", node; version=v"0.2.0")
         buf = IOBuffer()
         print_help(buf, entry)
         help_text = String(take!(buf))
-        @test contains(help_text, "0.1.4")
+        @test contains(help_text, "0.2.0")
 
         # Leaf with optional argument shows [arg] not <arg>
         leaf_opt_arg = LeafCommand("test", handler;
@@ -484,9 +484,9 @@ using Test
         @test called_with[][:data] == "test.csv"
 
         # dispatch() with ["--version"] prints version
-        entry = Entry("friedman", outer_node; version=v"0.1.4")
+        entry = Entry("friedman", outer_node; version=v"0.2.0")
         version_output = strip(capture_stdout(() -> dispatch(entry, ["--version"])))
-        @test contains(version_output, "0.1.4")
+        @test contains(version_output, "0.2.0")
 
         # dispatch() with [] shows help (no error)
         help_output = capture_stdout(() -> dispatch(entry, String[]))
@@ -534,7 +534,7 @@ using Test
 
         # -V short flag triggers version
         v_output = strip(capture_stdout(() -> dispatch(entry, ["-V"])))
-        @test contains(v_output, "0.1.4")
+        @test contains(v_output, "0.2.0")
     end
 
     @testset "DispatchError on unknown command" begin
@@ -1286,7 +1286,7 @@ using Test
                 "rename" => LeafCommand("rename", handler; description="Rename"),
                 "project" => NodeCommand("project", Dict{String,Union{NodeCommand,LeafCommand}}(), "Project")),
             "Friedman CLI")
-        entry = Entry("friedman", root; version=v"0.1.4")
+        entry = Entry("friedman", root; version=v"0.2.0")
 
         # Top level HAS irf, fevd, hd (action-first)
         @test haskey(root.subcmds, "irf")
