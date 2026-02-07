@@ -201,12 +201,12 @@ end
 
 Pre-dispatch hook: if args[2] looks like a stored tag (e.g., "var001"),
 rewrite args to pass --from-tag option to the appropriate handler.
-Only applies to irf/fevd/hd/forecast commands.
+Only applies to irf/fevd/hd/forecast/predict/residuals commands.
 """
 function resolve_stored_tags(args::Vector{String})
     length(args) < 2 && return args
     cmd = args[1]
-    cmd in ("irf", "fevd", "hd", "forecast") || return args
+    cmd in ("irf", "fevd", "hd", "forecast", "predict", "residuals") || return args
 
     potential_tag = args[2]
     # Check if it looks like a tag pattern (letters + digits)

@@ -1651,6 +1651,206 @@ using Test
         @test called_with[][:column] == 2
     end
 
+    @testset "Predict command structure (action-first)" begin
+        handler = (; kwargs...) -> kwargs
+
+        pred_var = LeafCommand("var", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=nothing, description="Lags"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="VAR predict")
+
+        pred_bvar = LeafCommand("bvar", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=4, description="Lags"),
+                Option("draws"; short="n", type=Int, default=2000, description="Draws"),
+                Option("sampler"; type=String, default="nuts", description="Sampler"),
+                Option("config"; type=String, default="", description="Config"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="BVAR predict")
+
+        pred_arima = LeafCommand("arima", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("column"; short="c", type=Int, default=1, description="Column"),
+                Option("p"; type=Int, default=nothing, description="AR order"),
+                Option("d"; type=Int, default=0, description="Differencing"),
+                Option("q"; type=Int, default=0, description="MA order"),
+                Option("method"; short="m", type=String, default="css_mle", description="Method"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            flags=[Flag("auto"; short="a", description="Auto ARIMA")],
+            description="ARIMA predict")
+
+        pred_vecm = LeafCommand("vecm", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=2, description="Lags"),
+                Option("rank"; short="r", type=String, default="auto", description="Rank"),
+                Option("deterministic"; type=String, default="constant", description="Deterministic"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="VECM predict")
+
+        predict_node = NodeCommand("predict",
+            Dict{String,Union{NodeCommand,LeafCommand}}(
+                "var" => pred_var, "bvar" => pred_bvar, "arima" => pred_arima, "vecm" => pred_vecm),
+            "In-sample predictions")
+
+        # Structure tests
+        @test predict_node.name == "predict"
+        @test length(predict_node.subcmds) == 4
+        for key in ["var", "bvar", "arima", "vecm"]
+            @test haskey(predict_node.subcmds, key)
+            @test predict_node.subcmds[key] isa LeafCommand
+        end
+
+        # Option counts
+        @test length(predict_node.subcmds["var"].options) == 4
+        @test length(predict_node.subcmds["bvar"].options) == 7
+        @test length(predict_node.subcmds["arima"].options) == 8
+        @test length(predict_node.subcmds["vecm"].options) == 6
+
+        # Help text
+        buf = IOBuffer()
+        print_help(buf, predict_node; prog="friedman predict")
+        help_text = String(take!(buf))
+        @test contains(help_text, "var")
+        @test contains(help_text, "bvar")
+        @test contains(help_text, "arima")
+        @test contains(help_text, "vecm")
+
+        # Arg binding: predict var
+        parsed = tokenize(["data.csv", "--lags=3"])
+        bound = bind_args(parsed, pred_var)
+        @test bound.data == "data.csv"
+        @test bound.lags == 3
+        @test bound.from_tag == ""
+
+        # Dispatch: friedman predict var test.csv --lags=2
+        called_with = Ref{Any}(nothing)
+        dispatch_handler = (; kwargs...) -> begin called_with[] = Dict(kwargs) end
+
+        pred_var_d = LeafCommand("var", dispatch_handler;
+            args=[Argument("data"; description="Data file")],
+            options=[Option("lags"; short="p", type=Int, default=nothing, description="Lags")],
+            description="predict")
+        pred_dispatch = NodeCommand("predict",
+            Dict{String,Union{NodeCommand,LeafCommand}}("var" => pred_var_d),
+            "Predict")
+        dispatch_node(pred_dispatch, ["var", "test.csv", "--lags=2"]; prog="friedman predict")
+        @test called_with[][:data] == "test.csv"
+        @test called_with[][:lags] == 2
+    end
+
+    @testset "Residuals command structure (action-first)" begin
+        handler = (; kwargs...) -> kwargs
+
+        res_var = LeafCommand("var", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=nothing, description="Lags"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="VAR residuals")
+
+        res_bvar = LeafCommand("bvar", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=4, description="Lags"),
+                Option("draws"; short="n", type=Int, default=2000, description="Draws"),
+                Option("sampler"; type=String, default="nuts", description="Sampler"),
+                Option("config"; type=String, default="", description="Config"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="BVAR residuals")
+
+        res_arima = LeafCommand("arima", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("column"; short="c", type=Int, default=1, description="Column"),
+                Option("p"; type=Int, default=nothing, description="AR order"),
+                Option("d"; type=Int, default=0, description="Differencing"),
+                Option("q"; type=Int, default=0, description="MA order"),
+                Option("method"; short="m", type=String, default="css_mle", description="Method"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            flags=[Flag("auto"; short="a", description="Auto ARIMA")],
+            description="ARIMA residuals")
+
+        res_vecm = LeafCommand("vecm", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=2, description="Lags"),
+                Option("rank"; short="r", type=String, default="auto", description="Rank"),
+                Option("deterministic"; type=String, default="constant", description="Deterministic"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="VECM residuals")
+
+        residuals_node = NodeCommand("residuals",
+            Dict{String,Union{NodeCommand,LeafCommand}}(
+                "var" => res_var, "bvar" => res_bvar, "arima" => res_arima, "vecm" => res_vecm),
+            "Model residuals")
+
+        # Structure tests
+        @test residuals_node.name == "residuals"
+        @test length(residuals_node.subcmds) == 4
+        for key in ["var", "bvar", "arima", "vecm"]
+            @test haskey(residuals_node.subcmds, key)
+            @test residuals_node.subcmds[key] isa LeafCommand
+        end
+
+        # Option counts
+        @test length(residuals_node.subcmds["var"].options) == 4
+        @test length(residuals_node.subcmds["bvar"].options) == 7
+        @test length(residuals_node.subcmds["arima"].options) == 8
+        @test length(residuals_node.subcmds["vecm"].options) == 6
+
+        # Help text
+        buf = IOBuffer()
+        print_help(buf, residuals_node; prog="friedman residuals")
+        help_text = String(take!(buf))
+        @test contains(help_text, "var")
+        @test contains(help_text, "bvar")
+        @test contains(help_text, "arima")
+        @test contains(help_text, "vecm")
+
+        # Dispatch: friedman residuals var test.csv
+        called_with = Ref{Any}(nothing)
+        dispatch_handler = (; kwargs...) -> begin called_with[] = Dict(kwargs) end
+
+        res_var_d = LeafCommand("var", dispatch_handler;
+            args=[Argument("data"; description="Data file")],
+            options=[Option("lags"; short="p", type=Int, default=nothing, description="Lags")],
+            description="residuals")
+        res_dispatch = NodeCommand("residuals",
+            Dict{String,Union{NodeCommand,LeafCommand}}("var" => res_var_d),
+            "Residuals")
+        dispatch_node(res_dispatch, ["var", "test.csv"]; prog="friedman residuals")
+        @test called_with[][:data] == "test.csv"
+    end
+
     @testset "List, rename, project structure (action-first)" begin
         handler = (; kwargs...) -> kwargs
 
@@ -1820,11 +2020,11 @@ using Test
         @test isnothing(match(tag_pattern, "my-model"))  # hyphen
 
         # Test resolve logic conceptually (without storage)
-        # resolve_stored_tags only applies to irf/fevd/hd/forecast commands
+        # resolve_stored_tags only applies to irf/fevd/hd/forecast/predict/residuals commands
         function _test_should_resolve(args::Vector{String})
             length(args) < 2 && return false
             cmd = args[1]
-            cmd in ("irf", "fevd", "hd", "forecast") || return false
+            cmd in ("irf", "fevd", "hd", "forecast", "predict", "residuals") || return false
             m = match(tag_pattern, args[2])
             return !isnothing(m)
         end
@@ -1833,6 +2033,8 @@ using Test
         @test _test_should_resolve(["forecast", "bvar003"])
         @test _test_should_resolve(["fevd", "lp012"])
         @test _test_should_resolve(["hd", "var100"])
+        @test _test_should_resolve(["predict", "var001"])
+        @test _test_should_resolve(["residuals", "bvar002"])
         @test !_test_should_resolve(["irf", "var", "data.csv"])
         @test !_test_should_resolve(["estimate", "var001"])  # estimate not in resolve set
         @test !_test_should_resolve(["irf"])  # too few args

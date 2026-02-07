@@ -29,6 +29,8 @@ include("commands/irf.jl")
 include("commands/fevd.jl")
 include("commands/hd.jl")
 include("commands/forecast.jl")
+include("commands/predict.jl")
+include("commands/residuals.jl")
 include("commands/list.jl")
 include("commands/rename.jl")
 include("commands/project.jl")
@@ -47,8 +49,10 @@ function build_app()
         "irf"      => register_irf_commands!(),
         "fevd"     => register_fevd_commands!(),
         "hd"       => register_hd_commands!(),
-        "forecast" => register_forecast_commands!(),
-        "list"     => register_list_commands!(),
+        "forecast"  => register_forecast_commands!(),
+        "predict"   => register_predict_commands!(),
+        "residuals" => register_residuals_commands!(),
+        "list"      => register_list_commands!(),
         "rename"   => register_rename_commands!(),
         "project"  => register_project_commands!(),
     )
@@ -69,7 +73,7 @@ function main(args::Vector{String}=ARGS)
     # Initialize global settings on first run
     init_settings!()
 
-    # Pre-dispatch: resolve stored tags for irf/fevd/hd/forecast
+    # Pre-dispatch: resolve stored tags for irf/fevd/hd/forecast/predict/residuals
     args = resolve_stored_tags(args)
 
     # Handle bare "project" with no subcommand → default to "show"
