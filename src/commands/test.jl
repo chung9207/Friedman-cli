@@ -144,6 +144,19 @@ function register_test_commands!()
         ),
         "VAR model diagnostic tests")
 
+    test_granger = LeafCommand("granger", _test_granger;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("cause"; type=Int, default=1, description="Cause variable index (1-based)"),
+            Option("effect"; type=Int, default=2, description="Effect variable index (1-based)"),
+            Option("lags"; short="p", type=Int, default=2, description="Lag order (in levels)"),
+            Option("rank"; short="r", type=String, default="auto", description="Cointegration rank (auto|1|2|...)"),
+            Option("deterministic"; type=String, default="constant", description="none|constant|trend"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="VECM Granger causality test (short-run, long-run, strong)")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "adf"                => test_adf,
         "kpss"               => test_kpss,
@@ -157,6 +170,7 @@ function register_test_commands!()
         "arch_lm"            => test_arch_lm,
         "ljung_box"          => test_ljung_box,
         "var"                => var_node,
+        "granger"            => test_granger,
     )
     return NodeCommand("test", subcmds, "Statistical tests (unit root, cointegration, diagnostics)")
 end
@@ -633,4 +647,38 @@ function _test_var_stability(; data::String, lags=nothing, format::String="table
         printstyled("VAR($p) is NOT stable (eigenvalue(s) outside unit circle)\n"; color=:red, bold=true)
     end
     println("  Max modulus: $(round(maximum(moduli); digits=6))")
+end
+
+# ── VECM Granger Causality Test ────────────────────────
+
+function _test_granger(; data::String, cause::Int=1, effect::Int=2,
+                         lags::Int=2, rank::String="auto",
+                         deterministic::String="constant",
+                         format::String="table", output::String="")
+    vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
+    n = size(Y, 2)
+    r = cointegrating_rank(vecm)
+
+    cause_name = _var_name(varnames, cause)
+    effect_name = _var_name(varnames, effect)
+
+    println("VECM Granger Causality Test: $cause_name → $effect_name")
+    println("VECM($(p-1)), rank=$r, $n variables")
+    println()
+
+    result = granger_causality_vecm(vecm, cause, effect)
+
+    test_df = DataFrame(
+        test=["Short-run", "Long-run", "Strong (joint)"],
+        statistic=round.([result.short_run_stat, result.long_run_stat, result.strong_stat]; digits=4),
+        df=[result.short_run_df, result.long_run_df, result.strong_df],
+        p_value=round.([result.short_run_pvalue, result.long_run_pvalue, result.strong_pvalue]; digits=4)
+    )
+
+    output_result(test_df; format=Symbol(format), output=output,
+                  title="Granger Causality: $cause_name → $effect_name")
+
+    interpret_test_result(result.strong_pvalue,
+        "Reject H0: $cause_name Granger-causes $effect_name (joint short+long-run)",
+        "Cannot reject H0: no Granger causality from $cause_name to $effect_name")
 end

@@ -409,6 +409,28 @@ function _load_and_structural_lp(data::String, horizons::Int, lags::Int,
 end
 
 """
+    _load_and_estimate_vecm(data, lags, rank, deterministic, method, significance)
+        -> (vecm, Y, varnames, p)
+
+Load data from CSV and estimate a VECM. When rank=="auto", uses select_vecm_rank().
+"""
+function _load_and_estimate_vecm(data::String, lags::Int, rank::String,
+                                  deterministic::String, method::String,
+                                  significance::Float64)
+    Y, varnames = load_multivariate_data(data)
+
+    r = if rank == "auto"
+        select_vecm_rank(Y, lags; significance=significance)
+    else
+        parse(Int, rank)
+    end
+
+    vecm = estimate_vecm(Y, lags; rank=r, deterministic=Symbol(deterministic),
+                         method=Symbol(method), significance=significance)
+    return vecm, Y, varnames, lags
+end
+
+"""
     _var_forecast_point(B, Y, p, horizons) -> Matrix{Float64}
 
 Iterate the VAR(p) equation h steps ahead to produce point forecasts.

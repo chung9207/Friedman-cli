@@ -754,6 +754,19 @@ using Test
             ],
             description="ML non-Gaussian SVAR")
 
+        est_vecm = LeafCommand("vecm", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=2, description="Lag order"),
+                Option("rank"; short="r", type=String, default="auto", description="Cointegration rank"),
+                Option("deterministic"; type=String, default="constant", description="Deterministic"),
+                Option("method"; type=String, default="johansen", description="Method"),
+                Option("significance"; type=Float64, default=0.05, description="Significance"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="Estimate VECM")
+
         estimate_node = NodeCommand("estimate",
             Dict{String,Union{NodeCommand,LeafCommand}}(
                 "var" => est_var, "bvar" => est_bvar, "lp" => est_lp,
@@ -761,16 +774,16 @@ using Test
                 "static" => est_static, "dynamic" => est_dynamic, "gdfm" => est_gdfm,
                 "arch" => est_arch, "garch" => est_garch, "egarch" => est_egarch,
                 "gjr_garch" => est_gjr_garch, "sv" => est_sv,
-                "fastica" => est_fastica, "ml" => est_ml),
+                "fastica" => est_fastica, "ml" => est_ml, "vecm" => est_vecm),
             "Estimate econometric models")
 
         # Structure tests
         @test estimate_node.name == "estimate"
-        @test length(estimate_node.subcmds) == 15
+        @test length(estimate_node.subcmds) == 16
 
-        # All 15 are LeafCommands
+        # All 16 are LeafCommands
         for key in ["var", "bvar", "lp", "arima", "gmm", "static", "dynamic", "gdfm",
-                     "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml"]
+                     "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml", "vecm"]
             @test haskey(estimate_node.subcmds, key)
             @test estimate_node.subcmds[key] isa LeafCommand
         end
@@ -993,6 +1006,19 @@ using Test
                 "lagselect" => var_lagselect, "stability" => var_stability),
             "VAR diagnostic tests")
 
+        test_granger = LeafCommand("granger", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("cause"; type=Int, default=1, description="Cause variable index"),
+                Option("effect"; type=Int, default=2, description="Effect variable index"),
+                Option("lags"; short="p", type=Int, default=2, description="Lags"),
+                Option("rank"; short="r", type=String, default="auto", description="Cointegrating rank"),
+                Option("deterministic"; type=String, default="constant", description="Deterministic"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+            ],
+            description="VECM Granger causality test")
+
         test_node = NodeCommand("test",
             Dict{String,Union{NodeCommand,LeafCommand}}(
                 "adf" => test_adf, "kpss" => test_kpss, "pp" => test_pp,
@@ -1000,12 +1026,12 @@ using Test
                 "normality" => test_normality, "identifiability" => test_identifiability,
                 "heteroskedasticity" => test_heteroskedasticity,
                 "arch_lm" => test_arch_lm, "ljung_box" => test_ljung_box,
-                "var" => var_node),
+                "var" => var_node, "granger" => test_granger),
             "Statistical tests")
 
         # Structure tests
         @test test_node.name == "test"
-        @test length(test_node.subcmds) == 12  # 11 leaves + 1 var NodeCommand
+        @test length(test_node.subcmds) == 13  # 11 leaves + 1 var NodeCommand + 1 granger
 
         # var subcmd is a NodeCommand with 2 children
         @test test_node.subcmds["var"] isa NodeCommand
@@ -1016,7 +1042,7 @@ using Test
         # All other subcmds are LeafCommands
         for key in ["adf", "kpss", "pp", "za", "np", "johansen",
                      "normality", "identifiability", "heteroskedasticity",
-                     "arch_lm", "ljung_box"]
+                     "arch_lm", "ljung_box", "granger"]
             @test test_node.subcmds[key] isa LeafCommand
         end
 
@@ -1131,9 +1157,27 @@ using Test
             ],
             description="LP IRFs")
 
+        irf_vecm = LeafCommand("vecm", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=2, description="Lags"),
+                Option("rank"; short="r", type=String, default="auto", description="Cointegrating rank"),
+                Option("deterministic"; type=String, default="constant", description="Deterministic"),
+                Option("shock"; type=Int, default=1, description="Shock"),
+                Option("horizons"; short="h", type=Int, default=20, description="Horizon"),
+                Option("id"; type=String, default="cholesky", description="Identification"),
+                Option("ci"; type=String, default="bootstrap", description="CI type"),
+                Option("replications"; type=Int, default=1000, description="Replications"),
+                Option("config"; type=String, default="", description="Config"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="VECM IRFs")
+
         irf_node = NodeCommand("irf",
             Dict{String,Union{NodeCommand,LeafCommand}}(
-                "var" => irf_var, "bvar" => irf_bvar, "lp" => irf_lp),
+                "var" => irf_var, "bvar" => irf_bvar, "lp" => irf_lp, "vecm" => irf_vecm),
             "Impulse Response Functions")
 
         # -- FEVD node --
@@ -1253,10 +1297,11 @@ using Test
 
         # IRF node structure
         @test irf_node.name == "irf"
-        @test length(irf_node.subcmds) == 3
+        @test length(irf_node.subcmds) == 4
         @test haskey(irf_node.subcmds, "var")
         @test haskey(irf_node.subcmds, "bvar")
         @test haskey(irf_node.subcmds, "lp")
+        @test haskey(irf_node.subcmds, "vecm")
         @test irf_node.subcmds["var"] isa LeafCommand
         @test irf_node.subcmds["bvar"] isa LeafCommand
         @test irf_node.subcmds["lp"] isa LeafCommand
@@ -1502,22 +1547,38 @@ using Test
             ],
             description="SV forecast")
 
+        fc_vecm = LeafCommand("vecm", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=2, description="Lags"),
+                Option("rank"; short="r", type=String, default="auto", description="Cointegrating rank"),
+                Option("deterministic"; type=String, default="constant", description="Deterministic"),
+                Option("horizons"; short="h", type=Int, default=12, description="Horizon"),
+                Option("ci-method"; type=String, default="none", description="CI method"),
+                Option("replications"; type=Int, default=500, description="Replications"),
+                Option("confidence"; type=Float64, default=0.95, description="Confidence"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="VECM forecast")
+
         forecast_node = NodeCommand("forecast",
             Dict{String,Union{NodeCommand,LeafCommand}}(
                 "var" => fc_var, "bvar" => fc_bvar, "lp" => fc_lp,
                 "arima" => fc_arima, "static" => fc_static,
                 "dynamic" => fc_dynamic, "gdfm" => fc_gdfm,
                 "arch" => fc_arch, "garch" => fc_garch, "egarch" => fc_egarch,
-                "gjr_garch" => fc_gjr_garch, "sv" => fc_sv),
+                "gjr_garch" => fc_gjr_garch, "sv" => fc_sv, "vecm" => fc_vecm),
             "Forecasting")
 
         # Structure tests
         @test forecast_node.name == "forecast"
-        @test length(forecast_node.subcmds) == 12
+        @test length(forecast_node.subcmds) == 13
 
         # All are LeafCommands
         for key in ["var", "bvar", "lp", "arima", "static", "dynamic", "gdfm",
-                     "arch", "garch", "egarch", "gjr_garch", "sv"]
+                     "arch", "garch", "egarch", "gjr_garch", "sv", "vecm"]
             @test haskey(forecast_node.subcmds, key)
             @test forecast_node.subcmds[key] isa LeafCommand
         end

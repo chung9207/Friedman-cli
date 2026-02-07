@@ -53,10 +53,29 @@ function register_irf_commands!()
         ],
         description="Compute structural LP impulse response functions")
 
+    irf_vecm = LeafCommand("vecm", _irf_vecm;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("lags"; short="p", type=Int, default=2, description="Lag order (in levels)"),
+            Option("rank"; short="r", type=String, default="auto", description="Cointegration rank (auto|1|2|...)"),
+            Option("deterministic"; type=String, default="constant", description="none|constant|trend"),
+            Option("shock"; type=Int, default=1, description="Shock variable index (1-based)"),
+            Option("horizons"; short="h", type=Int, default=20, description="IRF horizon"),
+            Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun"),
+            Option("ci"; type=String, default="bootstrap", description="none|bootstrap|theoretical"),
+            Option("replications"; type=Int, default=1000, description="Bootstrap replications"),
+            Option("config"; type=String, default="", description="TOML config for identification"),
+            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        description="Compute impulse response functions via VECM → VAR representation")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "var"  => irf_var,
         "bvar" => irf_bvar,
         "lp"   => irf_lp,
+        "vecm" => irf_vecm,
     )
     return NodeCommand("irf", subcmds, "Impulse Response Functions")
 end
@@ -260,4 +279,53 @@ function _irf_lp(; data::String, shock::Int=1, shocks::String="",
     storage_save_auto!("irf", Dict{String,Any}("type" => "lp", "id" => id,
         "shocks" => shock_indices, "horizons" => horizons, "n_vars" => n),
         Dict{String,Any}("command" => "irf lp", "data" => data))
+end
+
+# ── VECM IRF ────────────────────────────────────────────
+
+function _irf_vecm(; data::String, lags::Int=2, rank::String="auto",
+                    deterministic::String="constant",
+                    shock::Int=1, horizons::Int=20,
+                    id::String="cholesky", ci::String="bootstrap", replications::Int=1000,
+                    config::String="", from_tag::String="",
+                    output::String="", format::String="table")
+    vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
+    var_model = to_var(vecm)
+    n = size(Y, 2)
+    r = cointegrating_rank(vecm)
+
+    println("Computing VECM IRFs: rank=$r, VAR($p), shock=$shock, horizons=$horizons, id=$id, ci=$ci")
+    println()
+
+    kwargs = _build_identification_kwargs(id, config)
+    kwargs[:ci_type] = Symbol(ci)
+    kwargs[:reps] = replications
+
+    irf_result = irf(var_model, horizons; kwargs...)
+
+    report(irf_result)
+
+    irf_vals = irf_result.values
+    n_h = size(irf_vals, 1)
+
+    irf_df = DataFrame()
+    irf_df.horizon = 0:(n_h-1)
+    for (vi, vname) in enumerate(varnames)
+        irf_df[!, vname] = irf_vals[:, vi, shock]
+    end
+
+    if ci != "none" && !isnothing(irf_result.ci_lower)
+        for (vi, vname) in enumerate(varnames)
+            irf_df[!, "$(vname)_lower"] = irf_result.ci_lower[:, vi, shock]
+            irf_df[!, "$(vname)_upper"] = irf_result.ci_upper[:, vi, shock]
+        end
+    end
+
+    shock_name = _shock_name(varnames, shock)
+    output_result(irf_df; format=Symbol(format), output=output,
+                  title="VECM IRF to $shock_name shock ($id identification)")
+
+    storage_save_auto!("irf", Dict{String,Any}("type" => "vecm", "id" => id, "shock" => shock,
+        "horizons" => horizons, "n_vars" => n, "rank" => r),
+        Dict{String,Any}("command" => "irf vecm", "data" => data))
 end

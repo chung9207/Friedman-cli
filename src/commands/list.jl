@@ -59,7 +59,7 @@ end
 
 function _list_models(; type::String="", format::String="table", output::String="")
     model_types = ["var", "bvar", "lp", "arima", "gmm", "static", "dynamic", "gdfm",
-                   "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml"]
+                   "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml", "vecm"]
     _list_entries(model_types, "No stored models found.", "Stored Models";
                   type=type, format=format, output=output)
 end

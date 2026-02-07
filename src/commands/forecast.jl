@@ -166,6 +166,22 @@ function register_forecast_commands!()
         ],
         description="Forecast volatility using Stochastic Volatility model")
 
+    fc_vecm = LeafCommand("vecm", _forecast_vecm;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("lags"; short="p", type=Int, default=2, description="Lag order (in levels)"),
+            Option("rank"; short="r", type=String, default="auto", description="Cointegration rank (auto|1|2|...)"),
+            Option("deterministic"; type=String, default="constant", description="none|constant|trend"),
+            Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
+            Option("ci-method"; type=String, default="none", description="none|bootstrap|parametric"),
+            Option("replications"; type=Int, default=500, description="Bootstrap replications"),
+            Option("confidence"; type=Float64, default=0.95, description="Confidence level for intervals"),
+            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        description="Compute native VECM forecasts (preserves cointegrating relationships)")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "var"       => fc_var,
         "bvar"      => fc_bvar,
@@ -179,6 +195,7 @@ function register_forecast_commands!()
         "egarch"    => fc_egarch,
         "gjr_garch" => fc_gjr_garch,
         "sv"        => fc_sv,
+        "vecm"      => fc_vecm,
     )
     return NodeCommand("forecast", subcmds, "Forecasting")
 end
@@ -648,4 +665,42 @@ function _forecast_sv(; data::String, column::Int=1, draws::Int=5000,
 
     storage_save_auto!("forecast", Dict{String,Any}("type" => "sv", "horizons" => horizons),
         Dict{String,Any}("command" => "forecast sv", "data" => data))
+end
+
+# ── VECM Forecast ───────────────────────────────────────
+
+function _forecast_vecm(; data::String, lags::Int=2, rank::String="auto",
+                          deterministic::String="constant", horizons::Int=12,
+                          ci_method::String="none", replications::Int=500,
+                          confidence::Float64=0.95, from_tag::String="",
+                          output::String="", format::String="table")
+    vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
+    n = size(Y, 2)
+    r = cointegrating_rank(vecm)
+
+    println("Computing VECM forecast: rank=$r, horizons=$horizons, CI=$ci_method")
+    println()
+
+    fc = forecast(vecm, horizons; ci_method=Symbol(ci_method), reps=replications, conf_level=confidence)
+
+    fc_df = DataFrame()
+    fc_df.horizon = 1:horizons
+    for (vi, vname) in enumerate(varnames)
+        fc_df[!, vname] = fc.levels[:, vi]
+    end
+
+    if ci_method != "none" && !isnothing(fc.ci_lower)
+        for (vi, vname) in enumerate(varnames)
+            fc_df[!, "$(vname)_lower"] = fc.ci_lower[:, vi]
+            fc_df[!, "$(vname)_upper"] = fc.ci_upper[:, vi]
+        end
+    end
+
+    ci_label = ci_method == "none" ? "" : ", $(Int(round(confidence*100)))% CI"
+    output_result(fc_df; format=Symbol(format), output=output,
+                  title="VECM Forecast (rank=$r, h=$horizons$ci_label)")
+
+    storage_save_auto!("forecast", Dict{String,Any}("type" => "vecm", "horizons" => horizons,
+        "rank" => r, "n_vars" => n),
+        Dict{String,Any}("command" => "forecast vecm", "data" => data))
 end

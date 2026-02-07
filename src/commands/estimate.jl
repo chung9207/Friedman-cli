@@ -178,6 +178,19 @@ function register_estimate_commands!()
         ],
         description="Maximum likelihood non-Gaussian SVAR identification")
 
+    est_vecm = LeafCommand("vecm", _estimate_vecm;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("lags"; short="p", type=Int, default=2, description="Lag order (in levels, VECM uses p-1)"),
+            Option("rank"; short="r", type=String, default="auto", description="Cointegration rank (auto|1|2|...)"),
+            Option("deterministic"; type=String, default="constant", description="none|constant|trend"),
+            Option("method"; type=String, default="johansen", description="johansen|engle_granger"),
+            Option("significance"; type=Float64, default=0.05, description="Significance level for rank selection"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        description="Estimate a Vector Error Correction Model (VECM)")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "var"       => est_var,
         "bvar"      => est_bvar,
@@ -194,6 +207,7 @@ function register_estimate_commands!()
         "sv"        => est_sv,
         "fastica"   => est_fastica,
         "ml"        => est_ml,
+        "vecm"      => est_vecm,
     )
     return NodeCommand("estimate", subcmds, "Estimate econometric models")
 end
@@ -917,5 +931,46 @@ function _estimate_ml(; data::String, lags=nothing, distribution::String="studen
         output_result(se_df; format=Symbol(format), output=output,
                       title="Parameter Estimates with Standard Errors")
     end
+end
+
+# ── VECM ─────────────────────────────────────────────────
+
+function _estimate_vecm(; data::String, lags::Int=2, rank::String="auto",
+                          deterministic::String="constant", method::String="johansen",
+                          significance::Float64=0.05,
+                          output::String="", format::String="table")
+    vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, method, significance)
+    n = size(Y, 2)
+    r = cointegrating_rank(vecm)
+
+    println("Estimating VECM($(p-1)) with $n variables: $(join(varnames, ", "))")
+    println("Cointegration rank: $r, Deterministic: $deterministic, Method: $method")
+    println("Observations: $(size(Y, 1))")
+    println()
+
+    report(vecm)
+
+    # Cointegrating vectors (beta)
+    beta_df = DataFrame(vecm.beta, ["CV$i" for i in 1:r])
+    insertcols!(beta_df, 1, :variable => varnames)
+    output_result(beta_df; format=Symbol(format), output=output, title="Cointegrating Vectors (beta)")
+    println()
+
+    # Adjustment coefficients (alpha)
+    alpha_df = DataFrame(vecm.alpha, ["CV$i" for i in 1:r])
+    insertcols!(alpha_df, 1, :equation => varnames)
+    output_result(alpha_df; format=Symbol(format), output=output, title="Adjustment Coefficients (alpha)")
+    println()
+
+    output_kv(Pair{String,Any}[
+        "AIC" => round(vecm.aic; digits=4),
+        "BIC" => round(vecm.bic; digits=4),
+        "HQC" => round(vecm.hqic; digits=4),
+        "Log-likelihood" => round(loglikelihood(vecm); digits=4),
+    ]; format=format, title="Information Criteria")
+
+    storage_save_auto!("vecm", serialize_model(vecm),
+        Dict{String,Any}("command" => "estimate vecm", "data" => data, "lags" => p,
+                          "rank" => r, "method" => method))
 end
 
