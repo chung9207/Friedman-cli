@@ -3,7 +3,9 @@
 [![CI](https://github.com/chung9207/Friedman-cli/actions/workflows/CI.yml/badge.svg)](https://github.com/chung9207/Friedman-cli/actions/workflows/CI.yml)
 [![codecov](https://codecov.io/gh/chung9207/Friedman-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/chung9207/Friedman-cli)
 
-Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl).
+Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl) (v0.1.3+).
+
+8 top-level commands, 37 subcommands. Pipeline-based: post-estimation (IRF, FEVD, HD, forecast) nests under its model type.
 
 ## Installation
 
@@ -12,7 +14,11 @@ Requires Julia 1.10+.
 ```bash
 git clone https://github.com/chung9207/Friedman-cli.git
 cd Friedman-cli
-julia --project -e 'using Pkg; Pkg.instantiate()'
+julia --project -e '
+using Pkg
+Pkg.rm("MacroEconometricModels")
+Pkg.add(url="https://github.com/chung9207/MacroEconometricModels.jl.git")
+'
 ```
 
 ## Usage
@@ -141,7 +147,7 @@ friedman lp irf data.csv --id=cholesky --shock=1 --horizons=20
 friedman lp irf data.csv --id=sign --config=sign_restrictions.toml
 friedman lp irf data.csv --shocks=1,2,3 --id=cholesky --horizons=30
 
-# LP FEVD (via structural LP's VAR model)
+# LP FEVD (bias-corrected, Gorodnichenko & Lee 2019)
 friedman lp fevd data.csv --horizons=20 --id=cholesky
 
 # LP Historical Decomposition
