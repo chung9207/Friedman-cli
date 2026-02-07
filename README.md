@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/chung9207/Friedman-cli/actions/workflows/CI.yml/badge.svg)](https://github.com/chung9207/Friedman-cli/actions/workflows/CI.yml)
 [![codecov](https://codecov.io/gh/chung9207/Friedman-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/chung9207/Friedman-cli)
+[![Documentation](https://github.com/chung9207/Friedman-cli/actions/workflows/Documentation.yml/badge.svg)](https://chung9207.github.io/Friedman-cli/dev/)
 
 Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl) (v0.1.4+).
 
