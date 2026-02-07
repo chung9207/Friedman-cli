@@ -4,3 +4,9 @@ Manifest.toml
 *.jl.*.cov
 *.jl.mem
 CLAUDE.md
+install.sh
+uninstall.sh
+build_sysimage.jl
+precompile_exec.jl
+friedman.so
+bin/friedman-wrapper
