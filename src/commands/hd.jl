@@ -19,7 +19,7 @@ function register_hd_commands!()
             Option("lags"; short="p", type=Int, default=4, description="Lag order"),
             Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun"),
             Option("draws"; short="n", type=Int, default=2000, description="MCMC draws"),
-            Option("sampler"; type=String, default="nuts", description="nuts|hmc|smc"),
+            Option("sampler"; type=String, default="direct", description="direct|gibbs"),
             Option("config"; type=String, default="", description="TOML config for identification/prior"),
             Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
@@ -99,7 +99,7 @@ end
 # ── BVAR HD ──────────────────────────────────────────────
 
 function _hd_bvar(; data::String, lags::Int=4, id::String="cholesky",
-                   draws::Int=2000, sampler::String="nuts",
+                   draws::Int=2000, sampler::String="direct",
                    config::String="", from_tag::String="",
                    output::String="", format::String="table")
     post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
@@ -152,6 +152,7 @@ function _hd_lp(; data::String, lags::Int=4, var_lags=nothing,
     varnames = variable_names(df)
     n = size(Y, 2)
     vp = isnothing(var_lags) ? lags : var_lags
+    lp_horizon = 20
     hd_horizon = size(Y, 1) - vp
 
     method = get(ID_METHOD_MAP, id, :cholesky)
@@ -163,7 +164,7 @@ function _hd_lp(; data::String, lags::Int=4, var_lags=nothing,
     if !isnothing(check_func);      kwargs[:check_func] = check_func; end
     if !isnothing(narrative_check);  kwargs[:narrative_check] = narrative_check; end
 
-    slp = structural_lp(Y, hd_horizon; kwargs...)
+    slp = structural_lp(Y, lp_horizon; kwargs...)
 
     println("Computing LP Historical Decomposition: id=$id")
     println()

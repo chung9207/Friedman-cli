@@ -20,7 +20,7 @@ function register_forecast_commands!()
             Option("lags"; short="p", type=Int, default=4, description="Lag order"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
             Option("draws"; short="n", type=Int, default=2000, description="MCMC draws"),
-            Option("sampler"; type=String, default="nuts", description="nuts|hmc|smc"),
+            Option("sampler"; type=String, default="direct", description="direct|gibbs"),
             Option("config"; type=String, default="", description="TOML config for prior hyperparameters"),
             Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
@@ -250,7 +250,7 @@ end
 # ── BVAR Forecast ────────────────────────────────────────
 
 function _forecast_bvar(; data::String, lags::Int=4, horizons::Int=12,
-                         draws::Int=2000, sampler::String="nuts",
+                         draws::Int=2000, sampler::String="direct",
                          config::String="", from_tag::String="",
                          output::String="", format::String="table")
     post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
@@ -260,11 +260,11 @@ function _forecast_bvar(; data::String, lags::Int=4, horizons::Int=12,
     println()
 
     b_vecs, sigmas = MacroEconometricModels.extract_chain_parameters(post)
-    n_draws = length(b_vecs)
+    n_draws = size(b_vecs, 1)
     all_forecasts = zeros(n_draws, horizons, n)
 
     for d in 1:n_draws
-        model_d = MacroEconometricModels.parameters_to_model(b_vecs[d], sigmas[d], p, n; data=Y)
+        model_d = MacroEconometricModels.parameters_to_model(b_vecs[d, :], sigmas[d, :], p, n, Y)
         B_d = coef(model_d)
         all_forecasts[d, :, :] = _var_forecast_point(B_d, Y, p, horizons)
     end
@@ -474,13 +474,8 @@ function _forecast_dynamic(; data::String, nfactors=nothing, horizons::Int=12,
     fm = estimate_dynamic_factors(X, r, factor_lags; method=Symbol(method))
     fc = forecast(fm, horizons)
 
-    # Reconstruct observables via loadings
-    factor_fc = fc isa NamedTuple ? fc.factors : fc
-    if factor_fc isa AbstractMatrix
-        obs_fc = factor_fc * fm.loadings'
-    else
-        obs_fc = reshape(factor_fc, horizons, r) * fm.loadings'
-    end
+    # Extract observable forecasts from FactorForecast
+    obs_fc = fc.observables
 
     fc_df = DataFrame()
     fc_df.horizon = 1:horizons

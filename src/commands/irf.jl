@@ -25,7 +25,7 @@ function register_irf_commands!()
             Option("horizons"; short="h", type=Int, default=20, description="IRF horizon"),
             Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun"),
             Option("draws"; short="n", type=Int, default=2000, description="MCMC draws"),
-            Option("sampler"; type=String, default="nuts", description="nuts|hmc|smc"),
+            Option("sampler"; type=String, default="direct", description="direct|gibbs"),
             Option("config"; type=String, default="", description="TOML config for identification/prior"),
             Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
@@ -146,7 +146,7 @@ end
 # ── BVAR IRF ─────────────────────────────────────────────
 
 function _irf_bvar(; data::String, lags::Int=4, shock::Int=1, horizons::Int=20,
-                    id::String="cholesky", draws::Int=2000, sampler::String="nuts",
+                    id::String="cholesky", draws::Int=2000, sampler::String="direct",
                     config::String="", from_tag::String="",
                     output::String="", format::String="table")
     post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)

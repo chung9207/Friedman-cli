@@ -262,7 +262,7 @@ end
             cfg = _make_prior_config(dir; optimize=false)
 
             out = _capture() do
-                post, Y, varnames, p, n = _load_and_estimate_bvar(csv, 2, cfg, 500, "nuts")
+                post, Y, varnames, p, n = _load_and_estimate_bvar(csv, 2, cfg, 500, "direct")
                 @test post isa BVARPosterior
                 @test size(Y) == (100, 3)
                 @test n == 3
@@ -506,7 +506,7 @@ end  # Shared utilities
             out = cd(dir) do
                 _capture() do
                     _estimate_bvar(; data=csv, lags=2, prior="minnesota", draws=100,
-                                    sampler="nuts", method="mean", config="", format="table")
+                                    sampler="direct", method="mean", config="", format="table")
                 end
             end
             @test occursin("Bayesian VAR(2)", out) || occursin("BVAR(2)", out)
@@ -520,7 +520,7 @@ end  # Shared utilities
             out = cd(dir) do
                 _capture() do
                     _estimate_bvar(; data=csv, lags=2, prior="minnesota", draws=100,
-                                    sampler="nuts", method="median", config="", format="table")
+                                    sampler="direct", method="median", config="", format="table")
                 end
             end
             @test occursin("Median", out) || occursin("median", out)
@@ -534,7 +534,7 @@ end  # Shared utilities
             out = cd(dir) do
                 _capture() do
                     _estimate_bvar(; data=csv, lags=2, prior="minnesota", draws=100,
-                                    sampler="nuts", method="mean", config=cfg, format="table")
+                                    sampler="direct", method="mean", config=cfg, format="table")
                 end
             end
             @test occursin("BVAR(2)", out)
@@ -1541,7 +1541,7 @@ end  # Test handlers
             out = cd(dir) do
                 _capture() do
                     _irf_bvar(; data=csv, lags=2, shock=1, horizons=10, id="cholesky",
-                               draws=100, sampler="nuts", config="", format="table")
+                               draws=100, sampler="direct", config="", format="table")
                 end
             end
             @test occursin("Bayesian IRF", out)
@@ -1555,7 +1555,7 @@ end  # Test handlers
             out = cd(dir) do
                 _capture() do
                     _irf_bvar(; data=csv, lags=2, shock=2, horizons=10, id="cholesky",
-                               draws=100, sampler="nuts", config="", format="table")
+                               draws=100, sampler="direct", config="", format="table")
                 end
             end
             @test occursin("Bayesian IRF", out)
@@ -1684,7 +1684,7 @@ end  # IRF handlers
             out = cd(dir) do
                 _capture() do
                     _fevd_bvar(; data=csv, lags=2, horizons=10, id="cholesky",
-                                draws=100, sampler="nuts", config="", format="table")
+                                draws=100, sampler="direct", config="", format="table")
                 end
             end
             @test occursin("Bayesian FEVD", out)
@@ -1741,7 +1741,7 @@ end  # FEVD handlers
             out = cd(dir) do
                 _capture() do
                     _hd_bvar(; data=csv, lags=2, id="cholesky", draws=100,
-                              sampler="nuts", config="", format="table")
+                              sampler="direct", config="", format="table")
                 end
             end
             @test occursin("Bayesian Historical Decomposition", out) ||
@@ -1838,7 +1838,7 @@ end  # HD handlers
             out = cd(dir) do
                 _capture() do
                     _forecast_bvar(; data=csv, lags=2, horizons=5, draws=100,
-                                    sampler="nuts", config="", format="table")
+                                    sampler="direct", config="", format="table")
                 end
             end
             @test occursin("Bayesian", out)

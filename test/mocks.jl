@@ -236,7 +236,7 @@ end
 select_lag_order(Y, max_p; criterion=:aic) = min(2, max(1, max_p))
 estimate_var(Y, p; check_stability=true) = _mock_var(Y, p)
 
-estimate_bvar(Y, p; sampler=:nuts, n_samples=1000, n_draws=1000, prior=:normal, hyper=nothing) =
+estimate_bvar(Y, p; sampler=:direct, n_draws=1000, prior=:normal, hyper=nothing) =
     BVARPosterior(zeros(10, size(Y,2)*p+1, size(Y,2)), zeros(10, size(Y,2), size(Y,2)),
                   10, p, size(Y,2), Y)
 posterior_mean_model(post::BVARPosterior; data=nothing) = _mock_var(post.data, post.p)
@@ -390,11 +390,11 @@ end
 function extract_chain_parameters(post::BVARPosterior)
     nd = post.n_draws
     k = post.n * post.p + 1
-    b_vecs = [ones(k * post.n) * 0.1 for _ in 1:nd]
-    sigmas = [ones(post.n * (post.n + 1) ÷ 2) * 0.01 for _ in 1:nd]
+    b_vecs = ones(nd, k * post.n) * 0.1
+    sigmas = ones(nd, post.n^2) * 0.01
     (b_vecs, sigmas)
 end
-function parameters_to_model(b_vec, sigma_vec, p, n; data=nothing)
+function parameters_to_model(b_vec, sigma_vec, p, n, data=nothing)
     Y = isnothing(data) ? ones(100, n) : data
     k = n * p + 1
     B = zeros(k, n)
@@ -525,9 +525,12 @@ function forecast(model::FactorModel, h::Int; ci_method=:none, conf_level=0.95)
         has_ci ? obs .- 0.5 : nothing, has_ci ? obs .+ 0.5 : nothing,
         has_ci ? ones(h, n)*0.1 : nothing, h, conf_level)
 end
-function forecast(model::DynamicFactorModel, h::Int; ci=false)
+function forecast(model::DynamicFactorModel, h::Int; ci=false, ci_method=:none, conf_level=0.95, n_boot=500, ci_level=0.95)
     r = size(model.factors, 2)
-    (factors=ones(h, r) * 0.1,)
+    n = size(model.loadings, 1)
+    factors = ones(h, r) * 0.1
+    obs = factors * model.loadings'
+    FactorForecast(factors, obs, nothing, nothing, nothing, h, conf_level)
 end
 
 # Unit root / cointegration tests
@@ -632,7 +635,7 @@ end
 test_identification_strength(model::VARModel) = (statistic=25.0, pvalue=0.001)
 test_shock_gaussianity(result::ICASVARResult) = (statistic=12.0, pvalue=0.005)
 test_shock_independence(result::ICASVARResult) = (statistic=3.0, pvalue=0.08)
-test_overidentification(result::ICASVARResult) = (statistic=1.5, pvalue=0.45)
+test_overidentification(model::VARModel, result::ICASVARResult; restrictions=nothing, n_bootstrap=100) = (statistic=1.5, pvalue=0.45)
 test_gaussian_vs_nongaussian(model::VARModel) = (statistic=18.0, pvalue=0.001)
 
 # ─── Exports ──────────────────────────────────────────────

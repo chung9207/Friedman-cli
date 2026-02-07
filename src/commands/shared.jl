@@ -62,7 +62,7 @@ function _load_and_estimate_bvar(data::String, lags::Int, config::String,
     prior_sym = isnothing(prior_obj) ? :normal : :minnesota
 
     post = estimate_bvar(Y, p;
-        sampler=Symbol(sampler), n_samples=draws,
+        sampler=Symbol(sampler), n_draws=draws,
         prior=prior_sym, hyper=prior_obj)
 
     return post, Y, varnames, p, n
