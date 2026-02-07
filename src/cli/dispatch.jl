@@ -12,8 +12,8 @@ function dispatch(entry::Entry, args::Vector{String}=ARGS)
         return
     end
 
-    # Handle --help at top level with no subcommand
-    if isempty(args) || "--help" in args || "-h" in args
+    # Handle --help at top level only (not when a subcommand follows)
+    if isempty(args) || args[1] in ("--help", "-h")
         print_help(stdout, entry)
         return
     end
@@ -27,7 +27,7 @@ end
 Walk into a NodeCommand, matching the first token as a subcommand name.
 """
 function dispatch_node(node::NodeCommand, args::Vector{String}; prog::String=node.name)
-    if isempty(args) || "--help" in args || "-h" in args
+    if isempty(args) || args[1] in ("--help", "-h")
         print_help(stdout, node; prog=prog)
         return
     end
