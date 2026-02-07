@@ -84,7 +84,8 @@ function _capture(f)
         close(io)
         return read(path, String)
     finally
-        isfile(path) && rm(path; force=true)
+        try; close(io); catch; end
+        try; rm(path; force=true); catch; end
     end
 end
 
