@@ -2,7 +2,7 @@
 
 function register_irf_commands!()
     irf_var = LeafCommand("var", _irf_var;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=nothing, description="Lag order (default: auto)"),
             Option("shock"; type=Int, default=1, description="Shock variable index (1-based)"),
@@ -18,7 +18,7 @@ function register_irf_commands!()
         description="Compute frequentist impulse response functions")
 
     irf_bvar = LeafCommand("bvar", _irf_bvar;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=4, description="Lag order"),
             Option("shock"; type=Int, default=1, description="Shock variable index (1-based)"),
@@ -34,7 +34,7 @@ function register_irf_commands!()
         description="Compute Bayesian impulse response functions with credible intervals")
 
     irf_lp = LeafCommand("lp", _irf_lp;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("shock"; type=Int, default=1, description="Single shock index (1-based)"),
             Option("shocks"; type=String, default="", description="Comma-separated shock indices (e.g. 1,2,3)"),
@@ -54,7 +54,7 @@ function register_irf_commands!()
         description="Compute structural LP impulse response functions")
 
     irf_vecm = LeafCommand("vecm", _irf_vecm;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=2, description="Lag order (in levels)"),
             Option("rank"; short="r", type=String, default="auto", description="Cointegration rank (auto|1|2|...)"),
@@ -86,6 +86,12 @@ function _irf_var(; data::String, lags=nothing, shock::Int=1, horizons::Int=20,
                    id::String="cholesky", ci::String="bootstrap", replications::Int=1000,
                    config::String="", from_tag::String="",
                    output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     model, Y, varnames, p = _load_and_estimate_var(data, lags)
     n = size(Y, 2)
 
@@ -168,6 +174,12 @@ function _irf_bvar(; data::String, lags::Int=4, shock::Int=1, horizons::Int=20,
                     id::String="cholesky", draws::Int=2000, sampler::String="direct",
                     config::String="", from_tag::String="",
                     output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
     method = get(ID_METHOD_MAP, id, :cholesky)
 
@@ -234,6 +246,12 @@ function _irf_lp(; data::String, shock::Int=1, shocks::String="",
                   vcov::String="newey_west", config::String="",
                   from_tag::String="",
                   output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     # Multi-shock mode
     if !isempty(shocks)
         shock_indices = parse.(Int, split(shocks, ","))
@@ -289,6 +307,12 @@ function _irf_vecm(; data::String, lags::Int=2, rank::String="auto",
                     id::String="cholesky", ci::String="bootstrap", replications::Int=1000,
                     config::String="", from_tag::String="",
                     output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
     var_model = to_var(vecm)
     n = size(Y, 2)

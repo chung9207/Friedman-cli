@@ -2887,8 +2887,9 @@ end  # Settings operations
         node = register_predict_commands!()
         @test node isa NodeCommand
         @test node.name == "predict"
-        @test length(node.subcmds) == 4
-        for cmd in ["var", "bvar", "arima", "vecm"]
+        @test length(node.subcmds) == 12
+        for cmd in ["var", "bvar", "arima", "vecm", "static", "dynamic", "gdfm",
+                     "arch", "garch", "egarch", "gjr_garch", "sv"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -3038,6 +3039,153 @@ end  # Settings operations
         end
     end
 
+    # ── Factor model predict tests ──
+
+    @testset "_predict_static" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = cd(dir) do
+                _capture() do
+                    _predict_static(; data=csv, format="table")
+                end
+            end
+            @test occursin("Static", out) || occursin("factor", out) || occursin("Common Component", out)
+        end
+    end
+
+    @testset "_predict_static — explicit nfactors" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = cd(dir) do
+                _capture() do
+                    _predict_static(; data=csv, nfactors=2, format="table")
+                end
+            end
+            @test occursin("2 factors", out)
+        end
+    end
+
+    @testset "_predict_dynamic" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = cd(dir) do
+                _capture() do
+                    _predict_dynamic(; data=csv, format="table")
+                end
+            end
+            @test occursin("Dynamic", out) || occursin("Common Component", out)
+        end
+    end
+
+    @testset "_predict_dynamic — explicit options" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = cd(dir) do
+                _capture() do
+                    _predict_dynamic(; data=csv, nfactors=2, factor_lags=2, method="twostep", format="table")
+                end
+            end
+            @test occursin("2 factors", out)
+        end
+    end
+
+    @testset "_predict_gdfm" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = cd(dir) do
+                _capture() do
+                    _predict_gdfm(; data=csv, format="table")
+                end
+            end
+            @test occursin("GDFM", out) || occursin("Common Component", out)
+        end
+    end
+
+    @testset "_predict_gdfm — explicit rank" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = cd(dir) do
+                _capture() do
+                    _predict_gdfm(; data=csv, dynamic_rank=2, format="table")
+                end
+            end
+            @test occursin("q=2", out)
+        end
+    end
+
+    @testset "_predict_arch" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _predict_arch(; data=csv, column=1, q=1, format="table")
+                end
+            end
+            @test occursin("ARCH", out)
+            @test occursin("Conditional Variance", out) || occursin("variance", out)
+        end
+    end
+
+    @testset "_predict_garch" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _predict_garch(; data=csv, column=1, p=1, q=1, format="table")
+                end
+            end
+            @test occursin("GARCH", out)
+        end
+    end
+
+    @testset "_predict_egarch" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _predict_egarch(; data=csv, column=1, p=1, q=1, format="table")
+                end
+            end
+            @test occursin("EGARCH", out)
+        end
+    end
+
+    @testset "_predict_gjr_garch" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _predict_gjr_garch(; data=csv, column=1, p=1, q=1, format="table")
+                end
+            end
+            @test occursin("GJR-GARCH", out)
+        end
+    end
+
+    @testset "_predict_sv" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _predict_sv(; data=csv, column=1, draws=100, format="table")
+                end
+            end
+            @test occursin("SV", out)
+        end
+    end
+
+    @testset "_predict_arch — json" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _predict_arch(; data=csv, column=1, q=1, format="json")
+                end
+            end
+            @test !isempty(out)
+        end
+    end
+
 end  # Predict handlers
 
 # ═══════════════════════════════════════════════════════════════
@@ -3050,8 +3198,9 @@ end  # Predict handlers
         node = register_residuals_commands!()
         @test node isa NodeCommand
         @test node.name == "residuals"
-        @test length(node.subcmds) == 4
-        for cmd in ["var", "bvar", "arima", "vecm"]
+        @test length(node.subcmds) == 12
+        for cmd in ["var", "bvar", "arima", "vecm", "static", "dynamic", "gdfm",
+                     "arch", "garch", "egarch", "gjr_garch", "sv"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -3198,6 +3347,153 @@ end  # Predict handlers
                 end
             end
             @test occursin("VECM", out)
+        end
+    end
+
+    # ── Factor model residuals tests ──
+
+    @testset "_residuals_static" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_static(; data=csv, format="table")
+                end
+            end
+            @test occursin("Static", out) || occursin("factor", out) || occursin("Idiosyncratic", out)
+        end
+    end
+
+    @testset "_residuals_static — explicit nfactors" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_static(; data=csv, nfactors=2, format="table")
+                end
+            end
+            @test occursin("2 factors", out)
+        end
+    end
+
+    @testset "_residuals_dynamic" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_dynamic(; data=csv, format="table")
+                end
+            end
+            @test occursin("Dynamic", out) || occursin("Idiosyncratic", out)
+        end
+    end
+
+    @testset "_residuals_dynamic — explicit options" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_dynamic(; data=csv, nfactors=2, factor_lags=2, method="twostep", format="table")
+                end
+            end
+            @test occursin("2 factors", out)
+        end
+    end
+
+    @testset "_residuals_gdfm" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_gdfm(; data=csv, format="table")
+                end
+            end
+            @test occursin("GDFM", out) || occursin("Idiosyncratic", out)
+        end
+    end
+
+    @testset "_residuals_gdfm — explicit rank" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_gdfm(; data=csv, dynamic_rank=2, format="table")
+                end
+            end
+            @test occursin("q=2", out)
+        end
+    end
+
+    @testset "_residuals_arch" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_arch(; data=csv, column=1, q=1, format="table")
+                end
+            end
+            @test occursin("ARCH", out)
+            @test occursin("Standardized Residuals", out) || occursin("residual", out)
+        end
+    end
+
+    @testset "_residuals_garch" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_garch(; data=csv, column=1, p=1, q=1, format="table")
+                end
+            end
+            @test occursin("GARCH", out)
+        end
+    end
+
+    @testset "_residuals_egarch" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_egarch(; data=csv, column=1, p=1, q=1, format="table")
+                end
+            end
+            @test occursin("EGARCH", out)
+        end
+    end
+
+    @testset "_residuals_gjr_garch" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_gjr_garch(; data=csv, column=1, p=1, q=1, format="table")
+                end
+            end
+            @test occursin("GJR-GARCH", out)
+        end
+    end
+
+    @testset "_residuals_sv" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_sv(; data=csv, column=1, draws=100, format="table")
+                end
+            end
+            @test occursin("SV", out)
+        end
+    end
+
+    @testset "_residuals_arch — json" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_arch(; data=csv, column=1, q=1, format="json")
+                end
+            end
+            @test !isempty(out)
         end
     end
 

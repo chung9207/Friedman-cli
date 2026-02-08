@@ -463,3 +463,22 @@ function _var_forecast_point(B::AbstractMatrix, Y::AbstractMatrix, p::Int, horiz
 
     return forecasts
 end
+
+"""
+    _resolve_from_tag(from_tag) → (data_path, stored_params)
+
+Look up a stored tag and return the original data path and stored parameters.
+Errors if the tag doesn't exist or the data file is missing.
+"""
+function _resolve_from_tag(from_tag::String)
+    entry = storage_load(from_tag)
+    isnothing(entry) && error("Tag '$from_tag' not found in storage")
+    meta = get(entry, "meta", Dict{String,Any}())
+    data_path = get(meta, "data", "")
+    isempty(data_path) && error("Stored entry '$from_tag' has no data path — re-run with explicit data file")
+    isfile(data_path) || error("Data file from stored tag not found: $data_path")
+    stored_data = get(entry, "data", Dict{String,Any}())
+    params = merge(meta, isa(stored_data, Dict) ? stored_data : Dict{String,Any}())
+    printstyled("  Loading from tag: $from_tag → $data_path\n"; color=:cyan)
+    return data_path, params
+end

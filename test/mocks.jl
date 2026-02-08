@@ -288,6 +288,18 @@ predict(m::Union{ARModel,MAModel,ARMAModel,ARIMAModel}) = zeros(Float64, 50)
 residuals(m::VARModel) = m.U
 residuals(m::Union{ARModel,MAModel,ARMAModel,ARIMAModel}) = fill(0.01, 50)
 
+# Factor model predict/residuals
+predict(m::FactorModel) = m.factors * m.loadings'  # T × n common component
+predict(m::DynamicFactorModel) = m.factors * m.loadings'  # T × n common component
+predict(m::GeneralizedDynamicFactorModel) = m.common_component  # T × n
+residuals(m::FactorModel) = m.data .- m.factors * m.loadings'  # T × n idiosyncratic
+residuals(m::DynamicFactorModel) = ones(size(m.factors, 1), size(m.loadings, 1)) * 0.01
+residuals(m::GeneralizedDynamicFactorModel) = ones(size(m.common_component)) * 0.01
+
+# Volatility model predict/residuals
+predict(m::Union{ARCHModel,GARCHModel,EGARCHModel,GJRGARCHModel,SVModel}) = fill(0.01, 50)
+residuals(m::Union{ARCHModel,GARCHModel,EGARCHModel,GJRGARCHModel,SVModel}) = fill(0.01, 50)
+
 report(::VARModel) = nothing
 report(::ImpulseResponse) = nothing
 report(::BayesianImpulseResponse) = nothing
@@ -415,18 +427,19 @@ end
 # Chain parameter extraction (BVAR forecast)
 function extract_chain_parameters(chain::MockChains)
     n_draws = 10
-    b_vecs = [ones(9) * 0.1 for _ in 1:n_draws]
-    sigmas = [ones(6) * 0.01 for _ in 1:n_draws]
+    b_vecs = ones(n_draws, 9) * 0.1
+    sigmas = ones(n_draws, 6) * 0.01
     (b_vecs, sigmas)
 end
 function extract_chain_parameters(post::BVARPosterior)
     nd = post.n_draws
     k = post.n * post.p + 1
     b_vecs = ones(nd, k * post.n) * 0.1
-    sigmas = ones(nd, post.n^2) * 0.01
+    sigmas = ones(nd, post.n * (post.n + 1) ÷ 2) * 0.01
     (b_vecs, sigmas)
 end
-function parameters_to_model(b_vec, sigma_vec, p, n, data=nothing)
+parameters_to_model(b_vec, sigma_vec, p, n, data) = parameters_to_model(b_vec, sigma_vec, p, n; data=data)
+function parameters_to_model(b_vec, sigma_vec, p, n; data=nothing)
     Y = isnothing(data) ? ones(100, n) : data
     k = n * p + 1
     B = zeros(k, n)
@@ -667,7 +680,8 @@ end
 test_identification_strength(model::VARModel) = (statistic=25.0, pvalue=0.001)
 test_shock_gaussianity(result::ICASVARResult) = (statistic=12.0, pvalue=0.005)
 test_shock_independence(result::ICASVARResult) = (statistic=3.0, pvalue=0.08)
-test_overidentification(model::VARModel, result::ICASVARResult; restrictions=nothing, n_bootstrap=100) = (statistic=1.5, pvalue=0.45)
+test_overidentification(model::VARModel, result::ICASVARResult) = (statistic=1.5, pvalue=0.45)
+test_overidentification(result::ICASVARResult) = (statistic=1.5, pvalue=0.45)
 test_gaussian_vs_nongaussian(model::VARModel) = (statistic=18.0, pvalue=0.001)
 
 # ─── VECM Functions ──────────────────────────────────────

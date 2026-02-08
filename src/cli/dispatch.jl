@@ -34,7 +34,7 @@ end
 Walk into a NodeCommand, matching the first token as a subcommand name.
 """
 function dispatch_node(node::NodeCommand, args::Vector{String}; prog::String=node.name)
-    if isempty(args) || _wants_help(args)
+    if isempty(args)
         print_help(stdout, node; prog=prog)
         return
     end
@@ -42,18 +42,25 @@ function dispatch_node(node::NodeCommand, args::Vector{String}; prog::String=nod
     subcmd_name = args[1]
     rest = args[2:end]
 
-    if !haskey(node.subcmds, subcmd_name)
-        throw(DispatchError("$prog: unknown command '$subcmd_name'"))
+    # If first arg is a known subcommand, recurse into it (carries --help through)
+    if haskey(node.subcmds, subcmd_name)
+        subcmd = node.subcmds[subcmd_name]
+        subprog = prog * " " * subcmd_name
+        if subcmd isa NodeCommand
+            dispatch_node(subcmd, rest; prog=subprog)
+        else
+            dispatch_leaf(subcmd, rest; prog=subprog)
+        end
+        return
     end
 
-    subcmd = node.subcmds[subcmd_name]
-    subprog = prog * " " * subcmd_name
-
-    if subcmd isa NodeCommand
-        dispatch_node(subcmd, rest; prog=subprog)
-    else
-        dispatch_leaf(subcmd, rest; prog=subprog)
+    # First arg isn't a subcommand — show help if requested, otherwise error
+    if _wants_help(args)
+        print_help(stdout, node; prog=prog)
+        return
     end
+
+    throw(DispatchError("$prog: unknown command '$subcmd_name'"))
 end
 
 """

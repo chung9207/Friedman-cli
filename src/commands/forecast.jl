@@ -3,7 +3,7 @@
 
 function register_forecast_commands!()
     fc_var = LeafCommand("var", _forecast_var;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=nothing, description="Lag order (default: auto)"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
@@ -15,7 +15,7 @@ function register_forecast_commands!()
         description="Compute h-step ahead VAR forecasts")
 
     fc_bvar = LeafCommand("bvar", _forecast_bvar;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=4, description="Lag order"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
@@ -29,7 +29,7 @@ function register_forecast_commands!()
         description="Compute Bayesian h-step ahead forecasts with credible intervals")
 
     fc_lp = LeafCommand("lp", _forecast_lp;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("shock"; type=Int, default=1, description="Shock variable index (1-based)"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
@@ -46,7 +46,7 @@ function register_forecast_commands!()
         description="Compute direct LP forecasts")
 
     fc_arima = LeafCommand("arima", _forecast_arima;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("column"; short="c", type=Int, default=1, description="Column index (1-based)"),
             Option("p"; type=Int, default=nothing, description="AR order (default: auto selection)"),
@@ -66,7 +66,7 @@ function register_forecast_commands!()
         description="ARIMA forecast (auto-selects order when --p omitted)")
 
     fc_static = LeafCommand("static", _forecast_static;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("nfactors"; short="r", type=Int, default=nothing, description="Number of factors (default: auto via IC)"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
@@ -79,7 +79,7 @@ function register_forecast_commands!()
         description="Forecast observables using static factor model")
 
     fc_dynamic = LeafCommand("dynamic", _forecast_dynamic;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("nfactors"; short="r", type=Int, default=nothing, description="Number of factors (default: auto)"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
@@ -92,7 +92,7 @@ function register_forecast_commands!()
         description="Forecast observables using dynamic factor model")
 
     fc_gdfm = LeafCommand("gdfm", _forecast_gdfm;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("nfactors"; short="r", type=Int, default=nothing, description="Number of static factors (default: auto)"),
             Option("dynamic-rank"; short="q", type=Int, default=nothing, description="Dynamic rank (default: auto)"),
@@ -104,7 +104,7 @@ function register_forecast_commands!()
         description="Forecast observables using GDFM")
 
     fc_arch = LeafCommand("arch", _forecast_arch;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("column"; short="c", type=Int, default=1, description="Column index (1-based)"),
             Option("q"; type=Int, default=1, description="ARCH order"),
@@ -116,7 +116,7 @@ function register_forecast_commands!()
         description="Forecast volatility using ARCH model")
 
     fc_garch = LeafCommand("garch", _forecast_garch;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("column"; short="c", type=Int, default=1, description="Column index (1-based)"),
             Option("p"; type=Int, default=1, description="GARCH order"),
@@ -129,7 +129,7 @@ function register_forecast_commands!()
         description="Forecast volatility using GARCH model")
 
     fc_egarch = LeafCommand("egarch", _forecast_egarch;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("column"; short="c", type=Int, default=1, description="Column index (1-based)"),
             Option("p"; type=Int, default=1, description="EGARCH order"),
@@ -142,7 +142,7 @@ function register_forecast_commands!()
         description="Forecast volatility using EGARCH model")
 
     fc_gjr_garch = LeafCommand("gjr_garch", _forecast_gjr_garch;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("column"; short="c", type=Int, default=1, description="Column index (1-based)"),
             Option("p"; type=Int, default=1, description="GARCH order"),
@@ -155,7 +155,7 @@ function register_forecast_commands!()
         description="Forecast volatility using GJR-GARCH model")
 
     fc_sv = LeafCommand("sv", _forecast_sv;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("column"; short="c", type=Int, default=1, description="Column index (1-based)"),
             Option("draws"; short="n", type=Int, default=5000, description="MCMC draws"),
@@ -167,7 +167,7 @@ function register_forecast_commands!()
         description="Forecast volatility using Stochastic Volatility model")
 
     fc_vecm = LeafCommand("vecm", _forecast_vecm;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=2, description="Lag order (in levels)"),
             Option("rank"; short="r", type=String, default="auto", description="Cointegration rank (auto|1|2|...)"),
@@ -205,6 +205,12 @@ end
 function _forecast_var(; data::String, lags=nothing, horizons::Int=12,
                         confidence::Float64=0.95, from_tag::String="",
                         output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     model, Y, varnames, p = _load_and_estimate_var(data, lags)
     n = size(Y, 2)
 
@@ -270,6 +276,12 @@ function _forecast_bvar(; data::String, lags::Int=4, horizons::Int=12,
                          draws::Int=2000, sampler::String="direct",
                          config::String="", from_tag::String="",
                          output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
 
     println("Computing Bayesian forecast: BVAR($p), horizons=$horizons")
@@ -322,6 +334,12 @@ function _forecast_lp(; data::String, shock::Int=1, horizons::Int=12,
                        ci_method::String="analytical", conf_level::Float64=0.95,
                        n_boot::Int=500, from_tag::String="",
                        output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     Y, varnames = load_multivariate_data(data)
 
     println("Computing LP forecast: shock=$shock, horizons=$horizons, shock_size=$shock_size, ci=$ci_method")
@@ -365,6 +383,12 @@ function _forecast_arima(; data::String, column::Int=1, p=nothing, d::Int=0, q::
                            confidence::Float64=0.95, method::String="css_mle",
                            from_tag::String="",
                            format::String="table", output::String="")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     y, vname = load_univariate_series(data, column)
     method_sym = Symbol(method)
     safe_method = method_sym == :css_mle ? :mle : method_sym
@@ -415,6 +439,12 @@ function _forecast_static(; data::String, nfactors=nothing, horizons::Int=12,
                             ci_method::String="none", conf_level::Float64=0.95,
                             from_tag::String="",
                             output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     X, varnames = load_multivariate_data(data)
 
     r = if isnothing(nfactors)
@@ -467,6 +497,12 @@ function _forecast_dynamic(; data::String, nfactors=nothing, horizons::Int=12,
                              factor_lags::Int=1, method::String="twostep",
                              from_tag::String="",
                              output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     X, varnames = load_multivariate_data(data)
 
     r = if isnothing(nfactors)
@@ -485,8 +521,20 @@ function _forecast_dynamic(; data::String, nfactors=nothing, horizons::Int=12,
     fm = estimate_dynamic_factors(X, r, factor_lags; method=Symbol(method))
     fc = forecast(fm, horizons)
 
-    # Extract observable forecasts from FactorForecast
-    obs_fc = fc.observables
+    # Reconstruct observables via loadings
+    # fc may be a FactorForecast object, NamedTuple, or raw matrix
+    factor_fc = if hasproperty(fc, :factors)
+        fc.factors
+    elseif fc isa NamedTuple && haskey(fc, :factors)
+        fc.factors
+    else
+        fc
+    end
+    if factor_fc isa AbstractMatrix
+        obs_fc = factor_fc * fm.loadings'
+    else
+        obs_fc = reshape(collect(factor_fc), horizons, r) * fm.loadings'
+    end
 
     fc_df = DataFrame()
     fc_df.horizon = 1:horizons
@@ -505,6 +553,12 @@ end
 function _forecast_gdfm(; data::String, nfactors=nothing, dynamic_rank=nothing,
                           horizons::Int=12, from_tag::String="",
                           output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     X, varnames = load_multivariate_data(data)
 
     q = if isnothing(dynamic_rank)
@@ -577,6 +631,12 @@ end
 function _forecast_arch(; data::String, column::Int=1, q::Int=1, horizons::Int=12,
                           from_tag::String="",
                           output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     y, vname = load_univariate_series(data, column)
     label = "ARCH($q)"
 
@@ -594,6 +654,12 @@ end
 function _forecast_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
                            horizons::Int=12, from_tag::String="",
                            output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     y, vname = load_univariate_series(data, column)
     label = "GARCH($p,$q)"
 
@@ -615,6 +681,12 @@ end
 function _forecast_egarch(; data::String, column::Int=1, p::Int=1, q::Int=1,
                             horizons::Int=12, from_tag::String="",
                             output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     y, vname = load_univariate_series(data, column)
     label = "EGARCH($p,$q)"
 
@@ -632,6 +704,12 @@ end
 function _forecast_gjr_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
                                horizons::Int=12, from_tag::String="",
                                output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     y, vname = load_univariate_series(data, column)
     label = "GJR-GARCH($p,$q)"
 
@@ -649,6 +727,12 @@ end
 function _forecast_sv(; data::String, column::Int=1, draws::Int=5000,
                         horizons::Int=12, from_tag::String="",
                         output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     y, vname = load_univariate_series(data, column)
 
     println("Stochastic Volatility Forecast: variable=$vname, horizons=$horizons, draws=$draws")
@@ -669,6 +753,12 @@ function _forecast_vecm(; data::String, lags::Int=2, rank::String="auto",
                           ci_method::String="none", replications::Int=500,
                           confidence::Float64=0.95, from_tag::String="",
                           output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
     n = size(Y, 2)
     r = cointegrating_rank(vecm)

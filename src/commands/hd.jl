@@ -2,7 +2,7 @@
 
 function register_hd_commands!()
     hd_var = LeafCommand("var", _hd_var;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=nothing, description="Lag order (default: auto)"),
             Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun"),
@@ -14,7 +14,7 @@ function register_hd_commands!()
         description="Compute historical decomposition of shocks")
 
     hd_bvar = LeafCommand("bvar", _hd_bvar;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=4, description="Lag order"),
             Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun"),
@@ -28,7 +28,7 @@ function register_hd_commands!()
         description="Compute Bayesian historical decomposition")
 
     hd_lp = LeafCommand("lp", _hd_lp;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=4, description="LP control lags"),
             Option("var-lags"; type=Int, default=nothing, description="VAR lag order for identification"),
@@ -42,7 +42,7 @@ function register_hd_commands!()
         description="Compute historical decomposition via structural LP")
 
     hd_vecm = LeafCommand("vecm", _hd_vecm;
-        args=[Argument("data"; description="Path to CSV data file")],
+        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=2, description="Lag order (in levels)"),
             Option("rank"; short="r", type=String, default="auto", description="Cointegration rank (auto|1|2|...)"),
@@ -69,6 +69,12 @@ end
 function _hd_var(; data::String, lags=nothing, id::String="cholesky",
                   config::String="", from_tag::String="",
                   output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     model, Y, varnames, p = _load_and_estimate_var(data, lags)
     n = size(Y, 2)
 
@@ -103,6 +109,12 @@ function _hd_bvar(; data::String, lags::Int=4, id::String="cholesky",
                    draws::Int=2000, sampler::String="direct",
                    config::String="", from_tag::String="",
                    output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
     method = get(ID_METHOD_MAP, id, :cholesky)
 
@@ -135,11 +147,19 @@ function _hd_lp(; data::String, lags::Int=4, var_lags=nothing,
                  id::String="cholesky", vcov::String="newey_west", config::String="",
                  from_tag::String="",
                  output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     Y, varnames = load_multivariate_data(data)
-    n = size(Y, 2)
+    T_obs, n = size(Y)
     vp = isnothing(var_lags) ? lags : var_lags
-    lp_horizon = 20
-    hd_horizon = size(Y, 1) - vp
+    hd_horizon = T_obs - vp
+    # structural_lp needs enough observations: cap LP horizon to avoid assertion error
+    lp_horizon = min(hd_horizon, T_obs ÷ 2 - lags - 1)
+    lp_horizon < 1 && error("Not enough observations for LP historical decomposition (T=$T_obs, lags=$lags)")
 
     method = get(ID_METHOD_MAP, id, :cholesky)
     check_func, narrative_check = _build_check_func(config)
@@ -181,6 +201,12 @@ function _hd_vecm(; data::String, lags::Int=2, rank::String="auto",
                    id::String="cholesky", config::String="",
                    from_tag::String="",
                    output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data, _ = _resolve_from_tag(from_tag)
+    end
     vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
     var_model = to_var(vecm)
     n = size(Y, 2)
