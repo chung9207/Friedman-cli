@@ -1704,15 +1704,110 @@ using Test
             ],
             description="VECM predict")
 
+        pred_static = LeafCommand("static", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("nfactors"; short="r", type=Int, default=nothing, description="Factors"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="Static factor predict")
+
+        pred_dynamic = LeafCommand("dynamic", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("nfactors"; short="r", type=Int, default=nothing, description="Factors"),
+                Option("factor-lags"; short="p", type=Int, default=1, description="Factor lags"),
+                Option("method"; type=String, default="twostep", description="Method"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="Dynamic factor predict")
+
+        pred_gdfm = LeafCommand("gdfm", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("nfactors"; short="r", type=Int, default=nothing, description="Factors"),
+                Option("dynamic-rank"; short="q", type=Int, default=nothing, description="Dynamic rank"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="GDFM predict")
+
+        pred_arch = LeafCommand("arch", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("column"; short="c", type=Int, default=1, description="Column"),
+                Option("q"; type=Int, default=1, description="ARCH order"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="ARCH predict")
+
+        pred_garch = LeafCommand("garch", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("column"; short="c", type=Int, default=1, description="Column"),
+                Option("p"; type=Int, default=1, description="GARCH order"),
+                Option("q"; type=Int, default=1, description="ARCH order"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="GARCH predict")
+
+        pred_egarch = LeafCommand("egarch", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("column"; short="c", type=Int, default=1, description="Column"),
+                Option("p"; type=Int, default=1, description="EGARCH order"),
+                Option("q"; type=Int, default=1, description="ARCH order"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="EGARCH predict")
+
+        pred_gjr_garch = LeafCommand("gjr_garch", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("column"; short="c", type=Int, default=1, description="Column"),
+                Option("p"; type=Int, default=1, description="GJR-GARCH order"),
+                Option("q"; type=Int, default=1, description="ARCH order"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="GJR-GARCH predict")
+
+        pred_sv = LeafCommand("sv", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("column"; short="c", type=Int, default=1, description="Column"),
+                Option("draws"; short="n", type=Int, default=5000, description="Draws"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="SV predict")
+
         predict_node = NodeCommand("predict",
             Dict{String,Union{NodeCommand,LeafCommand}}(
-                "var" => pred_var, "bvar" => pred_bvar, "arima" => pred_arima, "vecm" => pred_vecm),
+                "var" => pred_var, "bvar" => pred_bvar, "arima" => pred_arima, "vecm" => pred_vecm,
+                "static" => pred_static, "dynamic" => pred_dynamic, "gdfm" => pred_gdfm,
+                "arch" => pred_arch, "garch" => pred_garch, "egarch" => pred_egarch,
+                "gjr_garch" => pred_gjr_garch, "sv" => pred_sv),
             "In-sample predictions")
 
         # Structure tests
         @test predict_node.name == "predict"
-        @test length(predict_node.subcmds) == 4
-        for key in ["var", "bvar", "arima", "vecm"]
+        @test length(predict_node.subcmds) == 12
+        for key in ["var", "bvar", "arima", "vecm", "static", "dynamic", "gdfm",
+                     "arch", "garch", "egarch", "gjr_garch", "sv"]
             @test haskey(predict_node.subcmds, key)
             @test predict_node.subcmds[key] isa LeafCommand
         end
@@ -1722,15 +1817,23 @@ using Test
         @test length(predict_node.subcmds["bvar"].options) == 7
         @test length(predict_node.subcmds["arima"].options) == 8
         @test length(predict_node.subcmds["vecm"].options) == 6
+        @test length(predict_node.subcmds["static"].options) == 4
+        @test length(predict_node.subcmds["dynamic"].options) == 6
+        @test length(predict_node.subcmds["gdfm"].options) == 5
+        @test length(predict_node.subcmds["arch"].options) == 5
+        @test length(predict_node.subcmds["garch"].options) == 6
+        @test length(predict_node.subcmds["egarch"].options) == 6
+        @test length(predict_node.subcmds["gjr_garch"].options) == 6
+        @test length(predict_node.subcmds["sv"].options) == 5
 
         # Help text
         buf = IOBuffer()
         print_help(buf, predict_node; prog="friedman predict")
         help_text = String(take!(buf))
-        @test contains(help_text, "var")
-        @test contains(help_text, "bvar")
-        @test contains(help_text, "arima")
-        @test contains(help_text, "vecm")
+        for key in ["var", "bvar", "arima", "vecm", "static", "dynamic", "gdfm",
+                     "arch", "garch", "egarch", "gjr_garch", "sv"]
+            @test contains(help_text, key)
+        end
 
         # Arg binding: predict var
         parsed = tokenize(["data.csv", "--lags=3"])
@@ -1808,15 +1911,110 @@ using Test
             ],
             description="VECM residuals")
 
+        res_static = LeafCommand("static", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("nfactors"; short="r", type=Int, default=nothing, description="Factors"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="Static factor residuals")
+
+        res_dynamic = LeafCommand("dynamic", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("nfactors"; short="r", type=Int, default=nothing, description="Factors"),
+                Option("factor-lags"; short="p", type=Int, default=1, description="Factor lags"),
+                Option("method"; type=String, default="twostep", description="Method"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="Dynamic factor residuals")
+
+        res_gdfm = LeafCommand("gdfm", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("nfactors"; short="r", type=Int, default=nothing, description="Factors"),
+                Option("dynamic-rank"; short="q", type=Int, default=nothing, description="Dynamic rank"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="GDFM residuals")
+
+        res_arch = LeafCommand("arch", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("column"; short="c", type=Int, default=1, description="Column"),
+                Option("q"; type=Int, default=1, description="ARCH order"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="ARCH residuals")
+
+        res_garch = LeafCommand("garch", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("column"; short="c", type=Int, default=1, description="Column"),
+                Option("p"; type=Int, default=1, description="GARCH order"),
+                Option("q"; type=Int, default=1, description="ARCH order"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="GARCH residuals")
+
+        res_egarch = LeafCommand("egarch", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("column"; short="c", type=Int, default=1, description="Column"),
+                Option("p"; type=Int, default=1, description="EGARCH order"),
+                Option("q"; type=Int, default=1, description="ARCH order"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="EGARCH residuals")
+
+        res_gjr_garch = LeafCommand("gjr_garch", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("column"; short="c", type=Int, default=1, description="Column"),
+                Option("p"; type=Int, default=1, description="GJR-GARCH order"),
+                Option("q"; type=Int, default=1, description="ARCH order"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="GJR-GARCH residuals")
+
+        res_sv = LeafCommand("sv", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("column"; short="c", type=Int, default=1, description="Column"),
+                Option("draws"; short="n", type=Int, default=5000, description="Draws"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="SV residuals")
+
         residuals_node = NodeCommand("residuals",
             Dict{String,Union{NodeCommand,LeafCommand}}(
-                "var" => res_var, "bvar" => res_bvar, "arima" => res_arima, "vecm" => res_vecm),
+                "var" => res_var, "bvar" => res_bvar, "arima" => res_arima, "vecm" => res_vecm,
+                "static" => res_static, "dynamic" => res_dynamic, "gdfm" => res_gdfm,
+                "arch" => res_arch, "garch" => res_garch, "egarch" => res_egarch,
+                "gjr_garch" => res_gjr_garch, "sv" => res_sv),
             "Model residuals")
 
         # Structure tests
         @test residuals_node.name == "residuals"
-        @test length(residuals_node.subcmds) == 4
-        for key in ["var", "bvar", "arima", "vecm"]
+        @test length(residuals_node.subcmds) == 12
+        for key in ["var", "bvar", "arima", "vecm", "static", "dynamic", "gdfm",
+                     "arch", "garch", "egarch", "gjr_garch", "sv"]
             @test haskey(residuals_node.subcmds, key)
             @test residuals_node.subcmds[key] isa LeafCommand
         end
@@ -1826,15 +2024,23 @@ using Test
         @test length(residuals_node.subcmds["bvar"].options) == 7
         @test length(residuals_node.subcmds["arima"].options) == 8
         @test length(residuals_node.subcmds["vecm"].options) == 6
+        @test length(residuals_node.subcmds["static"].options) == 4
+        @test length(residuals_node.subcmds["dynamic"].options) == 6
+        @test length(residuals_node.subcmds["gdfm"].options) == 5
+        @test length(residuals_node.subcmds["arch"].options) == 5
+        @test length(residuals_node.subcmds["garch"].options) == 6
+        @test length(residuals_node.subcmds["egarch"].options) == 6
+        @test length(residuals_node.subcmds["gjr_garch"].options) == 6
+        @test length(residuals_node.subcmds["sv"].options) == 5
 
         # Help text
         buf = IOBuffer()
         print_help(buf, residuals_node; prog="friedman residuals")
         help_text = String(take!(buf))
-        @test contains(help_text, "var")
-        @test contains(help_text, "bvar")
-        @test contains(help_text, "arima")
-        @test contains(help_text, "vecm")
+        for key in ["var", "bvar", "arima", "vecm", "static", "dynamic", "gdfm",
+                     "arch", "garch", "egarch", "gjr_garch", "sv"]
+            @test contains(help_text, key)
+        end
 
         # Dispatch: friedman residuals var test.csv
         called_with = Ref{Any}(nothing)

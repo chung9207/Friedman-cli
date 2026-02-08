@@ -17,7 +17,7 @@ function register_estimate_commands!()
             Option("lags"; short="p", type=Int, default=4, description="Lag order"),
             Option("prior"; type=String, default="minnesota", description="Prior type: minnesota"),
             Option("draws"; short="n", type=Int, default=2000, description="MCMC draws"),
-            Option("sampler"; type=String, default="nuts", description="nuts|hmc|smc"),
+            Option("sampler"; type=String, default="direct", description="direct|gibbs"),
             Option("method"; type=String, default="mean", description="mean|median (posterior extraction)"),
             Option("config"; type=String, default="", description="TOML config for prior hyperparameters"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
@@ -245,7 +245,7 @@ end
 # ── BVAR ───────────────────────────────────────────────────
 
 function _estimate_bvar(; data::String, lags::Int=4, prior::String="minnesota",
-                         draws::Int=2000, sampler::String="nuts", method::String="mean",
+                         draws::Int=2000, sampler::String="direct", method::String="mean",
                          config::String="", output::String="", format::String="table")
     Y, varnames = load_multivariate_data(data)
     n = size(Y, 2)
@@ -259,7 +259,7 @@ function _estimate_bvar(; data::String, lags::Int=4, prior::String="minnesota",
     prior_sym = isnothing(prior_obj) ? Symbol(prior) : :minnesota
 
     post = estimate_bvar(Y, p;
-        sampler=Symbol(sampler), n_samples=draws,
+        sampler=Symbol(sampler), n_draws=draws,
         prior=prior_sym, hyper=prior_obj)
 
     model = if method == "median"

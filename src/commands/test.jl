@@ -444,7 +444,7 @@ function _test_identifiability(; data::String, lags=nothing, test::String="all",
     end
 
     if run_overid && !isnothing(ica_result)
-        overid_result = test_overidentification(ica_result)
+        overid_result = test_overidentification(model, ica_result)
         push!(results_df, (
             test="Overidentification",
             statistic=round(overid_result.statistic; digits=4),
