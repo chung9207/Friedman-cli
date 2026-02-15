@@ -152,10 +152,92 @@ function register_test_commands!()
             Option("lags"; short="p", type=Int, default=2, description="Lag order (in levels)"),
             Option("rank"; short="r", type=String, default="auto", description="Cointegration rank (auto|1|2|...)"),
             Option("deterministic"; type=String, default="constant", description="none|constant|trend"),
+            Option("model"; type=String, default="vecm", description="var|vecm (model type for Granger test)"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
         ],
-        description="VECM Granger causality test (short-run, long-run, strong)")
+        flags=[
+            Flag("all"; description="Test all pairwise combinations (VAR only)"),
+        ],
+        description="Granger causality test (VAR or VECM)")
+
+    # Panel VAR tests as a nested NodeCommand
+    pvar_hansen_j = LeafCommand("hansen_j", _test_pvar_hansen_j;
+        args=[Argument("data"; description="Path to CSV panel data file")],
+        options=[
+            Option("id-col"; type=String, default="", description="Panel group identifier column"),
+            Option("time-col"; type=String, default="", description="Time period column"),
+            Option("lags"; short="p", type=Int, default=1, description="Lag order"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="Hansen J overidentification test for Panel VAR")
+
+    pvar_mmsc = LeafCommand("mmsc", _test_pvar_mmsc;
+        args=[Argument("data"; description="Path to CSV panel data file")],
+        options=[
+            Option("id-col"; type=String, default="", description="Panel group identifier column"),
+            Option("time-col"; type=String, default="", description="Time period column"),
+            Option("max-lags"; type=Int, default=4, description="Maximum lag order to test"),
+            Option("criterion"; type=String, default="bic", description="bic|aic|hqic"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="MMSC model selection criteria for Panel VAR lag order")
+
+    pvar_lagselect = LeafCommand("lagselect", _test_pvar_lagselect;
+        args=[Argument("data"; description="Path to CSV panel data file")],
+        options=[
+            Option("id-col"; type=String, default="", description="Panel group identifier column"),
+            Option("time-col"; type=String, default="", description="Time period column"),
+            Option("max-lags"; type=Int, default=4, description="Maximum lag order to test"),
+            Option("criterion"; type=String, default="bic", description="bic|aic|hqic"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="Panel VAR lag order selection")
+
+    pvar_stability = LeafCommand("stability", _test_pvar_stability;
+        args=[Argument("data"; description="Path to CSV panel data file")],
+        options=[
+            Option("id-col"; type=String, default="", description="Panel group identifier column"),
+            Option("time-col"; type=String, default="", description="Time period column"),
+            Option("lags"; short="p", type=Int, default=1, description="Lag order"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="Panel VAR stability check (eigenvalues of companion matrix)")
+
+    pvar_node = NodeCommand("pvar",
+        Dict{String,Union{NodeCommand,LeafCommand}}(
+            "hansen_j"  => pvar_hansen_j,
+            "mmsc"      => pvar_mmsc,
+            "lagselect" => pvar_lagselect,
+            "stability" => pvar_stability,
+        ),
+        "Panel VAR diagnostic tests")
+
+    test_lr = LeafCommand("lr", _test_lr;
+        args=[
+            Argument("tag1"; description="Restricted model tag"),
+            Argument("tag2"; description="Unrestricted model tag"),
+        ],
+        options=[
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="Likelihood Ratio test (restricted vs unrestricted model)")
+
+    test_lm = LeafCommand("lm", _test_lm;
+        args=[
+            Argument("tag1"; description="Restricted model tag"),
+            Argument("tag2"; description="Unrestricted model tag"),
+        ],
+        options=[
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="Lagrange Multiplier test (restricted vs unrestricted model)")
 
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "adf"                => test_adf,
@@ -171,6 +253,9 @@ function register_test_commands!()
         "ljung_box"          => test_ljung_box,
         "var"                => var_node,
         "granger"            => test_granger,
+        "pvar"               => pvar_node,
+        "lr"                 => test_lr,
+        "lm"                 => test_lm,
     )
     return NodeCommand("test", subcmds, "Statistical tests (unit root, cointegration, diagnostics)")
 end
@@ -654,7 +739,18 @@ end
 function _test_granger(; data::String, cause::Int=1, effect::Int=2,
                          lags::Int=2, rank::String="auto",
                          deterministic::String="constant",
+                         model::String="vecm", all::Bool=false,
                          format::String="table", output::String="")
+    validate_method(model, ["var", "vecm"], "Granger causality model")
+
+    if model == "var"
+        _test_granger_var(data, cause, effect, lags, all, format, output)
+    else
+        _test_granger_vecm(data, cause, effect, lags, rank, deterministic, format, output)
+    end
+end
+
+function _test_granger_vecm(data, cause, effect, lags, rank, deterministic, format, output)
     vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
     n = size(Y, 2)
     r = cointegrating_rank(vecm)
@@ -681,4 +777,215 @@ function _test_granger(; data::String, cause::Int=1, effect::Int=2,
     interpret_test_result(result.strong_pvalue,
         "Reject H0: $cause_name Granger-causes $effect_name (joint short+long-run)",
         "Cannot reject H0: no Granger causality from $cause_name to $effect_name")
+end
+
+function _test_granger_var(data, cause, effect, lags, test_all, format, output)
+    model, Y, varnames, p = _load_and_estimate_var(data, lags)
+    n = size(Y, 2)
+
+    if test_all
+        println("VAR Granger Causality Test (all pairwise): VAR($p), $n variables")
+        println()
+
+        results = granger_test_all(model)
+
+        test_df = DataFrame(
+            cause=String[],
+            effect=String[],
+            statistic=Float64[],
+            df=Int[],
+            p_value=Float64[]
+        )
+        for r in results
+            push!(test_df, (cause=r.cause, effect=r.effect,
+                           statistic=round(r.statistic; digits=4),
+                           df=r.df, p_value=round(r.pvalue; digits=4)))
+        end
+
+        output_result(test_df; format=Symbol(format), output=output,
+                      title="VAR Granger Causality (all pairwise)")
+    else
+        cause_name = _var_name(varnames, cause)
+        effect_name = _var_name(varnames, effect)
+
+        println("VAR Granger Causality Test: $cause_name → $effect_name")
+        println("VAR($p), $n variables")
+        println()
+
+        result = granger_test(model, cause, effect)
+
+        pairs = Pair{String,Any}[
+            "Test statistic" => round(result.statistic; digits=4),
+            "p-value" => round(result.pvalue; digits=4),
+            "Degrees of freedom" => result.df,
+        ]
+
+        output_kv(pairs; format=format, output=output,
+                  title="Granger Causality: $cause_name → $effect_name")
+
+        interpret_test_result(result.pvalue,
+            "Reject H0: $cause_name Granger-causes $effect_name at 5%",
+            "Cannot reject H0: no Granger causality from $cause_name to $effect_name")
+    end
+end
+
+# ── Panel VAR Tests ────────────────────────────────────────
+
+function _test_pvar_hansen_j(; data::String, id_col::String="", time_col::String="",
+                               lags::Int=1, format::String="table", output::String="")
+    isempty(id_col) && error("Panel VAR test requires --id-col")
+    isempty(time_col) && error("Panel VAR test requires --time-col")
+
+    model, panel, varnames = _load_and_estimate_pvar(data, id_col, time_col, lags)
+
+    println("Hansen J Overidentification Test: Panel VAR($lags)")
+    println()
+
+    result = pvar_hansen_j(model)
+
+    pairs = Pair{String,Any}[
+        "J statistic" => round(result.statistic; digits=4),
+        "p-value" => round(result.pvalue; digits=4),
+        "Degrees of freedom" => result.df,
+        "Instruments" => result.n_instruments,
+        "Parameters" => result.n_params,
+    ]
+    output_kv(pairs; format=format, output=output, title="Hansen J Test")
+
+    interpret_test_result(result.pvalue,
+        "Reject H0: overidentifying restrictions not valid at 5%",
+        "Cannot reject H0: overidentifying restrictions appear valid")
+end
+
+function _test_pvar_mmsc(; data::String, id_col::String="", time_col::String="",
+                           max_lags::Int=4, criterion::String="bic",
+                           format::String="table", output::String="")
+    isempty(id_col) && error("Panel VAR test requires --id-col")
+    isempty(time_col) && error("Panel VAR test requires --time-col")
+
+    panel = load_panel_data(data, id_col, time_col)
+
+    println("MMSC Model Selection: max lags=$max_lags, criterion=$criterion")
+    println()
+
+    result = pvar_mmsc(panel, max_lags; criterion=Symbol(criterion))
+
+    res_df = DataFrame(result.results)
+    rename!(res_df, :p => :lags, :bic => :BIC, :aic => :AIC, :hqic => :HQIC)
+    output_result(res_df; format=Symbol(format), output=output, title="MMSC Results")
+
+    println()
+    printstyled("Optimal lag order ($criterion): $(result.optimal_lag)\n"; bold=true)
+end
+
+function _test_pvar_lagselect(; data::String, id_col::String="", time_col::String="",
+                                max_lags::Int=4, criterion::String="bic",
+                                format::String="table", output::String="")
+    isempty(id_col) && error("Panel VAR test requires --id-col")
+    isempty(time_col) && error("Panel VAR test requires --time-col")
+
+    panel = load_panel_data(data, id_col, time_col)
+
+    println("Panel VAR Lag Selection: max lags=$max_lags, criterion=$criterion")
+    println()
+
+    result = pvar_lag_selection(panel, max_lags; criterion=Symbol(criterion))
+
+    res_df = DataFrame(result.results)
+    rename!(res_df, :p => :lags, :bic => :BIC, :aic => :AIC, :hqic => :HQIC)
+    output_result(res_df; format=Symbol(format), output=output, title="Lag Selection Results")
+
+    println()
+    printstyled("Optimal lag order ($criterion): $(result.optimal_lag)\n"; bold=true)
+end
+
+function _test_pvar_stability(; data::String, id_col::String="", time_col::String="",
+                                lags::Int=1, format::String="table", output::String="")
+    isempty(id_col) && error("Panel VAR test requires --id-col")
+    isempty(time_col) && error("Panel VAR test requires --time-col")
+
+    model, panel, varnames = _load_and_estimate_pvar(data, id_col, time_col, lags)
+
+    println("Panel VAR($lags) Stability Check")
+    println()
+
+    result = pvar_stability(model)
+
+    eig_df = DataFrame(
+        index=1:length(result.eigenvalues),
+        eigenvalue=string.(round.(result.eigenvalues; digits=6)),
+        modulus=round.(result.moduli; digits=6)
+    )
+
+    output_result(eig_df; format=Symbol(format), output=output,
+                  title="Panel VAR Companion Matrix Eigenvalues")
+    println()
+
+    if result.is_stable
+        printstyled("Panel VAR($lags) is stable (all eigenvalues inside unit circle)\n"; color=:green, bold=true)
+    else
+        printstyled("Panel VAR($lags) is NOT stable (eigenvalue(s) outside unit circle)\n"; color=:red, bold=true)
+    end
+    println("  Max modulus: $(round(maximum(result.moduli); digits=6))")
+end
+
+# ── LR Test ───────────────────────────────────────────────
+
+function _test_lr(; tag1::String, tag2::String, format::String="table", output::String="")
+    data1, params1 = _resolve_from_tag(tag1)
+    data2, params2 = _resolve_from_tag(tag2)
+
+    lags1 = get(params1, "lags", 2)
+    lags2 = get(params2, "lags", 2)
+
+    m1, _, _, _ = _load_and_estimate_var(data1, lags1)
+    m2, _, _, _ = _load_and_estimate_var(data2, lags2)
+
+    println("Likelihood Ratio Test: $tag1 (restricted) vs $tag2 (unrestricted)")
+    println()
+
+    result = lr_test(m1, m2)
+
+    pairs = Pair{String,Any}[
+        "LR statistic" => round(result.statistic; digits=4),
+        "p-value" => round(result.pvalue; digits=4),
+        "Degrees of freedom" => result.df,
+        "Log-lik (restricted)" => round(result.loglik_restricted; digits=4),
+        "Log-lik (unrestricted)" => round(result.loglik_unrestricted; digits=4),
+    ]
+    output_kv(pairs; format=format, output=output, title="Likelihood Ratio Test")
+
+    interpret_test_result(result.pvalue,
+        "Reject H0: restrictions are not supported by the data at 5%",
+        "Cannot reject H0: restrictions appear valid")
+end
+
+# ── LM Test ───────────────────────────────────────────────
+
+function _test_lm(; tag1::String, tag2::String, format::String="table", output::String="")
+    data1, params1 = _resolve_from_tag(tag1)
+    data2, params2 = _resolve_from_tag(tag2)
+
+    lags1 = get(params1, "lags", 2)
+    lags2 = get(params2, "lags", 2)
+
+    m1, _, _, _ = _load_and_estimate_var(data1, lags1)
+    m2, _, _, _ = _load_and_estimate_var(data2, lags2)
+
+    println("Lagrange Multiplier Test: $tag1 (restricted) vs $tag2 (unrestricted)")
+    println()
+
+    result = lm_test(m1, m2)
+
+    pairs = Pair{String,Any}[
+        "LM statistic" => round(result.statistic; digits=4),
+        "p-value" => round(result.pvalue; digits=4),
+        "Degrees of freedom" => result.df,
+        "Observations" => result.nobs,
+    ]
+    output_kv(pairs; format=format, output=output, title="Lagrange Multiplier Test")
+
+    interpret_test_result(result.pvalue,
+        "Reject H0: restrictions are not supported at 5%",
+        "Cannot reject H0: restrictions appear valid")
 end

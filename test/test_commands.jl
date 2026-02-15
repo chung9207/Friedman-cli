@@ -6,7 +6,7 @@ using Test
 using CSV, DataFrames, JSON3, PrettyTables, TOML
 using BSON, Dates
 using LinearAlgebra: eigvals, diag, I, svd, diagm
-using Statistics: mean, median
+using Statistics: mean, median, var
 
 # ─── Setup: Mock module + source includes ──────────────────────
 
@@ -51,6 +51,8 @@ include(joinpath(project_root, "src", "commands", "hd.jl"))
 include(joinpath(project_root, "src", "commands", "forecast.jl"))
 include(joinpath(project_root, "src", "commands", "predict.jl"))
 include(joinpath(project_root, "src", "commands", "residuals.jl"))
+include(joinpath(project_root, "src", "commands", "filter.jl"))
+include(joinpath(project_root, "src", "commands", "data.jl"))
 include(joinpath(project_root, "src", "commands", "list.jl"))
 include(joinpath(project_root, "src", "commands", "rename.jl"))
 include(joinpath(project_root, "src", "commands", "project.jl"))
@@ -93,6 +95,21 @@ function _capture(f)
         try; close(io); catch; end
         try; rm(path; force=true); catch; end
     end
+end
+
+"""Create a temp CSV file with synthetic panel data (group + time columns)."""
+function _make_panel_csv(dir; G=5, T_per=20, n=3, colnames=nothing)
+    cols = isnothing(colnames) ? ["var$i" for i in 1:n] : colnames
+    rows = G * T_per
+    data = Dict{String,Vector}()
+    data["group"] = repeat(1:G, inner=T_per)
+    data["time"] = repeat(1:T_per, outer=G)
+    for (i, name) in enumerate(cols)
+        data[name] = randn(rows) .+ Float64(i)
+    end
+    path = joinpath(dir, "panel.csv")
+    CSV.write(path, DataFrame(data))
+    return path
 end
 
 """Create a TOML config for prior settings."""
@@ -510,9 +527,9 @@ end  # Shared utilities
         node = register_estimate_commands!()
         @test node isa NodeCommand
         @test node.name == "estimate"
-        @test length(node.subcmds) == 16
+        @test length(node.subcmds) == 17
         for cmd in ["var", "bvar", "lp", "arima", "gmm", "static", "dynamic", "gdfm",
-                     "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml", "vecm"]
+                     "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml", "vecm", "pvar"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -621,7 +638,9 @@ end  # Shared utilities
                 end
             end
             @test occursin("Local Projections", out)
-            @test occursin("LP IRF", out)
+            @test occursin("LP Coefficients", out)
+            @test occursin("Estimation Summary", out)
+            @test occursin("Saved as:", out)
         end
     end
 
@@ -638,6 +657,8 @@ end  # Shared utilities
             end
             @test occursin("LP-IV", out)
             @test occursin("F-statistic", out)
+            @test occursin("LP-IV Coefficients", out)
+            @test occursin("Saved as:", out)
         end
     end
 
@@ -665,6 +686,8 @@ end  # Shared utilities
             end
             @test occursin("Smooth LP", out)
             @test occursin("Cross-validating", out)
+            @test occursin("Smooth LP Coefficients", out)
+            @test occursin("Saved as:", out)
         end
     end
 
@@ -679,6 +702,8 @@ end  # Shared utilities
             end
             @test occursin("Smooth LP", out)
             @test !occursin("Cross-validating", out)
+            @test occursin("Smooth LP Coefficients", out)
+            @test occursin("Saved as:", out)
         end
     end
 
@@ -692,9 +717,11 @@ end  # Shared utilities
                 end
             end
             @test occursin("State-Dependent LP", out)
-            @test occursin("Expansion", out) || occursin("expansion", out)
-            @test occursin("Recession", out) || occursin("recession", out)
+            @test occursin("Expansion", out)
+            @test occursin("Recession", out)
+            @test occursin("State LP Coefficients", out)
             @test occursin("Regime Difference Test", out)
+            @test occursin("Saved as:", out)
         end
     end
 
@@ -721,7 +748,8 @@ end  # Shared utilities
             end
             @test occursin("Propensity Score LP", out)
             @test occursin("Diagnostics", out)
-            @test occursin("ATE", out)
+            @test occursin("ATE Estimates", out)
+            @test occursin("Saved as:", out)
         end
     end
 
@@ -736,6 +764,8 @@ end  # Shared utilities
             end
             @test occursin("Doubly Robust LP", out)
             @test occursin("Diagnostics", out)
+            @test occursin("ATE Estimates", out)
+            @test occursin("Saved as:", out)
         end
     end
 
@@ -1173,10 +1203,10 @@ end  # Estimate handlers
         node = register_test_commands!()
         @test node isa NodeCommand
         @test node.name == "test"
-        @test length(node.subcmds) == 13
+        @test length(node.subcmds) == 16
         for cmd in ["adf", "kpss", "pp", "za", "np", "johansen",
                      "normality", "identifiability", "heteroskedasticity",
-                     "arch_lm", "ljung_box", "var", "granger"]
+                     "arch_lm", "ljung_box", "var", "granger", "pvar", "lr", "lm"]
             @test haskey(node.subcmds, cmd)
         end
         # VAR is a nested NodeCommand with lagselect and stability
@@ -1184,6 +1214,19 @@ end  # Estimate handlers
         @test var_node isa NodeCommand
         @test haskey(var_node.subcmds, "lagselect")
         @test haskey(var_node.subcmds, "stability")
+        # PVAR is a nested NodeCommand with 4 children
+        pvar_node = node.subcmds["pvar"]
+        @test pvar_node isa NodeCommand
+        @test length(pvar_node.subcmds) == 4
+        @test haskey(pvar_node.subcmds, "hansen_j")
+        @test haskey(pvar_node.subcmds, "mmsc")
+        @test haskey(pvar_node.subcmds, "lagselect")
+        @test haskey(pvar_node.subcmds, "stability")
+        # LR and LM are LeafCommands with 2 positional args
+        @test node.subcmds["lr"] isa LeafCommand
+        @test node.subcmds["lm"] isa LeafCommand
+        @test length(node.subcmds["lr"].args) == 2
+        @test length(node.subcmds["lm"].args) == 2
     end
 
     @testset "_test_adf — reject" begin
@@ -1518,8 +1561,8 @@ end  # Test handlers
         node = register_irf_commands!()
         @test node isa NodeCommand
         @test node.name == "irf"
-        @test length(node.subcmds) == 4
-        for cmd in ["var", "bvar", "lp", "vecm"]
+        @test length(node.subcmds) == 5
+        for cmd in ["var", "bvar", "lp", "vecm", "pvar"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -1714,8 +1757,8 @@ end  # IRF handlers
         node = register_fevd_commands!()
         @test node isa NodeCommand
         @test node.name == "fevd"
-        @test length(node.subcmds) == 4
-        for cmd in ["var", "bvar", "lp", "vecm"]
+        @test length(node.subcmds) == 5
+        for cmd in ["var", "bvar", "lp", "vecm", "pvar"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -2175,20 +2218,20 @@ end  # Forecast handlers
 
     @testset "register_estimate_commands! includes vecm" begin
         node = register_estimate_commands!()
-        @test length(node.subcmds) == 16
+        @test length(node.subcmds) == 17
         @test haskey(node.subcmds, "vecm")
         @test node.subcmds["vecm"] isa LeafCommand
     end
 
     @testset "register_irf_commands! includes vecm" begin
         node = register_irf_commands!()
-        @test length(node.subcmds) == 4
+        @test length(node.subcmds) == 5
         @test haskey(node.subcmds, "vecm")
     end
 
     @testset "register_fevd_commands! includes vecm" begin
         node = register_fevd_commands!()
-        @test length(node.subcmds) == 4
+        @test length(node.subcmds) == 5
         @test haskey(node.subcmds, "vecm")
     end
 
@@ -2206,7 +2249,7 @@ end  # Forecast handlers
 
     @testset "register_test_commands! includes granger" begin
         node = register_test_commands!()
-        @test length(node.subcmds) == 13
+        @test length(node.subcmds) == 16
         @test haskey(node.subcmds, "granger")
         @test node.subcmds["granger"] isa LeafCommand
     end
@@ -3630,5 +3673,1076 @@ end  # Output format tests
     end
 
 end  # Edge Cases
+
+@testset "Filter handlers" begin
+
+    @testset "register_filter_commands!" begin
+        node = register_filter_commands!()
+        @test node isa NodeCommand
+        @test node.name == "filter"
+        @test length(node.subcmds) == 5
+        for cmd in ["hp", "hamilton", "bn", "bk", "bhp"]
+            @test haskey(node.subcmds, cmd)
+        end
+    end
+
+    @testset "_filter_hp" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _filter_hp(; data=csv, lambda=1600.0, format="table")
+                end
+            end
+            @test occursin("HP Filter", out)
+            @test occursin("λ=1600.0", out)
+            @test occursin("3 variable(s)", out)
+            @test occursin("Cycle Variance Ratios", out)
+        end
+    end
+
+    @testset "_filter_hp — columns selection" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _filter_hp(; data=csv, lambda=1600.0, columns="1,3", format="table")
+                end
+            end
+            @test occursin("HP Filter", out)
+            @test occursin("2 variable(s)", out)
+        end
+    end
+
+    @testset "_filter_hp — json output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "hp.json")
+            out = cd(dir) do
+                _capture() do
+                    _filter_hp(; data=csv, lambda=1600.0, format="json", output=outfile)
+                end
+            end
+            @test isfile(outfile)
+            json_data = JSON3.read(read(outfile, String))
+            @test length(json_data) > 0
+        end
+    end
+
+    @testset "_filter_hp — csv output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "hp.csv")
+            out = cd(dir) do
+                _capture() do
+                    _filter_hp(; data=csv, lambda=1600.0, format="csv", output=outfile)
+                end
+            end
+            @test isfile(outfile)
+            result_df = CSV.read(outfile, DataFrame)
+            @test "t" in names(result_df)
+            @test nrow(result_df) == 100
+        end
+    end
+
+    @testset "_filter_hamilton" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _filter_hamilton(; data=csv, horizon=8, lags=4, format="table")
+                end
+            end
+            @test occursin("Hamilton Filter", out)
+            @test occursin("h=8", out)
+            @test occursin("p=4", out)
+            @test occursin("Cycle Variance Ratios", out)
+        end
+    end
+
+    @testset "_filter_hamilton — lost observations note" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _filter_hamilton(; data=csv, horizon=8, lags=4, format="table")
+                end
+            end
+            @test occursin("observations lost", out)
+        end
+    end
+
+    @testset "_filter_bn" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _filter_bn(; data=csv, format="table")
+                end
+            end
+            @test occursin("Beveridge-Nelson", out)
+            @test occursin("p=auto", out)
+            @test occursin("q=auto", out)
+            @test occursin("Cycle Variance Ratios", out)
+        end
+    end
+
+    @testset "_filter_bn — explicit orders" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _filter_bn(; data=csv, p=2, q=1, format="table")
+                end
+            end
+            @test occursin("Beveridge-Nelson", out)
+            @test occursin("p=2", out)
+            @test occursin("q=1", out)
+        end
+    end
+
+    @testset "_filter_bk" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _filter_bk(; data=csv, pl=6, pu=32, K=12, format="table")
+                end
+            end
+            @test occursin("Baxter-King", out)
+            @test occursin("pl=6", out)
+            @test occursin("pu=32", out)
+            @test occursin("K=12", out)
+            @test occursin("Cycle Variance Ratios", out)
+        end
+    end
+
+    @testset "_filter_bk — lost observations note" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _filter_bk(; data=csv, pl=6, pu=32, K=12, format="table")
+                end
+            end
+            @test occursin("observations lost", out)
+        end
+    end
+
+    @testset "_filter_bhp" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _filter_bhp(; data=csv, lambda=1600.0, stopping="BIC", format="table")
+                end
+            end
+            @test occursin("Boosted HP Filter", out)
+            @test occursin("λ=1600.0", out)
+            @test occursin("stopping=BIC", out)
+            @test occursin("iteration(s)", out)
+            @test occursin("Cycle Variance Ratios", out)
+        end
+    end
+
+    @testset "_filter_bhp — ADF stopping" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _filter_bhp(; data=csv, stopping="ADF", sig_p=0.10, format="table")
+                end
+            end
+            @test occursin("Boosted HP Filter", out)
+            @test occursin("stopping=ADF", out)
+        end
+    end
+
+end  # Filter handlers
+
+# ═══════════════════════════════════════════════════════════════
+# Panel VAR handlers
+# ═══════════════════════════════════════════════════════════════
+
+@testset "Panel VAR handlers" begin
+
+    @testset "register_estimate_commands! includes pvar" begin
+        node = register_estimate_commands!()
+        @test haskey(node.subcmds, "pvar")
+        @test node.subcmds["pvar"] isa LeafCommand
+        @test length(node.subcmds) == 17
+    end
+
+    @testset "register_irf_commands! includes pvar" begin
+        node = register_irf_commands!()
+        @test haskey(node.subcmds, "pvar")
+        @test node.subcmds["pvar"] isa LeafCommand
+        @test length(node.subcmds) == 5
+    end
+
+    @testset "register_fevd_commands! includes pvar" begin
+        node = register_fevd_commands!()
+        @test haskey(node.subcmds, "pvar")
+        @test node.subcmds["pvar"] isa LeafCommand
+        @test length(node.subcmds) == 5
+    end
+
+    @testset "register_test_commands! includes pvar, lr, lm" begin
+        node = register_test_commands!()
+        @test haskey(node.subcmds, "pvar")
+        @test node.subcmds["pvar"] isa NodeCommand
+        @test length(node.subcmds["pvar"].subcmds) == 4
+        @test haskey(node.subcmds["pvar"].subcmds, "hansen_j")
+        @test haskey(node.subcmds["pvar"].subcmds, "mmsc")
+        @test haskey(node.subcmds["pvar"].subcmds, "lagselect")
+        @test haskey(node.subcmds["pvar"].subcmds, "stability")
+        @test haskey(node.subcmds, "lr")
+        @test node.subcmds["lr"] isa LeafCommand
+        @test haskey(node.subcmds, "lm")
+        @test node.subcmds["lm"] isa LeafCommand
+        @test length(node.subcmds) == 16
+    end
+
+    @testset "_parse_varlist" begin
+        @test _parse_varlist("") == String[]
+        @test _parse_varlist("var1,var2,var3") == ["var1", "var2", "var3"]
+        @test _parse_varlist("x, y, z") == ["x", "y", "z"]
+        @test _parse_varlist("single") == ["single"]
+    end
+
+    @testset "load_panel_data" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir; G=3, T_per=10, n=2)
+            panel = load_panel_data(csv, "group", "time")
+            @test panel.n_groups == 3
+            @test panel.n_vars == 2
+            @test panel.T_obs == 30
+            @test length(panel.varnames) == 2
+        end
+    end
+
+    @testset "load_panel_data — missing id column" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir)
+            @test_throws ErrorException load_panel_data(csv, "nonexistent", "time")
+        end
+    end
+
+    @testset "load_panel_data — missing time column" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir)
+            @test_throws ErrorException load_panel_data(csv, "group", "nonexistent")
+        end
+    end
+
+    @testset "_estimate_pvar — default" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir; G=5, T_per=20, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _estimate_pvar(; data=csv, id_col="group", time_col="time", lags=1)
+                end
+            end
+            @test occursin("Panel VAR(1)", out)
+            @test occursin("gmm", out)
+            @test occursin("Saved as: pvar001", out)
+        end
+    end
+
+    @testset "_estimate_pvar — feols method" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir; G=5, T_per=20, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _estimate_pvar(; data=csv, id_col="group", time_col="time", method="feols")
+                end
+            end
+            @test occursin("feols", out)
+            @test occursin("Saved as: pvar001", out)
+        end
+    end
+
+    @testset "_estimate_pvar — system GMM" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir; G=5, T_per=20, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _estimate_pvar(; data=csv, id_col="group", time_col="time", system=true)
+                end
+            end
+            @test occursin("System GMM", out)
+        end
+    end
+
+    @testset "_estimate_pvar — json format" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir; G=5, T_per=20, n=3)
+            outfile = joinpath(dir, "pvar.json")
+            out = cd(dir) do
+                _capture() do
+                    _estimate_pvar(; data=csv, id_col="group", time_col="time",
+                                   format="json", output=outfile)
+                end
+            end
+            @test isfile(outfile)
+        end
+    end
+
+    @testset "_estimate_pvar — missing id-col error" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir)
+            @test_throws ErrorException cd(dir) do
+                _estimate_pvar(; data=csv, time_col="time")
+            end
+        end
+    end
+
+    @testset "_estimate_pvar — missing time-col error" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir)
+            @test_throws ErrorException cd(dir) do
+                _estimate_pvar(; data=csv, id_col="group")
+            end
+        end
+    end
+
+    @testset "_estimate_pvar — invalid method error" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir)
+            @test_throws ErrorException cd(dir) do
+                _estimate_pvar(; data=csv, id_col="group", time_col="time", method="invalid")
+            end
+        end
+    end
+
+    @testset "_irf_pvar — oirf" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir; G=5, T_per=20, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _irf_pvar(; data=csv, id_col="group", time_col="time",
+                              horizons=10, irf_type="oirf")
+                end
+            end
+            @test occursin("Panel VAR OIRF", out)
+            @test occursin("Saved as: irf001", out)
+        end
+    end
+
+    @testset "_irf_pvar — girf" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir; G=5, T_per=20, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _irf_pvar(; data=csv, id_col="group", time_col="time",
+                              horizons=10, irf_type="girf")
+                end
+            end
+            @test occursin("Panel VAR GIRF", out)
+        end
+    end
+
+    @testset "_irf_pvar — missing data and tag error" begin
+        mktempdir() do dir
+            @test_throws ErrorException cd(dir) do
+                _irf_pvar(; data="", id_col="group", time_col="time")
+            end
+        end
+    end
+
+    @testset "_fevd_pvar — default" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir; G=5, T_per=20, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _fevd_pvar(; data=csv, id_col="group", time_col="time", horizons=10)
+                end
+            end
+            @test occursin("Panel VAR FEVD", out)
+            @test occursin("Saved as: fevd001", out)
+        end
+    end
+
+    @testset "_test_pvar_hansen_j" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir; G=5, T_per=20, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _test_pvar_hansen_j(; data=csv, id_col="group", time_col="time", lags=1)
+                end
+            end
+            @test occursin("Hansen J", out)
+            @test occursin("J statistic", out)
+        end
+    end
+
+    @testset "_test_pvar_hansen_j — missing id error" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir)
+            @test_throws ErrorException cd(dir) do
+                _test_pvar_hansen_j(; data=csv, time_col="time")
+            end
+        end
+    end
+
+    @testset "_test_pvar_mmsc" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir; G=5, T_per=20, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _test_pvar_mmsc(; data=csv, id_col="group", time_col="time", max_lags=4)
+                end
+            end
+            @test occursin("MMSC", out)
+            @test occursin("Optimal lag order", out)
+        end
+    end
+
+    @testset "_test_pvar_lagselect" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir; G=5, T_per=20, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _test_pvar_lagselect(; data=csv, id_col="group", time_col="time", max_lags=3)
+                end
+            end
+            @test occursin("Lag Selection", out)
+            @test occursin("Optimal lag order", out)
+        end
+    end
+
+    @testset "_test_pvar_stability" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir; G=5, T_per=20, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _test_pvar_stability(; data=csv, id_col="group", time_col="time", lags=1)
+                end
+            end
+            @test occursin("Stability Check", out)
+            @test occursin("stable", out)
+        end
+    end
+
+end  # Panel VAR handlers
+
+# ═══════════════════════════════════════════════════════════════
+# LR / LM test handlers
+# ═══════════════════════════════════════════════════════════════
+
+@testset "LR/LM test handlers" begin
+
+    @testset "_test_lr" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            cd(dir) do
+                # Save two models first
+                storage_save!("var001", "var", Dict{String,Any}("v" => 1),
+                    Dict{String,Any}("data" => csv, "lags" => 2))
+                storage_save!("var002", "var", Dict{String,Any}("v" => 1),
+                    Dict{String,Any}("data" => csv, "lags" => 4))
+                out = _capture() do
+                    _test_lr(; tag1="var001", tag2="var002")
+                end
+                @test occursin("Likelihood Ratio Test", out)
+                @test occursin("LR statistic", out)
+                @test occursin("p-value", out)
+            end
+        end
+    end
+
+    @testset "_test_lr — missing tag error" begin
+        mktempdir() do dir
+            cd(dir) do
+                @test_throws ErrorException _test_lr(; tag1="nonexistent001", tag2="nonexistent002")
+            end
+        end
+    end
+
+    @testset "_test_lm" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            cd(dir) do
+                storage_save!("var001", "var", Dict{String,Any}("v" => 1),
+                    Dict{String,Any}("data" => csv, "lags" => 2))
+                storage_save!("var002", "var", Dict{String,Any}("v" => 1),
+                    Dict{String,Any}("data" => csv, "lags" => 4))
+                out = _capture() do
+                    _test_lm(; tag1="var001", tag2="var002")
+                end
+                @test occursin("Lagrange Multiplier Test", out)
+                @test occursin("LM statistic", out)
+            end
+        end
+    end
+
+end  # LR/LM test handlers
+
+# ═══════════════════════════════════════════════════════════════
+# Enhanced Granger causality handler
+# ═══════════════════════════════════════════════════════════════
+
+@testset "Enhanced Granger handlers" begin
+
+    @testset "_test_granger — vecm (default)" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _test_granger(; data=csv, cause=1, effect=2, lags=2)
+                end
+            end
+            @test occursin("VECM Granger Causality", out)
+            @test occursin("Short-run", out)
+        end
+    end
+
+    @testset "_test_granger — var model" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _test_granger(; data=csv, cause=1, effect=2, lags=2, model="var")
+                end
+            end
+            @test occursin("VAR Granger Causality", out)
+            @test occursin("Test statistic", out)
+        end
+    end
+
+    @testset "_test_granger — var all pairwise" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _test_granger(; data=csv, lags=2, model="var", all=true)
+                end
+            end
+            @test occursin("all pairwise", out)
+            @test occursin("cause", out)
+            @test occursin("effect", out)
+        end
+    end
+
+    @testset "_test_granger — invalid model error" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            @test_throws ErrorException cd(dir) do
+                _test_granger(; data=csv, model="invalid")
+            end
+        end
+    end
+
+    @testset "_test_granger — vecm with explicit model option" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _test_granger(; data=csv, cause=1, effect=2, lags=2, model="vecm")
+                end
+            end
+            @test occursin("VECM Granger Causality", out)
+        end
+    end
+
+end  # Enhanced Granger handlers
+
+# ═══════════════════════════════════════════════════════════════
+# Data command handlers
+# ═══════════════════════════════════════════════════════════════
+
+@testset "Data handlers" begin
+
+    @testset "register_data_commands!" begin
+        node = register_data_commands!()
+        @test node isa NodeCommand
+        @test node.name == "data"
+        @test length(node.subcmds) == 8
+        for cmd in ["list", "load", "describe", "diagnose", "fix", "transform", "filter", "validate"]
+            @test haskey(node.subcmds, cmd)
+            @test node.subcmds[cmd] isa LeafCommand
+        end
+    end
+
+    @testset "option counts" begin
+        node = register_data_commands!()
+        @test length(node.subcmds["list"].options) == 2
+        @test length(node.subcmds["load"].options) == 4
+        @test length(node.subcmds["describe"].options) == 2
+        @test length(node.subcmds["diagnose"].options) == 2
+        @test length(node.subcmds["fix"].options) == 3
+        @test length(node.subcmds["transform"].options) == 3
+        @test length(node.subcmds["filter"].options) == 8
+        @test length(node.subcmds["validate"].options) == 3
+    end
+
+    @testset "_data_list — table" begin
+        out = _capture() do
+            _data_list(; format="table")
+        end
+        @test occursin("Available Datasets", out)
+        @test occursin("fred_md", out)
+        @test occursin("fred_qd", out)
+        @test occursin("pwt", out)
+        @test occursin("FRED-MD", out)
+        @test occursin("Penn World Table", out)
+    end
+
+    @testset "_data_list — json" begin
+        mktempdir() do dir
+            outfile = joinpath(dir, "datasets.json")
+            _capture() do
+                _data_list(; format="json", output=outfile)
+            end
+            @test isfile(outfile)
+            json_data = JSON3.read(read(outfile, String))
+            @test length(json_data) == 3
+        end
+    end
+
+    @testset "_data_load — fred_md" begin
+        mktempdir() do dir
+            out = cd(dir) do
+                _capture() do
+                    _data_load(; name="fred_md")
+                end
+            end
+            @test occursin("Loaded fred_md", out)
+            @test occursin("804", out)
+            @test occursin("126", out)
+            @test occursin("monthly", out)
+            @test isfile(joinpath(dir, "fred_md.csv"))
+        end
+    end
+
+    @testset "_data_load — fred_qd" begin
+        mktempdir() do dir
+            out = cd(dir) do
+                _capture() do
+                    _data_load(; name="fred_qd")
+                end
+            end
+            @test occursin("Loaded fred_qd", out)
+            @test occursin("268", out)
+            @test occursin("245", out)
+            @test occursin("quarterly", out)
+        end
+    end
+
+    @testset "_data_load — pwt" begin
+        mktempdir() do dir
+            out = cd(dir) do
+                _capture() do
+                    _data_load(; name="pwt")
+                end
+            end
+            @test occursin("Loaded pwt", out)
+            @test occursin("Panel", out)
+            @test occursin("38 groups", out)
+        end
+    end
+
+    @testset "_data_load — with --transform" begin
+        mktempdir() do dir
+            out = cd(dir) do
+                _capture() do
+                    _data_load(; name="fred_md", transform=true)
+                end
+            end
+            @test occursin("Applied FRED transformation codes", out)
+            @test occursin("Loaded fred_md", out)
+        end
+    end
+
+    @testset "_data_load — with --vars" begin
+        mktempdir() do dir
+            out = cd(dir) do
+                _capture() do
+                    _data_load(; name="fred_md", vars="INDPRO,CPIAUCSL,FEDFUNDS")
+                end
+            end
+            @test occursin("Loaded fred_md", out)
+            @test occursin("3", out)
+            @test isfile(joinpath(dir, "fred_md.csv"))
+            result_df = CSV.read(joinpath(dir, "fred_md.csv"), DataFrame)
+            @test ncol(result_df) == 3
+        end
+    end
+
+    @testset "_data_load — custom output" begin
+        mktempdir() do dir
+            outfile = joinpath(dir, "my_data.csv")
+            out = cd(dir) do
+                _capture() do
+                    _data_load(; name="fred_md", output=outfile)
+                end
+            end
+            @test isfile(outfile)
+            @test occursin("Written to", out)
+        end
+    end
+
+    @testset "_data_load — invalid name" begin
+        mktempdir() do dir
+            @test_throws ErrorException cd(dir) do
+                _data_load(; name="nonexistent")
+            end
+        end
+    end
+
+    @testset "_data_load — pwt with --vars" begin
+        mktempdir() do dir
+            out = cd(dir) do
+                _capture() do
+                    _data_load(; name="pwt", vars="rgdpna,pop")
+                end
+            end
+            @test isfile(joinpath(dir, "pwt.csv"))
+            result_df = CSV.read(joinpath(dir, "pwt.csv"), DataFrame)
+            @test "rgdpna" in names(result_df)
+            @test "pop" in names(result_df)
+            @test "group" in names(result_df)
+            @test "time" in names(result_df)
+            @test ncol(result_df) == 4  # group, time, rgdpna, pop
+        end
+    end
+
+    @testset "_data_load — pwt with --country" begin
+        mktempdir() do dir
+            out = cd(dir) do
+                _capture() do
+                    _data_load(; name="pwt", country="USA")
+                end
+            end
+            @test occursin("country=USA", out)
+        end
+    end
+
+    @testset "_data_load — invalid var name" begin
+        mktempdir() do dir
+            @test_throws ErrorException cd(dir) do
+                _data_load(; name="fred_md", vars="NONEXISTENT_VAR")
+            end
+        end
+    end
+
+    @testset "_data_describe — basic" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = _capture() do
+                _data_describe(; data=csv)
+            end
+            @test occursin("Data Summary", out)
+            @test occursin("100 observations", out)
+            @test occursin("3 variables", out)
+            @test occursin("Descriptive Statistics", out)
+        end
+    end
+
+    @testset "_data_describe — csv output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "desc.csv")
+            _capture() do
+                _data_describe(; data=csv, format="csv", output=outfile)
+            end
+            @test isfile(outfile)
+            result_df = CSV.read(outfile, DataFrame)
+            @test "variable" in names(result_df)
+            @test "mean" in names(result_df)
+            @test "std" in names(result_df)
+            @test "skewness" in names(result_df)
+            @test nrow(result_df) == 3
+        end
+    end
+
+    @testset "_data_describe — json output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "desc.json")
+            _capture() do
+                _data_describe(; data=csv, format="json", output=outfile)
+            end
+            @test isfile(outfile)
+            json_data = JSON3.read(read(outfile, String))
+            @test length(json_data) == 3
+        end
+    end
+
+    @testset "_data_diagnose — clean data" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = _capture() do
+                _data_diagnose(; data=csv)
+            end
+            @test occursin("Data Diagnostics", out)
+            @test occursin("100 observations", out)
+            @test occursin("Data is clean", out)
+        end
+    end
+
+    @testset "_data_diagnose — json output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "diag.json")
+            _capture() do
+                _data_diagnose(; data=csv, format="json", output=outfile)
+            end
+            @test isfile(outfile)
+        end
+    end
+
+    @testset "_data_fix — listwise (default)" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _data_fix(; data=csv)
+                end
+            end
+            @test occursin("Fixed data (listwise)", out)
+            @test occursin("Written to", out)
+            # Default output should be data_clean.csv
+            @test occursin("data_clean.csv", out)
+        end
+    end
+
+    @testset "_data_fix — interpolate" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _data_fix(; data=csv, method="interpolate")
+                end
+            end
+            @test occursin("Fixed data (interpolate)", out)
+        end
+    end
+
+    @testset "_data_fix — mean" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _data_fix(; data=csv, method="mean")
+                end
+            end
+            @test occursin("Fixed data (mean)", out)
+        end
+    end
+
+    @testset "_data_fix — custom output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "clean_data.csv")
+            out = cd(dir) do
+                _capture() do
+                    _data_fix(; data=csv, output=outfile)
+                end
+            end
+            @test isfile(outfile)
+            result_df = CSV.read(outfile, DataFrame)
+            @test nrow(result_df) == 100
+        end
+    end
+
+    @testset "_data_fix — invalid method" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            @test_throws ErrorException _data_fix(; data=csv, method="invalid")
+        end
+    end
+
+    @testset "_data_transform — explicit tcodes" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _data_transform(; data=csv, tcodes="5,5,1")
+                end
+            end
+            @test occursin("Transformed 3 variable(s)", out)
+            @test occursin("tcode=5", out)
+            @test occursin("tcode=1", out)
+            @test occursin("Δlog", out)
+            @test occursin("level", out)
+            @test occursin("Written to", out)
+        end
+    end
+
+    @testset "_data_transform — custom output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "trans.csv")
+            out = cd(dir) do
+                _capture() do
+                    _data_transform(; data=csv, tcodes="1,2,3", output=outfile)
+                end
+            end
+            @test isfile(outfile)
+        end
+    end
+
+    @testset "_data_transform — missing tcodes error" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            @test_throws ErrorException _data_transform(; data=csv, tcodes="")
+        end
+    end
+
+    @testset "_data_transform — wrong number of tcodes" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            @test_throws ErrorException _data_transform(; data=csv, tcodes="5,5")
+        end
+    end
+
+    @testset "_data_filter — hp default" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = _capture() do
+                _data_filter(; data=csv, method="hp")
+            end
+            @test occursin("Data Filter (hp, component=cycle)", out)
+            @test occursin("3 variable(s)", out)
+        end
+    end
+
+    @testset "_data_filter — hamilton" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = _capture() do
+                _data_filter(; data=csv, method="hamilton", horizon=8, lags=4)
+            end
+            @test occursin("Data Filter (hamilton", out)
+        end
+    end
+
+    @testset "_data_filter — bhp" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = _capture() do
+                _data_filter(; data=csv, method="bhp")
+            end
+            @test occursin("Data Filter (bhp", out)
+        end
+    end
+
+    @testset "_data_filter — trend component" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = _capture() do
+                _data_filter(; data=csv, method="hp", component="trend")
+            end
+            @test occursin("trend component", out)
+        end
+    end
+
+    @testset "_data_filter — csv output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            outfile = joinpath(dir, "filtered.csv")
+            _capture() do
+                _data_filter(; data=csv, method="hp", format="csv", output=outfile)
+            end
+            @test isfile(outfile)
+            result_df = CSV.read(outfile, DataFrame)
+            @test "t" in names(result_df)
+            @test nrow(result_df) == 100
+        end
+    end
+
+    @testset "_data_filter — column selection" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = _capture() do
+                _data_filter(; data=csv, method="hp", columns="1,2")
+            end
+            @test occursin("2 variable(s)", out)
+        end
+    end
+
+    @testset "_data_filter — invalid method" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            @test_throws ErrorException _data_filter(; data=csv, method="invalid")
+        end
+    end
+
+    @testset "_data_filter — invalid component" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            @test_throws ErrorException _data_filter(; data=csv, component="invalid")
+        end
+    end
+
+    @testset "_data_validate — valid var" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = _capture() do
+                _data_validate(; data=csv, model="var")
+            end
+            @test occursin("Data is valid for var estimation", out)
+            @test occursin("3 variable(s)", out)
+            @test occursin("100 observations", out)
+        end
+    end
+
+    @testset "_data_validate — valid arima (univariate)" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=1)
+            out = _capture() do
+                _data_validate(; data=csv, model="arima")
+            end
+            @test occursin("Data is valid for arima estimation", out)
+        end
+    end
+
+    @testset "_data_validate — invalid arima (multivariate)" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = _capture() do
+                _data_validate(; data=csv, model="arima")
+            end
+            @test occursin("validation failed", out)
+            @test occursin("univariate", out)
+        end
+    end
+
+    @testset "_data_validate — missing --model error" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            @test_throws ErrorException _data_validate(; data=csv, model="")
+        end
+    end
+
+    @testset "_data_validate — invalid model type error" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            @test_throws ErrorException _data_validate(; data=csv, model="invalid")
+        end
+    end
+
+    @testset "_data_validate — valid bvar" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = _capture() do
+                _data_validate(; data=csv, model="bvar")
+            end
+            @test occursin("Data is valid for bvar estimation", out)
+        end
+    end
+
+    @testset "_data_validate — valid garch (univariate)" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=1)
+            out = _capture() do
+                _data_validate(; data=csv, model="garch")
+            end
+            @test occursin("Data is valid for garch estimation", out)
+        end
+    end
+
+end  # Data handlers
 
 end  # Command Handlers

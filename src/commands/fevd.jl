@@ -59,11 +59,25 @@ function register_fevd_commands!()
         ],
         description="Compute FEVD via VECM → VAR representation")
 
+    fevd_pvar = LeafCommand("pvar", _fevd_pvar;
+        args=[Argument("data"; required=false, default="", description="Path to CSV panel data file")],
+        options=[
+            Option("id-col"; type=String, default="", description="Panel group identifier column"),
+            Option("time-col"; type=String, default="", description="Time period column"),
+            Option("lags"; short="p", type=Int, default=1, description="Lag order"),
+            Option("horizons"; short="h", type=Int, default=10, description="Forecast horizon"),
+            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        description="Compute Panel VAR forecast error variance decomposition")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "var"  => fevd_var,
         "bvar" => fevd_bvar,
         "lp"   => fevd_lp,
         "vecm" => fevd_vecm,
+        "pvar" => fevd_pvar,
     )
     return NodeCommand("fevd", subcmds, "Forecast Error Variance Decomposition")
 end
@@ -191,4 +205,47 @@ function _fevd_vecm(; data::String, lags::Int=2, rank::String="auto",
     storage_save_auto!("fevd", Dict{String,Any}("type" => "vecm", "id" => id,
         "horizons" => horizons, "n_vars" => n, "rank" => r),
         Dict{String,Any}("command" => "fevd vecm", "data" => data))
+end
+
+# ── Panel VAR FEVD ─────────────────────────────────────────
+
+function _fevd_pvar(; data::String, id_col::String="", time_col::String="",
+                     lags::Int=1, horizons::Int=10,
+                     from_tag::String="",
+                     output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data_path, params = _resolve_from_tag(from_tag)
+        data = data_path
+        if isempty(id_col)
+            id_col = get(params, "id_col", "")
+        end
+        if isempty(time_col)
+            time_col = get(params, "time_col", "")
+        end
+        if lags == 1
+            lags = get(params, "lags", lags)
+        end
+    end
+    isempty(id_col) && error("Panel VAR FEVD requires --id-col")
+    isempty(time_col) && error("Panel VAR FEVD requires --time-col")
+
+    model, panel, varnames = _load_and_estimate_pvar(data, id_col, time_col, lags)
+    n = length(varnames)
+
+    println("Computing Panel VAR FEVD: horizons=$horizons")
+    println()
+
+    fevd_result = pvar_fevd(model, horizons)
+
+    _output_fevd_tables(fevd_result.proportions, varnames, horizons;
+                        id="cholesky", title_prefix="Panel VAR FEVD",
+                        format=format, output=output)
+
+    storage_save_auto!("fevd", Dict{String,Any}("type" => "pvar",
+        "horizons" => horizons, "n_vars" => n),
+        Dict{String,Any}("command" => "fevd pvar", "data" => data,
+                          "id_col" => id_col, "time_col" => time_col, "lags" => lags))
 end

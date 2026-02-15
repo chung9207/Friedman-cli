@@ -767,6 +767,29 @@ using Test
             ],
             description="Estimate VECM")
 
+        est_pvar = LeafCommand("pvar", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("id-col"; type=String, default="", description="Panel group ID column"),
+                Option("time-col"; type=String, default="", description="Time column"),
+                Option("lags"; short="p", type=Int, default=1, description="Lags"),
+                Option("dependent"; type=String, default="", description="Dependent variables"),
+                Option("predet"; type=String, default="", description="Predetermined variables"),
+                Option("exog"; type=String, default="", description="Exogenous variables"),
+                Option("transformation"; type=String, default="fd", description="Transformation"),
+                Option("steps"; type=String, default="twostep", description="Steps"),
+                Option("method"; type=String, default="gmm", description="Method"),
+                Option("min-lag-endo"; type=Int, default=2, description="Min lag endo"),
+                Option("max-lag-endo"; type=Int, default=99, description="Max lag endo"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            flags=[
+                Flag("system"; description="Use system GMM"),
+                Flag("collapse"; description="Collapse instruments"),
+            ],
+            description="Estimate Panel VAR")
+
         estimate_node = NodeCommand("estimate",
             Dict{String,Union{NodeCommand,LeafCommand}}(
                 "var" => est_var, "bvar" => est_bvar, "lp" => est_lp,
@@ -774,16 +797,17 @@ using Test
                 "static" => est_static, "dynamic" => est_dynamic, "gdfm" => est_gdfm,
                 "arch" => est_arch, "garch" => est_garch, "egarch" => est_egarch,
                 "gjr_garch" => est_gjr_garch, "sv" => est_sv,
-                "fastica" => est_fastica, "ml" => est_ml, "vecm" => est_vecm),
+                "fastica" => est_fastica, "ml" => est_ml, "vecm" => est_vecm,
+                "pvar" => est_pvar),
             "Estimate econometric models")
 
         # Structure tests
         @test estimate_node.name == "estimate"
-        @test length(estimate_node.subcmds) == 16
+        @test length(estimate_node.subcmds) == 17
 
-        # All 16 are LeafCommands
+        # All 17 are LeafCommands
         for key in ["var", "bvar", "lp", "arima", "gmm", "static", "dynamic", "gdfm",
-                     "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml", "vecm"]
+                     "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml", "vecm", "pvar"]
             @test haskey(estimate_node.subcmds, key)
             @test estimate_node.subcmds[key] isa LeafCommand
         end
@@ -810,6 +834,11 @@ using Test
         @test contains(help_text, "fastica")
         @test contains(help_text, "arch")
         @test contains(help_text, "sv")
+        @test contains(help_text, "pvar")
+
+        # Estimate pvar option count (13 options + 2 flags)
+        @test length(estimate_node.subcmds["pvar"].options) == 13
+        @test length(estimate_node.subcmds["pvar"].flags) == 2
 
         # Arg binding: estimate var
         parsed = tokenize(["data.csv", "--lags=4", "--trend=both"])
@@ -1014,10 +1043,85 @@ using Test
                 Option("lags"; short="p", type=Int, default=2, description="Lags"),
                 Option("rank"; short="r", type=String, default="auto", description="Cointegrating rank"),
                 Option("deterministic"; type=String, default="constant", description="Deterministic"),
+                Option("model"; type=String, default="vecm", description="var|vecm"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
                 Option("output"; short="o", type=String, default="", description="Output"),
             ],
-            description="VECM Granger causality test")
+            flags=[
+                Flag("all"; description="Test all pairwise combinations (VAR only)"),
+            ],
+            description="Granger causality test (VAR or VECM)")
+
+        # Panel VAR tests as nested NodeCommand
+        pvar_hansen_j = LeafCommand("hansen_j", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("id-col"; type=String, default="", description="Panel group ID column"),
+                Option("time-col"; type=String, default="", description="Time column"),
+                Option("lags"; short="p", type=Int, default=1, description="Lags"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+            ],
+            description="Hansen J test")
+
+        pvar_mmsc = LeafCommand("mmsc", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("id-col"; type=String, default="", description="Panel group ID column"),
+                Option("time-col"; type=String, default="", description="Time column"),
+                Option("max-lags"; type=Int, default=4, description="Max lags"),
+                Option("criterion"; type=String, default="bic", description="Criterion"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+            ],
+            description="MMSC model selection")
+
+        pvar_lagselect = LeafCommand("lagselect", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("id-col"; type=String, default="", description="Panel group ID column"),
+                Option("time-col"; type=String, default="", description="Time column"),
+                Option("max-lags"; type=Int, default=4, description="Max lags"),
+                Option("criterion"; type=String, default="bic", description="Criterion"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+            ],
+            description="Panel VAR lag selection")
+
+        pvar_stability = LeafCommand("stability", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("id-col"; type=String, default="", description="Panel group ID column"),
+                Option("time-col"; type=String, default="", description="Time column"),
+                Option("lags"; short="p", type=Int, default=1, description="Lags"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+            ],
+            description="Panel VAR stability check")
+
+        pvar_node = NodeCommand("pvar",
+            Dict{String,Union{NodeCommand,LeafCommand}}(
+                "hansen_j" => pvar_hansen_j, "mmsc" => pvar_mmsc,
+                "lagselect" => pvar_lagselect, "stability" => pvar_stability),
+            "Panel VAR diagnostic tests")
+
+        test_lr = LeafCommand("lr", handler;
+            args=[Argument("tag1"; description="Restricted model tag"),
+                  Argument("tag2"; description="Unrestricted model tag")],
+            options=[
+                Option("format"; short="f", type=String, default="table", description="Format"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+            ],
+            description="Likelihood Ratio test")
+
+        test_lm = LeafCommand("lm", handler;
+            args=[Argument("tag1"; description="Restricted model tag"),
+                  Argument("tag2"; description="Unrestricted model tag")],
+            options=[
+                Option("format"; short="f", type=String, default="table", description="Format"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+            ],
+            description="Lagrange Multiplier test")
 
         test_node = NodeCommand("test",
             Dict{String,Union{NodeCommand,LeafCommand}}(
@@ -1026,12 +1130,13 @@ using Test
                 "normality" => test_normality, "identifiability" => test_identifiability,
                 "heteroskedasticity" => test_heteroskedasticity,
                 "arch_lm" => test_arch_lm, "ljung_box" => test_ljung_box,
-                "var" => var_node, "granger" => test_granger),
+                "var" => var_node, "granger" => test_granger,
+                "pvar" => pvar_node, "lr" => test_lr, "lm" => test_lm),
             "Statistical tests")
 
         # Structure tests
         @test test_node.name == "test"
-        @test length(test_node.subcmds) == 13  # 11 leaves + 1 var NodeCommand + 1 granger
+        @test length(test_node.subcmds) == 16  # 11 leaves + var NodeCommand + granger + pvar NodeCommand + lr + lm
 
         # var subcmd is a NodeCommand with 2 children
         @test test_node.subcmds["var"] isa NodeCommand
@@ -1039,10 +1144,24 @@ using Test
         @test haskey(test_node.subcmds["var"].subcmds, "lagselect")
         @test haskey(test_node.subcmds["var"].subcmds, "stability")
 
+        # pvar subcmd is a NodeCommand with 4 children
+        @test test_node.subcmds["pvar"] isa NodeCommand
+        @test length(test_node.subcmds["pvar"].subcmds) == 4
+        @test haskey(test_node.subcmds["pvar"].subcmds, "hansen_j")
+        @test haskey(test_node.subcmds["pvar"].subcmds, "mmsc")
+        @test haskey(test_node.subcmds["pvar"].subcmds, "lagselect")
+        @test haskey(test_node.subcmds["pvar"].subcmds, "stability")
+
+        # lr and lm are LeafCommands
+        @test test_node.subcmds["lr"] isa LeafCommand
+        @test test_node.subcmds["lm"] isa LeafCommand
+        @test length(test_node.subcmds["lr"].args) == 2
+        @test length(test_node.subcmds["lm"].args) == 2
+
         # All other subcmds are LeafCommands
         for key in ["adf", "kpss", "pp", "za", "np", "johansen",
                      "normality", "identifiability", "heteroskedasticity",
-                     "arch_lm", "ljung_box", "granger"]
+                     "arch_lm", "ljung_box", "granger", "lr", "lm"]
             @test test_node.subcmds[key] isa LeafCommand
         end
 
@@ -1054,6 +1173,10 @@ using Test
         @test length(test_node.subcmds["ljung_box"].options) == 4
         @test length(test_node.subcmds["identifiability"].options) == 6
         @test length(test_node.subcmds["heteroskedasticity"].options) == 6
+        @test length(test_node.subcmds["granger"].options) == 8
+        @test length(test_node.subcmds["granger"].flags) == 1
+        @test length(test_node.subcmds["lr"].options) == 2
+        @test length(test_node.subcmds["lm"].options) == 2
 
         # Help text
         buf = IOBuffer()
@@ -1066,6 +1189,9 @@ using Test
         @test contains(help_text, "arch_lm")
         @test contains(help_text, "ljung_box")
         @test contains(help_text, "var")
+        @test contains(help_text, "pvar")
+        @test contains(help_text, "lr")
+        @test contains(help_text, "lm")
 
         # Arg binding: adf
         parsed = tokenize(["data.csv", "--column=2", "--max-lags=8"])
@@ -1175,9 +1301,26 @@ using Test
             ],
             description="VECM IRFs")
 
+        irf_pvar = LeafCommand("pvar", handler;
+            args=[Argument("data"; required=false, default="", description="Data file")],
+            options=[
+                Option("id-col"; type=String, default="", description="Panel group ID column"),
+                Option("time-col"; type=String, default="", description="Time column"),
+                Option("lags"; short="p", type=Int, default=1, description="Lags"),
+                Option("horizons"; short="h", type=Int, default=10, description="Horizon"),
+                Option("irf-type"; type=String, default="oirf", description="oirf|girf"),
+                Option("boot-draws"; type=Int, default=500, description="Bootstrap draws"),
+                Option("confidence"; type=Float64, default=0.95, description="Confidence level"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="Panel VAR IRFs")
+
         irf_node = NodeCommand("irf",
             Dict{String,Union{NodeCommand,LeafCommand}}(
-                "var" => irf_var, "bvar" => irf_bvar, "lp" => irf_lp, "vecm" => irf_vecm),
+                "var" => irf_var, "bvar" => irf_bvar, "lp" => irf_lp,
+                "vecm" => irf_vecm, "pvar" => irf_pvar),
             "Impulse Response Functions")
 
         # -- FEVD node --
@@ -1224,9 +1367,38 @@ using Test
             ],
             description="LP FEVD")
 
+        fevd_vecm = LeafCommand("vecm", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lags"; short="p", type=Int, default=2, description="Lags"),
+                Option("rank"; short="r", type=String, default="auto", description="Cointegrating rank"),
+                Option("deterministic"; type=String, default="constant", description="Deterministic"),
+                Option("horizons"; short="h", type=Int, default=20, description="Horizon"),
+                Option("id"; type=String, default="cholesky", description="Identification"),
+                Option("config"; type=String, default="", description="Config"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="VECM FEVD")
+
+        fevd_pvar = LeafCommand("pvar", handler;
+            args=[Argument("data"; required=false, default="", description="Data file")],
+            options=[
+                Option("id-col"; type=String, default="", description="Panel group ID column"),
+                Option("time-col"; type=String, default="", description="Time column"),
+                Option("lags"; short="p", type=Int, default=1, description="Lags"),
+                Option("horizons"; short="h", type=Int, default=10, description="Horizon"),
+                Option("from-tag"; type=String, default="", description="From tag"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="Panel VAR FEVD")
+
         fevd_node = NodeCommand("fevd",
             Dict{String,Union{NodeCommand,LeafCommand}}(
-                "var" => fevd_var, "bvar" => fevd_bvar, "lp" => fevd_lp),
+                "var" => fevd_var, "bvar" => fevd_bvar, "lp" => fevd_lp,
+                "vecm" => fevd_vecm, "pvar" => fevd_pvar),
             "Forecast Error Variance Decomposition")
 
         # -- HD node --
@@ -1297,17 +1469,29 @@ using Test
 
         # IRF node structure
         @test irf_node.name == "irf"
-        @test length(irf_node.subcmds) == 4
+        @test length(irf_node.subcmds) == 5
         @test haskey(irf_node.subcmds, "var")
         @test haskey(irf_node.subcmds, "bvar")
         @test haskey(irf_node.subcmds, "lp")
         @test haskey(irf_node.subcmds, "vecm")
+        @test haskey(irf_node.subcmds, "pvar")
         @test irf_node.subcmds["var"] isa LeafCommand
         @test irf_node.subcmds["bvar"] isa LeafCommand
         @test irf_node.subcmds["lp"] isa LeafCommand
+        @test irf_node.subcmds["pvar"] isa LeafCommand
 
         # IRF var option count (10 options)
         @test length(irf_node.subcmds["var"].options) == 10
+        # IRF pvar option count (10 options)
+        @test length(irf_node.subcmds["pvar"].options) == 10
+
+        # FEVD node structure (5 leaves: var, bvar, lp, vecm, pvar)
+        @test length(fevd_node.subcmds) == 5
+        @test haskey(fevd_node.subcmds, "vecm")
+        @test haskey(fevd_node.subcmds, "pvar")
+        @test fevd_node.subcmds["vecm"] isa LeafCommand
+        @test fevd_node.subcmds["pvar"] isa LeafCommand
+        @test length(fevd_node.subcmds["pvar"].options) == 7
 
         # FEVD bvar has draws, sampler, from-tag
         @test length(fevd_node.subcmds["bvar"].options) == 9
@@ -1330,6 +1514,7 @@ using Test
         @test contains(help_text, "var")
         @test contains(help_text, "bvar")
         @test contains(help_text, "lp")
+        @test contains(help_text, "pvar")
 
         # Help text for FEVD
         buf = IOBuffer()
@@ -1338,6 +1523,7 @@ using Test
         @test contains(help_text, "var")
         @test contains(help_text, "bvar")
         @test contains(help_text, "lp")
+        @test contains(help_text, "pvar")
 
         # Help text for HD
         buf = IOBuffer()
@@ -2057,6 +2243,279 @@ using Test
         @test called_with[][:data] == "test.csv"
     end
 
+    @testset "Filter command structure (action-first)" begin
+        handler = (; kwargs...) -> kwargs
+
+        filt_hp = LeafCommand("hp", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lambda"; short="l", type=Float64, default=1600.0, description="Lambda"),
+                Option("columns"; short="c", type=String, default="", description="Columns"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="HP filter")
+
+        filt_hamilton = LeafCommand("hamilton", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("horizon"; short="h", type=Int, default=8, description="Horizon"),
+                Option("lags"; short="p", type=Int, default=4, description="Lags"),
+                Option("columns"; short="c", type=String, default="", description="Columns"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="Hamilton filter")
+
+        filt_bn = LeafCommand("bn", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("p"; type=Int, default=nothing, description="AR order"),
+                Option("q"; type=Int, default=nothing, description="MA order"),
+                Option("columns"; short="c", type=String, default="", description="Columns"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="Beveridge-Nelson")
+
+        filt_bk = LeafCommand("bk", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("pl"; type=Int, default=6, description="Min period"),
+                Option("pu"; type=Int, default=32, description="Max period"),
+                Option("K"; type=Int, default=12, description="Truncation"),
+                Option("columns"; short="c", type=String, default="", description="Columns"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="Baxter-King filter")
+
+        filt_bhp = LeafCommand("bhp", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lambda"; short="l", type=Float64, default=1600.0, description="Lambda"),
+                Option("stopping"; type=String, default="BIC", description="Stopping"),
+                Option("max-iter"; type=Int, default=100, description="Max iterations"),
+                Option("sig-p"; type=Float64, default=0.05, description="Significance"),
+                Option("columns"; short="c", type=String, default="", description="Columns"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="Boosted HP filter")
+
+        filter_node = NodeCommand("filter",
+            Dict{String,Union{NodeCommand,LeafCommand}}(
+                "hp" => filt_hp, "hamilton" => filt_hamilton, "bn" => filt_bn,
+                "bk" => filt_bk, "bhp" => filt_bhp),
+            "Time series filters")
+
+        @test filter_node.name == "filter"
+        @test length(filter_node.subcmds) == 5
+        for cmd in ["hp", "hamilton", "bn", "bk", "bhp"]
+            @test haskey(filter_node.subcmds, cmd)
+            @test filter_node.subcmds[cmd] isa LeafCommand
+        end
+
+        # Option counts
+        @test length(filter_node.subcmds["hp"].options) == 4
+        @test length(filter_node.subcmds["hamilton"].options) == 5
+        @test length(filter_node.subcmds["bn"].options) == 5
+        @test length(filter_node.subcmds["bk"].options) == 6
+        @test length(filter_node.subcmds["bhp"].options) == 7
+
+        # Help text
+        buf = IOBuffer()
+        print_help(buf, filter_node; prog="friedman filter")
+        help_text = String(take!(buf))
+        @test contains(help_text, "hp")
+        @test contains(help_text, "hamilton")
+        @test contains(help_text, "bn")
+        @test contains(help_text, "bk")
+        @test contains(help_text, "bhp")
+
+        # Arg binding: filter hp data.csv --lambda=1600
+        parsed = tokenize(["data.csv", "--lambda=1600.0"])
+        bound = bind_args(parsed, filt_hp)
+        @test bound.data == "data.csv"
+        @test bound.lambda == 1600.0
+
+        # Arg binding: filter bk data.csv --pl=6 --pu=32 --K=12
+        parsed = tokenize(["data.csv", "--pl=6", "--pu=32", "--K=12"])
+        bound = bind_args(parsed, filt_bk)
+        @test bound.data == "data.csv"
+        @test bound.pl == 6
+        @test bound.pu == 32
+        @test bound.K == 12
+
+        # Dispatch
+        called_with = Ref{Any}(nothing)
+        dispatch_handler = (; kwargs...) -> (called_with[] = kwargs)
+        filt_dispatch_hp = LeafCommand("hp", dispatch_handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("lambda"; short="l", type=Float64, default=1600.0, description="Lambda"),
+                Option("columns"; short="c", type=String, default="", description="Columns"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="HP filter")
+        filt_dispatch = NodeCommand("filter",
+            Dict{String,Union{NodeCommand,LeafCommand}}("hp" => filt_dispatch_hp),
+            "Filters")
+        dispatch_node(filt_dispatch, ["hp", "test.csv"]; prog="friedman filter")
+        @test called_with[][:data] == "test.csv"
+    end
+
+    @testset "Data command structure (action-first)" begin
+        handler = (; kwargs...) -> kwargs
+
+        data_list = LeafCommand("list", handler;
+            args=Argument[],
+            options=[
+                Option("format"; short="f", type=String, default="table", description="Format"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+            ],
+            description="List datasets")
+
+        data_load = LeafCommand("load", handler;
+            args=[Argument("name"; description="Dataset name")],
+            options=[
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+                Option("vars"; type=String, default="", description="Vars"),
+                Option("country"; type=String, default="", description="Country"),
+            ],
+            flags=[Flag("transform"; short="t", description="Apply tcodes")],
+            description="Load dataset")
+
+        data_describe = LeafCommand("describe", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("format"; short="f", type=String, default="table", description="Format"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+            ],
+            description="Describe data")
+
+        data_diagnose = LeafCommand("diagnose", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("format"; short="f", type=String, default="table", description="Format"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+            ],
+            description="Diagnose data")
+
+        data_fix = LeafCommand("fix", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("method"; short="m", type=String, default="listwise", description="Method"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="Fix data")
+
+        data_transform = LeafCommand("transform", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("tcodes"; type=String, default="", description="Tcodes"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="Transform data")
+
+        data_filter = LeafCommand("filter", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("method"; short="m", type=String, default="hp", description="Method"),
+                Option("component"; type=String, default="cycle", description="Component"),
+                Option("lambda"; short="l", type=Float64, default=1600.0, description="Lambda"),
+                Option("horizon"; type=Int, default=8, description="Horizon"),
+                Option("lags"; short="p", type=Int, default=4, description="Lags"),
+                Option("columns"; short="c", type=String, default="", description="Columns"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="Filter data")
+
+        data_validate = LeafCommand("validate", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("model"; type=String, default="", description="Model type"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+            ],
+            description="Validate data")
+
+        data_node = NodeCommand("data",
+            Dict{String,Union{NodeCommand,LeafCommand}}(
+                "list" => data_list, "load" => data_load, "describe" => data_describe,
+                "diagnose" => data_diagnose, "fix" => data_fix, "transform" => data_transform,
+                "filter" => data_filter, "validate" => data_validate),
+            "Data management")
+
+        @test data_node.name == "data"
+        @test length(data_node.subcmds) == 8
+        for cmd in ["list", "load", "describe", "diagnose", "fix", "transform", "filter", "validate"]
+            @test haskey(data_node.subcmds, cmd)
+            @test data_node.subcmds[cmd] isa LeafCommand
+        end
+
+        # Option counts
+        @test length(data_node.subcmds["list"].options) == 2
+        @test length(data_node.subcmds["load"].options) == 4
+        @test length(data_node.subcmds["describe"].options) == 2
+        @test length(data_node.subcmds["diagnose"].options) == 2
+        @test length(data_node.subcmds["fix"].options) == 3
+        @test length(data_node.subcmds["transform"].options) == 3
+        @test length(data_node.subcmds["filter"].options) == 8
+        @test length(data_node.subcmds["validate"].options) == 3
+
+        # Help text
+        buf = IOBuffer()
+        print_help(buf, data_node; prog="friedman data")
+        help_text = String(take!(buf))
+        for cmd in ["list", "load", "describe", "diagnose", "fix", "transform", "filter", "validate"]
+            @test contains(help_text, cmd)
+        end
+
+        # Arg binding: data load fred_md --transform
+        parsed = tokenize(["fred_md", "--transform"])
+        bound = bind_args(parsed, data_load)
+        @test bound.name == "fred_md"
+        @test bound.transform == true
+
+        # Arg binding: data describe data.csv --format=json
+        parsed = tokenize(["data.csv", "--format=json"])
+        bound = bind_args(parsed, data_describe)
+        @test bound.data == "data.csv"
+        @test bound.format == "json"
+
+        # Arg binding: data filter data.csv --method=hamilton --component=trend
+        parsed = tokenize(["data.csv", "--method=hamilton", "--component=trend"])
+        bound = bind_args(parsed, data_filter)
+        @test bound.data == "data.csv"
+        @test bound.method == "hamilton"
+        @test bound.component == "trend"
+
+        # Arg binding: data validate data.csv --model=var
+        parsed = tokenize(["data.csv", "--model=var"])
+        bound = bind_args(parsed, data_validate)
+        @test bound.data == "data.csv"
+        @test bound.model == "var"
+
+        # Dispatch
+        called_with = Ref{Any}(nothing)
+        dispatch_handler = (; kwargs...) -> (called_with[] = kwargs)
+        data_load_d = LeafCommand("load", dispatch_handler;
+            args=[Argument("name"; description="Name")],
+            options=[Option("output"; short="o", type=String, default="", description="Output")],
+            description="Load")
+        data_dispatch = NodeCommand("data",
+            Dict{String,Union{NodeCommand,LeafCommand}}("load" => data_load_d),
+            "Data")
+        dispatch_node(data_dispatch, ["load", "fred_md"]; prog="friedman data")
+        @test called_with[][:name] == "fred_md"
+    end
+
     @testset "List, rename, project structure (action-first)" begin
         handler = (; kwargs...) -> kwargs
 
@@ -2205,8 +2664,13 @@ using Test
         @test !isnothing(match(tag_pattern, "irf123"))
         @test !isnothing(match(tag_pattern, "forecast0001"))
         @test !isnothing(match(tag_pattern, "sv999"))
+        @test !isnothing(match(tag_pattern, "pvar001"))
 
         # Extract components
+        m = match(tag_pattern, "pvar001")
+        @test m.captures[1] == "pvar"
+        @test m.captures[2] == "001"
+
         m = match(tag_pattern, "var001")
         @test m.captures[1] == "var"
         @test m.captures[2] == "001"
