@@ -3,7 +3,7 @@ module Friedman
 using CSV, DataFrames, PrettyTables, JSON3, TOML, BSON, Dates
 using MacroEconometricModels
 using LinearAlgebra: eigvals, diag, I, svd
-using Statistics: mean, median
+using Statistics: mean, median, var
 
 # CLI engine
 include("cli/types.jl")
@@ -31,6 +31,8 @@ include("commands/hd.jl")
 include("commands/forecast.jl")
 include("commands/predict.jl")
 include("commands/residuals.jl")
+include("commands/filter.jl")
+include("commands/data.jl")
 include("commands/list.jl")
 include("commands/rename.jl")
 include("commands/project.jl")
@@ -52,6 +54,8 @@ function build_app()
         "forecast"  => register_forecast_commands!(),
         "predict"   => register_predict_commands!(),
         "residuals" => register_residuals_commands!(),
+        "filter"    => register_filter_commands!(),
+        "data"      => register_data_commands!(),
         "list"      => register_list_commands!(),
         "rename"   => register_rename_commands!(),
         "project"  => register_project_commands!(),

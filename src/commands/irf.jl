@@ -71,11 +71,28 @@ function register_irf_commands!()
         ],
         description="Compute impulse response functions via VECM → VAR representation")
 
+    irf_pvar = LeafCommand("pvar", _irf_pvar;
+        args=[Argument("data"; required=false, default="", description="Path to CSV panel data file")],
+        options=[
+            Option("id-col"; type=String, default="", description="Panel group identifier column"),
+            Option("time-col"; type=String, default="", description="Time period column"),
+            Option("lags"; short="p", type=Int, default=1, description="Lag order"),
+            Option("horizons"; short="h", type=Int, default=10, description="IRF horizon"),
+            Option("irf-type"; type=String, default="oirf", description="oirf|girf"),
+            Option("boot-draws"; type=Int, default=500, description="Bootstrap draws for CIs"),
+            Option("confidence"; type=Float64, default=0.95, description="Confidence level"),
+            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        description="Compute Panel VAR impulse response functions (OIRF/GIRF)")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "var"  => irf_var,
         "bvar" => irf_bvar,
         "lp"   => irf_lp,
         "vecm" => irf_vecm,
+        "pvar" => irf_pvar,
     )
     return NodeCommand("irf", subcmds, "Impulse Response Functions")
 end
@@ -352,4 +369,71 @@ function _irf_vecm(; data::String, lags::Int=2, rank::String="auto",
     storage_save_auto!("irf", Dict{String,Any}("type" => "vecm", "id" => id, "shock" => shock,
         "horizons" => horizons, "n_vars" => n, "rank" => r),
         Dict{String,Any}("command" => "irf vecm", "data" => data))
+end
+
+# ── Panel VAR IRF ──────────────────────────────────────────
+
+function _irf_pvar(; data::String, id_col::String="", time_col::String="",
+                    lags::Int=1, horizons::Int=10,
+                    irf_type::String="oirf", boot_draws::Int=500,
+                    confidence::Float64=0.95, from_tag::String="",
+                    output::String="", format::String="table")
+    if isempty(data) && isempty(from_tag)
+        error("Either <data> argument or --from-tag option is required")
+    end
+    if !isempty(from_tag) && isempty(data)
+        data_path, params = _resolve_from_tag(from_tag)
+        data = data_path
+        if isempty(id_col)
+            id_col = get(params, "id_col", "")
+        end
+        if isempty(time_col)
+            time_col = get(params, "time_col", "")
+        end
+        if lags == 1
+            lags = get(params, "lags", lags)
+        end
+    end
+    isempty(id_col) && error("Panel VAR IRF requires --id-col")
+    isempty(time_col) && error("Panel VAR IRF requires --time-col")
+    validate_method(irf_type, ["oirf", "girf"], "IRF type")
+
+    model, panel, varnames = _load_and_estimate_pvar(data, id_col, time_col, lags)
+    n = length(varnames)
+
+    println("Computing Panel VAR IRFs: type=$irf_type, horizons=$horizons, bootstrap=$boot_draws")
+    println()
+
+    # Compute IRFs with bootstrap CIs
+    irf_result = pvar_bootstrap_irf(model, horizons;
+        n_boot=boot_draws, conf_level=confidence, irf_type=Symbol(irf_type))
+
+    # Output per-shock IRF tables
+    for shock in 1:n
+        shock_name = _shock_name(varnames, shock)
+        irf_vals = irf_result.values
+        n_h = size(irf_vals, 1)
+
+        irf_df = DataFrame()
+        irf_df.horizon = 0:(n_h-1)
+        for (vi, vname) in enumerate(varnames)
+            irf_df[!, vname] = irf_vals[:, vi, shock]
+        end
+        if !isnothing(irf_result.ci_lower)
+            for (vi, vname) in enumerate(varnames)
+                irf_df[!, "$(vname)_lower"] = irf_result.ci_lower[:, vi, shock]
+                irf_df[!, "$(vname)_upper"] = irf_result.ci_upper[:, vi, shock]
+            end
+        end
+
+        output_result(irf_df; format=Symbol(format),
+                      output=_per_var_output_path(output, shock_name),
+                      title="Panel VAR $(uppercase(irf_type)) to $shock_name shock")
+        println()
+    end
+
+    storage_save_auto!("irf", Dict{String,Any}("type" => "pvar", "irf_type" => irf_type,
+        "horizons" => horizons, "n_vars" => n),
+        Dict{String,Any}("command" => "irf pvar", "data" => data,
+                          "id_col" => id_col, "time_col" => time_col, "lags" => lags))
 end

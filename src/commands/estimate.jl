@@ -178,6 +178,29 @@ function register_estimate_commands!()
         ],
         description="Maximum likelihood non-Gaussian SVAR identification")
 
+    est_pvar = LeafCommand("pvar", _estimate_pvar;
+        args=[Argument("data"; description="Path to CSV panel data file")],
+        options=[
+            Option("id-col"; type=String, default="", description="Panel group identifier column (required)"),
+            Option("time-col"; type=String, default="", description="Time period column (required)"),
+            Option("lags"; short="p", type=Int, default=1, description="Lag order"),
+            Option("dependent"; type=String, default="", description="Dependent variables (comma-separated)"),
+            Option("predet"; type=String, default="", description="Predetermined variables (comma-separated)"),
+            Option("exog"; type=String, default="", description="Exogenous variables (comma-separated)"),
+            Option("transformation"; type=String, default="fd", description="fd|fod (first-difference or forward orthogonal)"),
+            Option("steps"; type=String, default="twostep", description="onestep|twostep"),
+            Option("method"; type=String, default="gmm", description="gmm|feols"),
+            Option("min-lag-endo"; type=Int, default=2, description="Minimum lag for endogenous instruments"),
+            Option("max-lag-endo"; type=Int, default=99, description="Maximum lag for endogenous instruments"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        flags=[
+            Flag("system"; description="Use system GMM (adds level equations)"),
+            Flag("collapse"; description="Collapse instruments to limit count"),
+        ],
+        description="Estimate a Panel VAR model (FD-GMM / System-GMM / FE-OLS)")
+
     est_vecm = LeafCommand("vecm", _estimate_vecm;
         args=[Argument("data"; description="Path to CSV data file")],
         options=[
@@ -208,6 +231,7 @@ function register_estimate_commands!()
         "fastica"   => est_fastica,
         "ml"        => est_ml,
         "vecm"      => est_vecm,
+        "pvar"      => est_pvar,
     )
     return NodeCommand("estimate", subcmds, "Estimate econometric models")
 end
@@ -306,29 +330,58 @@ function _estimate_lp(; data::String, method::String="standard", shock::Int=1,
     end
 end
 
+"""Output LP coefficient table: shock coefficients + SEs per horizon per response variable."""
+function _output_lp_coef_table(irf_result, varnames, horizons;
+                               title::String="", format::String="table", output::String="")
+    n_h = size(irf_result.values, 1)
+    n_resp = size(irf_result.values, 2)
+    has_se = hasproperty(irf_result, :se) && !isnothing(irf_result.se) &&
+             size(irf_result.se) == size(irf_result.values)
+
+    coef_df = DataFrame()
+    coef_df.Horizon = 0:(n_h - 1)
+    for vi in 1:n_resp
+        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
+        coeffs = irf_result.values[:, vi]
+        coef_df[!, Symbol(vname)] = round.(coeffs; digits=6)
+        if has_se
+            ses = irf_result.se[:, vi]
+            tstats = coeffs ./ ses
+            coef_df[!, Symbol("$(vname)_se")] = round.(ses; digits=6)
+            coef_df[!, Symbol("$(vname)_t")] = round.(tstats; digits=3)
+        end
+    end
+
+    output_result(coef_df; format=Symbol(format), output=output, title=title)
+end
+
 function _estimate_lp_standard(data, shock, horizons, control_lags, vcov, output, format)
     Y, varnames = load_multivariate_data(data)
+    n = size(Y, 2)
+    shock_name = _shock_name(varnames, shock)
 
-    println("Estimating Local Projections: shock=$shock, horizons=$horizons, vcov=$vcov")
+    println("Estimating Local Projections: method=standard")
+    println("  Shock: $shock_name, Horizons: $horizons, Lags: $control_lags, VCov: $vcov")
+    println("  Variables: $(join(varnames, ", "))")
     println()
 
     model = estimate_lp(Y, shock, horizons; lags=control_lags, cov_type=Symbol(vcov))
     irf_result = lp_irf(model)
 
-    shock_name = _shock_name(varnames, shock)
+    _output_lp_coef_table(irf_result, varnames, horizons;
+        title="LP Coefficients ($shock_name → responses)", format=format, output=output)
 
-    irf_df = DataFrame()
-    irf_df.horizon = 0:horizons
-    n_resp = size(irf_result.values, 2)
-    for vi in 1:n_resp
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-        irf_df[!, vname] = irf_result.values[:, vi]
-        irf_df[!, "$(vname)_lower"] = irf_result.ci_lower[:, vi]
-        irf_df[!, "$(vname)_upper"] = irf_result.ci_upper[:, vi]
-    end
+    println()
+    output_kv(Pair{String,Any}[
+        "Effective observations" => model.T_eff,
+        "Covariance estimator" => vcov,
+        "Horizons" => horizons,
+        "Control lags" => control_lags,
+    ]; format=format, title="Estimation Summary")
 
-    output_result(irf_df; format=Symbol(format), output=output,
-                  title="LP IRF to $shock_name shock")
+    storage_save_auto!("lp", Dict{String,Any}("type" => "standard", "shock" => shock,
+        "horizons" => horizons, "lags" => control_lags, "n_vars" => n),
+        Dict{String,Any}("command" => "estimate lp", "data" => data))
 end
 
 function _estimate_lp_iv(data, shock, horizons, control_lags, vcov, instruments, output, format)
@@ -336,38 +389,46 @@ function _estimate_lp_iv(data, shock, horizons, control_lags, vcov, instruments,
 
     Y, varnames = load_multivariate_data(data)
     Z, _ = load_multivariate_data(instruments)
+    n = size(Y, 2)
+    shock_name = _shock_name(varnames, shock)
 
-    println("Estimating LP-IV: shock=$shock, horizons=$horizons, instruments=$(size(Z, 2))")
+    println("Estimating LP-IV: shock=$shock_name, horizons=$horizons, instruments=$(size(Z, 2))")
     println()
 
     model = estimate_lp_iv(Y, shock, Z, horizons; lags=control_lags, cov_type=Symbol(vcov))
-    irf_result = lp_iv_irf(model)
 
+    # First-stage diagnostics
     wi = weak_instrument_test(model)
-    println("First-stage F-statistic: $(round(wi.F_stat; digits=2))")
+    println("First-stage diagnostics:")
+    println("  F-statistic: $(round(wi.F_stat; digits=2))")
     if wi.F_stat < 10
-        printstyled("Warning: Weak instruments (F < 10)\n"; color=:yellow)
+        printstyled("  Warning: Weak instruments (F < 10)\n"; color=:yellow)
+    else
+        printstyled("  Instruments appear strong (F >= 10)\n"; color=:green)
     end
     println()
 
-    shock_name = _shock_name(varnames, shock)
+    irf_result = lp_iv_irf(model)
 
-    irf_df = DataFrame()
-    irf_df.horizon = 0:horizons
-    n_resp = size(irf_result.values, 2)
-    for vi in 1:n_resp
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-        irf_df[!, vname] = irf_result.values[:, vi]
-        irf_df[!, "$(vname)_lower"] = irf_result.ci_lower[:, vi]
-        irf_df[!, "$(vname)_upper"] = irf_result.ci_upper[:, vi]
-    end
+    _output_lp_coef_table(irf_result, varnames, horizons;
+        title="LP-IV Coefficients ($shock_name → responses)", format=format, output=output)
 
-    output_result(irf_df; format=Symbol(format), output=output,
-                  title="LP-IV IRF to $shock_name shock")
+    println()
+    output_kv(Pair{String,Any}[
+        "Effective observations" => model.T_eff,
+        "Covariance estimator" => vcov,
+        "First-stage F" => round(wi.F_stat; digits=2),
+        "Instruments" => size(Z, 2),
+    ]; format=format, title="LP-IV Estimation Summary")
+
+    storage_save_auto!("lp", Dict{String,Any}("type" => "iv", "shock" => shock,
+        "horizons" => horizons, "n_vars" => n, "first_stage_F" => wi.F_stat),
+        Dict{String,Any}("command" => "estimate lp --method=iv", "data" => data))
 end
 
 function _estimate_lp_smooth(data, shock, horizons, knots, lambda, output, format)
     Y, varnames = load_multivariate_data(data)
+    n = size(Y, 2)
 
     lam = if lambda == 0.0
         println("Cross-validating smoothing parameter...")
@@ -376,54 +437,49 @@ function _estimate_lp_smooth(data, shock, horizons, knots, lambda, output, forma
         lambda
     end
 
-    println("Estimating Smooth LP: shock=$shock, horizons=$horizons, knots=$knots, lambda=$(round(lam; digits=4))")
+    shock_name = _shock_name(varnames, shock)
+    println("Estimating Smooth LP: shock=$shock_name, horizons=$horizons, knots=$knots, λ=$(round(lam; digits=4))")
     println()
 
     model = estimate_smooth_lp(Y, shock, horizons; n_knots=knots, lambda=lam)
     irf_result = smooth_lp_irf(model)
 
-    shock_name = _shock_name(varnames, shock)
+    _output_lp_coef_table(irf_result, varnames, horizons;
+        title="Smooth LP Coefficients ($shock_name → responses)", format=format, output=output)
 
-    irf_df = DataFrame()
-    irf_df.horizon = 0:horizons
-    n_resp = size(irf_result.values, 2)
-    for vi in 1:n_resp
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-        irf_df[!, vname] = irf_result.values[:, vi]
-        irf_df[!, "$(vname)_lower"] = irf_result.ci_lower[:, vi]
-        irf_df[!, "$(vname)_upper"] = irf_result.ci_upper[:, vi]
-    end
+    println()
+    output_kv(Pair{String,Any}[
+        "Smoothing parameter (λ)" => round(lam; digits=6),
+        "B-spline knots" => knots,
+        "Horizons" => horizons,
+    ]; format=format, title="Smooth LP Estimation Summary")
 
-    output_result(irf_df; format=Symbol(format), output=output,
-                  title="Smooth LP IRF to $shock_name shock")
+    storage_save_auto!("lp", Dict{String,Any}("type" => "smooth", "shock" => shock,
+        "horizons" => horizons, "lambda" => lam, "knots" => knots, "n_vars" => n),
+        Dict{String,Any}("command" => "estimate lp --method=smooth", "data" => data))
 end
 
 function _estimate_lp_state(data, shock, horizons, state_var, gamma, transition, output, format)
     isnothing(state_var) && error("state-dependent LP requires --state-var=<idx>")
 
     Y, varnames = load_multivariate_data(data)
+    n = size(Y, 2)
+    shock_name = _shock_name(varnames, shock)
+    state_name = _var_name(varnames, state_var)
 
-    println("Estimating State-Dependent LP: shock=$shock, state=$state_var, gamma=$gamma, transition=$transition")
+    println("Estimating State-Dependent LP: shock=$shock_name, state=$state_name, γ=$gamma, transition=$transition")
     println()
 
     state_vec = Y[:, state_var]
     model = estimate_state_lp(Y, shock, state_vec, horizons; gamma=gamma)
     results = state_irf(model)
 
-    shock_name = _shock_name(varnames, shock)
-
     for (regime, label) in [(:expansion, "Expansion"), (:recession, "Recession")]
         irf_result = getfield(results, regime)
-        irf_df = DataFrame()
-        irf_df.horizon = 0:horizons
-        n_resp = size(irf_result.values, 2)
-        for vi in 1:n_resp
-            vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-            irf_df[!, vname] = irf_result.values[:, vi]
-        end
-        output_result(irf_df; format=Symbol(format),
-                      output=isempty(output) ? "" : replace(output, "." => "_$(lowercase(label))."),
-                      title="State LP IRF ($label) to $shock_name shock")
+        _output_lp_coef_table(irf_result, varnames, horizons;
+            title="State LP Coefficients — $label ($shock_name → responses)",
+            format=format,
+            output=isempty(output) ? "" : replace(output, "." => "_$(lowercase(label))."))
         println()
     end
 
@@ -432,12 +488,23 @@ function _estimate_lp_state(data, shock, horizons, state_var, gamma, transition,
     println("Regime Difference Test:")
     println("  Avg t-statistic: $(round(jt.avg_t_stat; digits=3))")
     println("  p-value: $(round(jt.p_value; digits=4))")
+    if jt.p_value < 0.05
+        printstyled("  → Significant regime differences at 5%\n"; color=:green)
+    else
+        printstyled("  → No significant regime differences at 5%\n"; color=:yellow)
+    end
+
+    storage_save_auto!("lp", Dict{String,Any}("type" => "state", "shock" => shock,
+        "horizons" => horizons, "state_var" => state_var, "gamma" => gamma, "n_vars" => n),
+        Dict{String,Any}("command" => "estimate lp --method=state", "data" => data))
 end
 
 function _estimate_lp_propensity(data, treatment, horizons, score_method, output, format)
     Y, varnames = load_multivariate_data(data)
+    n = size(Y, 2)
+    treat_name = _var_name(varnames, treatment)
 
-    println("Estimating Propensity Score LP: treatment=$treatment, horizons=$horizons, method=$score_method")
+    println("Estimating Propensity Score LP: treatment=$treat_name, horizons=$horizons, method=$score_method")
     println()
 
     treatment_bool = Bool.(Y[:, treatment] .> median(Y[:, treatment]))
@@ -446,8 +513,7 @@ function _estimate_lp_propensity(data, treatment, horizons, score_method, output
     model = estimate_propensity_lp(Y, treatment_bool, covariates, horizons;
         ps_method=Symbol(score_method))
 
-    irf_result = propensity_irf(model)
-
+    # Propensity score diagnostics
     diag = propensity_diagnostics(model)
     ps = diag.propensity_summary
     println("Propensity Score Diagnostics:")
@@ -456,25 +522,22 @@ function _estimate_lp_propensity(data, treatment, horizons, score_method, output
     println("  Max weighted SMD: $(round(diag.balance.max_weighted; digits=4))")
     println()
 
-    irf_df = DataFrame()
-    irf_df.horizon = 0:horizons
-    n_resp = size(irf_result.values, 2)
-    for vi in 1:n_resp
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-        irf_df[!, vname] = irf_result.values[:, vi]
-        irf_df[!, "$(vname)_lower"] = irf_result.ci_lower[:, vi]
-        irf_df[!, "$(vname)_upper"] = irf_result.ci_upper[:, vi]
-    end
+    irf_result = propensity_irf(model)
 
-    treat_name = _var_name(varnames, treatment)
-    output_result(irf_df; format=Symbol(format), output=output,
-                  title="Propensity Score LP: ATE of $treat_name")
+    _output_lp_coef_table(irf_result, varnames, horizons;
+        title="Propensity Score LP: ATE Estimates ($treat_name)", format=format, output=output)
+
+    storage_save_auto!("lp", Dict{String,Any}("type" => "propensity", "treatment" => treatment,
+        "horizons" => horizons, "n_vars" => n, "score_method" => score_method),
+        Dict{String,Any}("command" => "estimate lp --method=propensity", "data" => data))
 end
 
 function _estimate_lp_robust(data, treatment, horizons, score_method, output, format)
     Y, varnames = load_multivariate_data(data)
+    n = size(Y, 2)
+    treat_name = _var_name(varnames, treatment)
 
-    println("Estimating Doubly Robust LP: treatment=$treatment, horizons=$horizons, method=$score_method")
+    println("Estimating Doubly Robust LP: treatment=$treat_name, horizons=$horizons, method=$score_method")
     println()
 
     treatment_bool = Bool.(Y[:, treatment] .> median(Y[:, treatment]))
@@ -483,8 +546,7 @@ function _estimate_lp_robust(data, treatment, horizons, score_method, output, fo
     model = doubly_robust_lp(Y, treatment_bool, covariates, horizons;
         ps_method=Symbol(score_method))
 
-    irf_result = propensity_irf(model)
-
+    # Diagnostics
     diag = propensity_diagnostics(model)
     ps = diag.propensity_summary
     println("Doubly Robust Diagnostics:")
@@ -493,19 +555,14 @@ function _estimate_lp_robust(data, treatment, horizons, score_method, output, fo
     println("  Max weighted SMD: $(round(diag.balance.max_weighted; digits=4))")
     println()
 
-    irf_df = DataFrame()
-    irf_df.horizon = 0:horizons
-    n_resp = size(irf_result.values, 2)
-    for vi in 1:n_resp
-        vname = vi <= length(varnames) ? varnames[vi] : "var_$vi"
-        irf_df[!, vname] = irf_result.values[:, vi]
-        irf_df[!, "$(vname)_lower"] = irf_result.ci_lower[:, vi]
-        irf_df[!, "$(vname)_upper"] = irf_result.ci_upper[:, vi]
-    end
+    irf_result = propensity_irf(model)
 
-    treat_name = _var_name(varnames, treatment)
-    output_result(irf_df; format=Symbol(format), output=output,
-                  title="Doubly Robust LP: ATE of $treat_name")
+    _output_lp_coef_table(irf_result, varnames, horizons;
+        title="Doubly Robust LP: ATE Estimates ($treat_name)", format=format, output=output)
+
+    storage_save_auto!("lp", Dict{String,Any}("type" => "robust", "treatment" => treatment,
+        "horizons" => horizons, "n_vars" => n, "score_method" => score_method),
+        Dict{String,Any}("command" => "estimate lp --method=robust", "data" => data))
 end
 
 # ── ARIMA ──────────────────────────────────────────────────
@@ -972,5 +1029,60 @@ function _estimate_vecm(; data::String, lags::Int=2, rank::String="auto",
     storage_save_auto!("vecm", serialize_model(vecm),
         Dict{String,Any}("command" => "estimate vecm", "data" => data, "lags" => p,
                           "rank" => r, "method" => method))
+end
+
+# ── Panel VAR ─────────────────────────────────────────────
+
+function _estimate_pvar(; data::String, id_col::String="", time_col::String="",
+                         lags::Int=1, dependent::String="", predet::String="", exog::String="",
+                         transformation::String="fd", steps::String="twostep",
+                         method::String="gmm", system::Bool=false, collapse::Bool=false,
+                         min_lag_endo::Int=2, max_lag_endo::Int=99,
+                         output::String="", format::String="table")
+    isempty(id_col) && error("Panel VAR requires --id-col to specify the group identifier column")
+    isempty(time_col) && error("Panel VAR requires --time-col to specify the time period column")
+    validate_method(method, ["gmm", "feols"], "PVAR estimation method")
+    validate_method(transformation, ["fd", "fod"], "PVAR transformation")
+    validate_method(steps, ["onestep", "twostep"], "PVAR steps")
+
+    model, panel, varnames = _load_and_estimate_pvar(data, id_col, time_col, lags;
+        method=method, transformation=transformation, steps=steps,
+        system=system, collapse=collapse,
+        dependent=dependent, predet=predet, exog=exog,
+        min_lag_endo=min_lag_endo, max_lag_endo=max_lag_endo)
+
+    n = length(varnames)
+    p = lags
+
+    println("Estimating Panel VAR($p) with $n variables: $(join(varnames, ", "))")
+    println("  Method: $method, Transformation: $transformation, Steps: $steps")
+    println("  Groups: $(panel.n_groups), Observations: $(panel.T_obs)")
+    if system
+        println("  System GMM (level + difference equations)")
+    end
+    if collapse
+        println("  Instruments collapsed")
+    end
+    println()
+
+    report(model)
+
+    coef_df = _build_pvar_coef_table(model, varnames, p)
+    output_result(coef_df; format=Symbol(format), output=output,
+                  title="Panel VAR($p) Coefficients ($method)")
+
+    println()
+    output_kv(Pair{String,Any}[
+        "Groups" => panel.n_groups,
+        "Total observations" => panel.T_obs,
+        "Instruments" => model.n_instruments,
+        "Method" => string(model.method),
+        "Transformation" => string(model.transformation),
+    ]; format=format, title="Panel Summary")
+
+    storage_save_auto!("pvar", Dict{String,Any}("type" => "pvar", "method" => method,
+        "lags" => p, "n_vars" => n, "n_groups" => panel.n_groups),
+        Dict{String,Any}("command" => "estimate pvar", "data" => data,
+                          "id_col" => id_col, "time_col" => time_col, "lags" => p))
 end
 

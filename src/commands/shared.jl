@@ -464,6 +464,97 @@ function _var_forecast_point(B::AbstractMatrix, Y::AbstractMatrix, p::Int, horiz
     return forecasts
 end
 
+# ── Panel VAR Helpers ─────────────────────────────────────
+
+"""
+    _parse_varlist(str) -> Vector{String}
+
+Parse a comma-separated variable list string. Returns empty vector for empty input.
+"""
+function _parse_varlist(str::String)
+    isempty(str) && return String[]
+    return [strip(s) for s in split(str, ",") if !isempty(strip(s))]
+end
+
+"""
+    load_panel_data(data, id_col, time_col; varnames=nothing) -> PanelData
+
+Load CSV data and set panel structure using xtset().
+"""
+function load_panel_data(data::String, id_col::String, time_col::String)
+    df = load_data(data)
+    id_col in names(df) || error("id column '$id_col' not found in data (columns: $(join(names(df), ", ")))")
+    time_col in names(df) || error("time column '$time_col' not found in data (columns: $(join(names(df), ", ")))")
+    group_ids = Int.(df[!, id_col])
+    time_ids = Int.(df[!, time_col])
+    # Get numeric columns excluding id and time
+    varnames = [n for n in variable_names(df) if n != id_col && n != time_col]
+    isempty(varnames) && error("no numeric variables found after excluding id/time columns")
+    Y = Matrix{Float64}(df[!, varnames])
+    return xtset(Y, group_ids, time_ids; varnames=varnames)
+end
+
+"""
+    _load_and_estimate_pvar(data, id_col, time_col, lags; kwargs...) -> (model, panel, varnames)
+
+Combined load + estimate for Panel VAR.
+"""
+function _load_and_estimate_pvar(data::String, id_col::String, time_col::String,
+                                  lags::Int; method::String="gmm",
+                                  transformation::String="fd", steps::String="twostep",
+                                  system::Bool=false, collapse::Bool=false,
+                                  dependent::String="", predet::String="", exog::String="",
+                                  min_lag_endo::Int=2, max_lag_endo::Int=99)
+    panel = load_panel_data(data, id_col, time_col)
+
+    dep = _parse_varlist(dependent)
+    pre = _parse_varlist(predet)
+    exo = _parse_varlist(exog)
+
+    model = if method == "feols"
+        estimate_pvar_feols(panel, lags;
+            dependent=isempty(dep) ? nothing : dep,
+            exogenous=isempty(exo) ? nothing : exo)
+    else
+        estimate_pvar(panel, lags;
+            transformation=Symbol(transformation), steps=Symbol(steps),
+            system=system, collapse=collapse,
+            dependent=isempty(dep) ? nothing : dep,
+            predetermined=isempty(pre) ? nothing : pre,
+            exogenous=isempty(exo) ? nothing : exo,
+            min_lag_endo=min_lag_endo, max_lag_endo=max_lag_endo)
+    end
+    return model, panel, panel.varnames
+end
+
+"""
+    _build_pvar_coef_table(model, varnames, p) -> DataFrame
+
+Build a coefficient table for Panel VAR model with SE and p-values.
+"""
+function _build_pvar_coef_table(model, varnames::Vector{String}, p::Int)
+    n = length(varnames)
+    n_rows = size(model.Phi, 1)
+    row_names = String[]
+    for lag in 1:p
+        for v in varnames
+            push!(row_names, "$(v)_L$(lag)")
+        end
+    end
+    if n_rows > n * p
+        push!(row_names, "const")
+    end
+
+    coef_df = DataFrame()
+    for (vi, vname) in enumerate(varnames)
+        coef_df[!, Symbol("$(vname)_coef")] = round.(model.Phi[1:length(row_names), vi]; digits=6)
+        coef_df[!, Symbol("$(vname)_se")] = round.(model.se[1:length(row_names), vi]; digits=6)
+        coef_df[!, Symbol("$(vname)_pval")] = round.(model.pvalues[1:length(row_names), vi]; digits=4)
+    end
+    insertcols!(coef_df, 1, :parameter => row_names)
+    return coef_df
+end
+
 """
     _resolve_from_tag(from_tag) → (data_path, stored_params)
 

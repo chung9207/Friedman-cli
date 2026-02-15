@@ -4,6 +4,7 @@
 module MacroEconometricModels
 
 using LinearAlgebra: I, diagm
+using Statistics: mean
 
 # ─── Core Types ───────────────────────────────────────────
 
@@ -71,10 +72,10 @@ end
 
 struct LPModel{T}
     Y::Matrix{T}; shock_var::Int; horizon::Int; lags::Int
-    B::Matrix{T}; residuals::Matrix{T}; vcov::Matrix{T}
+    B::Matrix{T}; residuals::Matrix{T}; vcov::Matrix{T}; T_eff::Int
 end
 struct LPIVModel{T}
-    Y::Matrix{T}; instruments::Matrix{T}; first_stage_F::T; horizon::Int
+    Y::Matrix{T}; instruments::Matrix{T}; first_stage_F::T; horizon::Int; T_eff::Int
 end
 struct SmoothLPModel{T}
     Y::Matrix{T}; lambda::T; horizon::Int
@@ -457,7 +458,7 @@ end
 # LP functions
 function estimate_lp(Y, shock_var, horizon; lags=4, cov_type=:newey_west)
     T_obs, n = size(Y)
-    LPModel(Y, shock_var, horizon, lags, ones(lags+1, n)*0.1, ones(T_obs-lags, n)*0.01, Matrix{Float64}(I(n)) * 0.01)
+    LPModel(Y, shock_var, horizon, lags, ones(lags+1, n)*0.1, ones(T_obs-lags, n)*0.01, Matrix{Float64}(I(n)) * 0.01, T_obs-lags)
 end
 function lp_irf(model::LPModel; conf_level=0.95)
     n = size(model.Y, 2); h = model.horizon + 1
@@ -465,7 +466,8 @@ function lp_irf(model::LPModel; conf_level=0.95)
     LPImpulseResponse(vals, vals .- 0.5, vals .+ 0.5, abs.(ones(h, n)) * 0.1)
 end
 function estimate_lp_iv(Y, shock_var, Z, horizon; lags=4, cov_type=:newey_west)
-    LPIVModel(Y, Z, 15.0, horizon)
+    T_obs = size(Y, 1)
+    LPIVModel(Y, Z, 15.0, horizon, T_obs-4)
 end
 function lp_iv_irf(model::LPIVModel; conf_level=0.95)
     n = size(model.Y, 2); h = model.horizon + 1
@@ -517,7 +519,7 @@ function structural_lp(Y, horizon; method=:cholesky, lags=4, var_lags=4,
     ci_hi = ci_type == :none ? nothing : irf_vals .+ 0.5
     irf_res = ImpulseResponse(irf_vals, ci_lo, ci_hi)
     Q = Matrix{Float64}(I(n))
-    lp_models = [LPModel(Y, i, horizon, lags, ones(5, n)*0.1, ones(T_obs-lags, n)*0.01, Matrix{Float64}(I(n))*0.01) for i in 1:n]
+    lp_models = [LPModel(Y, i, horizon, lags, ones(5, n)*0.1, ones(T_obs-lags, n)*0.01, Matrix{Float64}(I(n))*0.01, T_obs-lags) for i in 1:n]
     StructuralLP(irf_res, model, Q, method, ones(horizon+1, n, n)*0.1, lp_models)
 end
 function lp_fevd(slp::StructuralLP, horizons::Int; estimator=:R2, n_boot=200, conf_level=0.95)
@@ -729,6 +731,238 @@ function granger_causality_vecm(vecm::VECMModel, cause::Int, effect::Int)
         cause, effect)
 end
 
+# ─── Panel VAR Types ────────────────────────────────────────
+
+struct PanelData{T<:Real}
+    data::Matrix{T}; varnames::Vector{String}; group_id::Vector{Int}; time_id::Vector{Int}
+    n_groups::Int; n_vars::Int; T_obs::Int; balanced::Bool
+end
+
+struct PVARModel{T<:Real}
+    Phi::Matrix{T}; Sigma::Matrix{T}; se::Matrix{T}; pvalues::Matrix{T}
+    m::Int; p::Int; method::Symbol; transformation::Symbol; steps::Symbol
+    n_groups::Int; n_periods::Int; n_obs::Int; n_instruments::Int
+end
+
+struct PVARStability{T<:Real}
+    eigenvalues::Vector{Complex{T}}; moduli::Vector{T}; is_stable::Bool
+end
+
+struct PVARTestResult{T<:Real}
+    test_name::String; statistic::T; pvalue::T; df::Int; n_instruments::Int; n_params::Int
+end
+
+struct GrangerCausalityResult{T<:Real}
+    statistic::T; pvalue::T; df::Int; test_type::Symbol; cause::String; effect::String
+end
+
+struct LRTestResult{T<:Real}
+    statistic::T; pvalue::T; df::Int; loglik_restricted::T; loglik_unrestricted::T
+end
+
+struct LMTestResult{T<:Real}
+    statistic::T; pvalue::T; df::Int; nobs::Int; score_norm::T
+end
+
+# ─── Panel VAR Functions ────────────────────────────────────
+
+function xtset(data::AbstractMatrix, group_col::AbstractVector, time_col::AbstractVector;
+               varnames=nothing)
+    T_obs, n = size(data)
+    groups = sort(unique(group_col))
+    n_groups = length(groups)
+    vn = isnothing(varnames) ? ["var$i" for i in 1:n] : varnames
+    PanelData(Float64.(data), vn, Int.(group_col), Int.(time_col),
+              n_groups, n, T_obs, true)
+end
+
+isbalanced(pd::PanelData) = pd.balanced
+ngroups(pd::PanelData) = pd.n_groups
+
+function estimate_pvar(panel::PanelData, p::Int;
+                       transformation=:fd, steps=:twostep, system=false, collapse=false,
+                       dependent=nothing, predetermined=nothing, exogenous=nothing,
+                       min_lag_endo=2, max_lag_endo=99)
+    n = panel.n_vars
+    k = n * p + 1
+    Phi = ones(k, n) * 0.3
+    Sigma = Matrix{Float64}(I(n)) * 0.01
+    se = ones(k, n) * 0.05
+    pvals = ones(k, n) * 0.02
+    n_inst = system ? 2 * k : k + p
+    PVARModel(Phi, Sigma, se, pvals, n, p, :gmm, transformation, steps,
+              panel.n_groups, panel.T_obs ÷ panel.n_groups, panel.T_obs, n_inst)
+end
+
+function estimate_pvar_feols(panel::PanelData, p::Int;
+                              dependent=nothing, exogenous=nothing)
+    n = panel.n_vars
+    k = n * p + 1
+    Phi = ones(k, n) * 0.25
+    Sigma = Matrix{Float64}(I(n)) * 0.01
+    se = ones(k, n) * 0.04
+    pvals = ones(k, n) * 0.01
+    PVARModel(Phi, Sigma, se, pvals, n, p, :feols, :fd, :onestep,
+              panel.n_groups, panel.T_obs ÷ panel.n_groups, panel.T_obs, 0)
+end
+
+coef(m::PVARModel) = m.Phi
+report(::PVARModel) = nothing
+
+function pvar_oirf(model::PVARModel, horizon::Int)
+    n = model.m
+    vals = ones(horizon + 1, n, n) * 0.1
+    ImpulseResponse(vals, nothing, nothing)
+end
+
+function pvar_girf(model::PVARModel, horizon::Int)
+    n = model.m
+    vals = ones(horizon + 1, n, n) * 0.12
+    ImpulseResponse(vals, nothing, nothing)
+end
+
+function pvar_bootstrap_irf(model::PVARModel, horizon::Int;
+                             n_boot=500, conf_level=0.95, irf_type=:oirf)
+    n = model.m
+    vals = ones(horizon + 1, n, n) * 0.1
+    ci_lo = vals .- 0.5
+    ci_hi = vals .+ 0.5
+    ImpulseResponse(vals, ci_lo, ci_hi)
+end
+
+function pvar_fevd(model::PVARModel, horizon::Int)
+    n = model.m
+    props = ones(n, n, horizon) / n
+    FEVD(props, props)
+end
+
+function pvar_stability(model::PVARModel)
+    n = model.m * model.p
+    eigs = [0.5 + 0.1im, 0.5 - 0.1im, 0.3 + 0.0im]
+    moduli = abs.(eigs)
+    PVARStability(eigs, moduli, all(moduli .< 1.0))
+end
+
+function pvar_hansen_j(model::PVARModel)
+    PVARTestResult("Hansen J", 8.5, 0.38, model.n_instruments - model.m * model.p - model.m,
+                   model.n_instruments, model.m * model.p + model.m)
+end
+
+function pvar_mmsc(panel::PanelData, max_p::Int; criterion=:bic)
+    results = [(p=p, bic=-100.0+p, aic=-110.0+p, hqic=-105.0+p) for p in 1:max_p]
+    (results=results, optimal_lag=1, criterion=criterion)
+end
+
+function pvar_lag_selection(panel::PanelData, max_p::Int; criterion=:bic)
+    results = [(p=p, bic=-100.0+p, aic=-110.0+p, hqic=-105.0+p) for p in 1:max_p]
+    (results=results, optimal_lag=1, criterion=criterion)
+end
+
+# Enhanced Granger causality for VAR
+function granger_test(model::VARModel, cause::Int, effect::Int; lags=nothing)
+    GrangerCausalityResult(12.5, 0.003, 2, :pairwise, "var$cause", "var$effect")
+end
+
+function granger_test_all(model::VARModel; lags=nothing)
+    n = size(model.Y, 2)
+    results = GrangerCausalityResult[]
+    for i in 1:n, j in 1:n
+        i == j && continue
+        push!(results, GrangerCausalityResult(10.0 + i, 0.01, 2, :pairwise, "var$i", "var$j"))
+    end
+    results
+end
+
+# LR and LM tests
+function lr_test(m_restricted::VARModel, m_unrestricted::VARModel)
+    ll_r = -510.0
+    ll_u = -500.0
+    stat = 2 * (ll_u - ll_r)
+    LRTestResult(stat, 0.02, 3, ll_r, ll_u)
+end
+
+function lm_test(m_restricted::VARModel, m_unrestricted::VARModel)
+    LMTestResult(15.0, 0.005, 3, size(m_restricted.Y, 1), 3.87)
+end
+
+# ─── Filter Types & Functions ─────────────────────────────
+
+struct HPFilterResult{T}
+    trend::Vector{T}; cycle::Vector{T}; lambda::T; T_obs::Int
+end
+
+struct HamiltonFilterResult{T}
+    trend::Vector{T}; cycle::Vector{T}; beta::Vector{T}; h::Int; p::Int; T_obs::Int; valid_range::UnitRange{Int}
+end
+
+struct BeveridgeNelsonResult{T}
+    permanent::Vector{T}; transitory::Vector{T}; drift::T; long_run_multiplier::T; arima_order::Tuple{Int,Int,Int}; T_obs::Int
+end
+
+struct BaxterKingResult{T}
+    cycle::Vector{T}; trend::Vector{T}; weights::Vector{T}; pl::Int; pu::Int; K::Int; T_obs::Int; valid_range::UnitRange{Int}
+end
+
+struct BoostedHPResult{T}
+    trend::Vector{T}; cycle::Vector{T}; lambda::T; iterations::Int; stopping::Symbol; bic_path::Vector{T}; adf_pvalues::Vector{T}; T_obs::Int
+end
+
+trend(r::HPFilterResult) = r.trend
+cycle(r::HPFilterResult) = r.cycle
+trend(r::HamiltonFilterResult) = r.trend
+cycle(r::HamiltonFilterResult) = r.cycle
+trend(r::BeveridgeNelsonResult) = r.permanent
+cycle(r::BeveridgeNelsonResult) = r.transitory
+trend(r::BaxterKingResult) = r.trend
+cycle(r::BaxterKingResult) = r.cycle
+trend(r::BoostedHPResult) = r.trend
+cycle(r::BoostedHPResult) = r.cycle
+
+function hp_filter(y::AbstractVector; lambda=1600.0)
+    T = length(y)
+    t = cumsum(ones(T)) .* mean(y) / T
+    c = y .- t
+    HPFilterResult(t, c, Float64(lambda), T)
+end
+
+function hamilton_filter(y::AbstractVector; h=8, p=4)
+    T = length(y)
+    start = h + p
+    valid = (start+1):T
+    t = cumsum(ones(T)) .* mean(y) / T
+    c = y .- t
+    beta = ones(p + 1) * 0.1
+    HamiltonFilterResult(t, c, beta, h, p, T, valid)
+end
+
+function beveridge_nelson(y::AbstractVector; p=:auto, q=:auto, max_terms=500)
+    T = length(y)
+    t = cumsum(ones(T)) .* mean(y) / T
+    c = y .- t
+    p_val = p == :auto ? 1 : p
+    q_val = q == :auto ? 0 : q
+    BeveridgeNelsonResult(t, c, 0.01, 1.5, (p_val, 0, q_val), T)
+end
+
+function baxter_king(y::AbstractVector; pl=6, pu=32, K=12)
+    T = length(y)
+    valid = (K+1):(T-K)
+    t = cumsum(ones(T)) .* mean(y) / T
+    c = y .- t
+    weights = ones(2K + 1) / (2K + 1)
+    BaxterKingResult(c, t, weights, pl, pu, K, T, valid)
+end
+
+function boosted_hp(y::AbstractVector; lambda=1600.0, stopping=:BIC, max_iter=100, sig_p=0.05)
+    T = length(y)
+    t = cumsum(ones(T)) .* mean(y) / T
+    c = y .- t
+    iters = 3
+    bic_path = [10.0, 8.0, 9.0]
+    adf_pvals = [0.5, 0.1, 0.01]
+    BoostedHPResult(t, c, Float64(lambda), iters, stopping, bic_path, adf_pvals, T)
+end
+
 # ─── Exports ──────────────────────────────────────────────
 
 export VARModel, MockChains, BVARPosterior, MinnesotaHyperparameters
@@ -746,6 +980,9 @@ export ADFResult, KPSSResult, PPResult, ZAResult, NgPerronResult, JohansenResult
 export GMMModel
 export ARCHModel, GARCHModel, EGARCHModel, GJRGARCHModel, SVModel, VolatilityForecast
 export VECMModel, VECMForecast, VECMGrangerResult
+export PanelData, PVARModel, PVARStability, PVARTestResult
+export GrangerCausalityResult, LRTestResult, LMTestResult
+export HPFilterResult, HamiltonFilterResult, BeveridgeNelsonResult, BaxterKingResult, BoostedHPResult
 
 export select_lag_order, estimate_var, estimate_bvar, posterior_mean_model, posterior_median_model
 export optimize_hyperparameters, coef, loglikelihood, stderror, predict, residuals, report
@@ -772,5 +1009,142 @@ export identify_markov_switching, identify_garch, identify_smooth_transition, id
 export normality_test_suite, test_identification_strength, test_shock_gaussianity
 export test_shock_independence, test_overidentification, test_gaussian_vs_nongaussian
 export estimate_vecm, select_vecm_rank, to_var, cointegrating_rank, granger_causality_vecm
+export xtset, isbalanced, ngroups, estimate_pvar, estimate_pvar_feols
+export pvar_oirf, pvar_girf, pvar_bootstrap_irf, pvar_fevd, pvar_stability
+export pvar_hansen_j, pvar_mmsc, pvar_lag_selection
+export granger_test, granger_test_all, lr_test, lm_test
+export hp_filter, hamilton_filter, beveridge_nelson, baxter_king, boosted_hp, trend, cycle
+
+# ─── Data Module Types & Functions ────────────────────────
+
+struct TimeSeriesData{T<:Real}
+    data::Matrix{T}; varnames::Vector{String}; frequency::Symbol
+    tcode::Vector{Int}; time_index::Vector{Int}; desc::String; vardesc::Vector{String}
+end
+
+struct DataDiagnostic
+    n_nan::Vector{Int}; n_inf::Vector{Int}; is_constant::Vector{Bool}
+    is_short::Bool; is_clean::Bool
+end
+
+struct DataSummary{T<:Real}
+    n::Int; mean::Vector{T}; std::Vector{T}; min::Vector{T}
+    p25::Vector{T}; median::Vector{T}; p75::Vector{T}; max::Vector{T}
+    skewness::Vector{T}; kurtosis::Vector{T}
+end
+
+function load_example(name::Symbol)
+    if name == :fred_md
+        n_vars = 126; T_obs = 804
+        data = randn(T_obs, n_vars) .+ 1.0
+        vn = ["INDPRO", "CPIAUCSL", "FEDFUNDS", ["var$i" for i in 4:n_vars]...]
+        tc = vcat([5, 5, 1], [1 for _ in 4:n_vars])
+        vd = vcat(["Industrial Production", "CPI All Urban", "Fed Funds Rate"],
+                  ["Variable $i" for i in 4:n_vars])
+        TimeSeriesData(data, vn, :monthly, tc, collect(1:T_obs),
+            "FRED-MD Monthly Database (2024 vintage)", vd)
+    elseif name == :fred_qd
+        n_vars = 245; T_obs = 268
+        data = randn(T_obs, n_vars) .+ 1.0
+        vn = ["GDP", "PCECC96", ["var$i" for i in 3:n_vars]...]
+        tc = vcat([5, 5], [1 for _ in 3:n_vars])
+        vd = vcat(["Real GDP", "Real PCE"], ["Variable $i" for i in 3:n_vars])
+        TimeSeriesData(data, vn, :quarterly, tc, collect(1:T_obs),
+            "FRED-QD Quarterly Database", vd)
+    elseif name == :pwt
+        n_vars = 42; n_countries = 38; T_per = 74
+        T_obs = n_countries * T_per
+        data = randn(T_obs, n_vars) .+ 1.0
+        vn = ["rgdpna", "pop", ["var$i" for i in 3:n_vars]...]
+        group_ids = repeat(1:n_countries, inner=T_per)
+        time_ids = repeat(1:T_per, outer=n_countries)
+        PanelData(data, vn, group_ids, time_ids, n_countries, n_vars, T_obs, true)
+    else
+        error("unknown dataset: $name (available: fred_md, fred_qd, pwt)")
+    end
+end
+
+to_matrix(d::TimeSeriesData) = d.data
+to_matrix(d::PanelData) = d.data
+varnames(d::TimeSeriesData) = d.varnames
+varnames(d::PanelData) = d.varnames
+frequency(d::TimeSeriesData) = d.frequency
+desc(d::TimeSeriesData) = d.desc
+vardesc(d::TimeSeriesData) = d.vardesc
+nobs(d::TimeSeriesData) = size(d.data, 1)
+nvars(d::TimeSeriesData) = size(d.data, 2)
+
+function describe_data(d::TimeSeriesData)
+    T_obs, n = size(d.data)
+    m = vec(mean(d.data; dims=1))
+    s = vec(std_mock(d.data))
+    mn = vec(minimum(d.data; dims=1))
+    mx = vec(maximum(d.data; dims=1))
+    p25 = m .- 0.67 .* s
+    med = copy(m)
+    p75 = m .+ 0.67 .* s
+    sk = fill(0.1, n)
+    ku = fill(3.0, n)
+    DataSummary(T_obs, m, s, mn, p25, med, p75, mx, sk, ku)
+end
+
+# Simple std without Distributions dependency
+function std_mock(X::AbstractMatrix)
+    T_obs = size(X, 1)
+    m = mean(X; dims=1)
+    sqrt.(sum((X .- m).^2; dims=1) ./ max(1, T_obs - 1))
+end
+
+function diagnose(d::TimeSeriesData)
+    T_obs, n = size(d.data)
+    n_nan = [count(isnan, d.data[:, i]) for i in 1:n]
+    n_inf = [count(isinf, d.data[:, i]) for i in 1:n]
+    is_const = [all(d.data[:, i] .== d.data[1, i]) for i in 1:n]
+    is_short = T_obs < 30
+    is_clean = all(n_nan .== 0) && all(n_inf .== 0) && !any(is_const) && !is_short
+    DataDiagnostic(n_nan, n_inf, is_const, is_short, is_clean)
+end
+
+function fix(d::TimeSeriesData; method=:listwise)
+    # Mock: return same data (pretend it was cleaned)
+    TimeSeriesData(copy(d.data), d.varnames, d.frequency, d.tcode, d.time_index, d.desc, d.vardesc)
+end
+
+function apply_tcode(d::TimeSeriesData, codes::Vector{Int})
+    # Mock: return same data (pretend transformations applied)
+    TimeSeriesData(copy(d.data), d.varnames, d.frequency, codes, d.time_index, d.desc, d.vardesc)
+end
+
+function validate_for_model(d::TimeSeriesData, model_type::Symbol)
+    n = nvars(d)
+    T_obs = nobs(d)
+    if model_type in (:arima, :arch, :garch, :egarch, :gjr_garch, :sv) && n > 1
+        error("$model_type requires univariate data, got $n variables")
+    end
+    if T_obs < 10
+        error("insufficient observations ($T_obs) for $model_type estimation")
+    end
+    nothing
+end
+
+function apply_filter(y::AbstractVector, method::Symbol; kwargs...)
+    if method == :hp
+        hp_filter(y; lambda=get(kwargs, :lambda, 1600.0))
+    elseif method == :hamilton
+        hamilton_filter(y; h=get(kwargs, :horizon, 8), p=get(kwargs, :lags, 4))
+    elseif method == :bn
+        beveridge_nelson(y)
+    elseif method == :bk
+        baxter_king(y; pl=get(kwargs, :pl, 6), pu=get(kwargs, :pu, 32), K=get(kwargs, :K, 12))
+    elseif method == :bhp
+        boosted_hp(y; lambda=get(kwargs, :lambda, 1600.0))
+    else
+        error("unknown filter method: $method")
+    end
+end
+
+export TimeSeriesData, DataDiagnostic, DataSummary
+export load_example, to_matrix, varnames, frequency, desc, vardesc, nobs, nvars
+export describe_data, diagnose, fix, apply_tcode, validate_for_model, apply_filter
 
 end # module
