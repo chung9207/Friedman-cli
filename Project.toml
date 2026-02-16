@@ -16,7 +16,7 @@ TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
 [compat]
 BSON = "0.3.9"
-MacroEconometricModels = "0.2.1"
+MacroEconometricModels = "0.2.2"
 julia = "1.12"
 
 [extras]

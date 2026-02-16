@@ -17,8 +17,10 @@ friedman
 ├── hd           var | bvar | lp | vecm
 ├── forecast     var | bvar | lp | arima | static | dynamic | gdfm |
 │                arch | garch | egarch | gjr_garch | sv | vecm
-├── predict      var | bvar | arima | vecm
-├── residuals    var | bvar | arima | vecm
+├── predict      var | bvar | arima | vecm | static | dynamic | gdfm |
+│                arch | garch | egarch | gjr_garch | sv
+├── residuals    var | bvar | arima | vecm | static | dynamic | gdfm |
+│                arch | garch | egarch | gjr_garch | sv
 ├── filter       hp | hamilton | bn | bk | bhp
 ├── data         list | load | describe | diagnose | fix | transform | filter | validate
 ├── list         models | results

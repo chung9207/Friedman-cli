@@ -4,7 +4,7 @@
 [![codecov](https://codecov.io/gh/chung9207/Friedman-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/chung9207/Friedman-cli)
 [![Documentation](https://github.com/chung9207/Friedman-cli/actions/workflows/Documentation.yml/badge.svg)](https://chung9207.github.io/Friedman-cli/dev/)
 
-Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl) (v0.2.1).
+Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl) (v0.2.2).
 
 13 top-level commands, ~97 subcommands. Action-first CLI: commands are organized by action (`estimate`, `irf`, `forecast`, ...) rather than by model type.
 
@@ -38,8 +38,8 @@ julia --project bin/friedman [command] [subcommand] [args...] [options...]
 | `fevd` | `var` `bvar` `lp` `vecm` `pvar` | Forecast error variance decomposition |
 | `hd` | `var` `bvar` `lp` `vecm` | Historical decomposition |
 | `forecast` | `var` `bvar` `lp` `arima` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `vecm` | Forecasting (13 model types) |
-| `predict` | `var` `bvar` `arima` `vecm` | In-sample fitted values |
-| `residuals` | `var` `bvar` `arima` `vecm` | Model residuals |
+| `predict` | `var` `bvar` `arima` `vecm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` | In-sample fitted values (12 model types) |
+| `residuals` | `var` `bvar` `arima` `vecm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` | Model residuals (12 model types) |
 | `filter` | `hp` `hamilton` `bn` `bk` `bhp` | Time series filters |
 | `data` | `list` `load` `describe` `diagnose` `fix` `transform` `filter` `validate` | Data management |
 | `list` | `models` `results` | List stored models and results |
@@ -298,12 +298,16 @@ friedman predict var data.csv --lags=2
 friedman predict bvar data.csv --lags=4 --draws=2000
 friedman predict arima data.csv --p=1 --d=1 --q=1
 friedman predict vecm data.csv --rank=1
+friedman predict static data.csv --nfactors=3
+friedman predict garch data.csv --column=1 --p=1 --q=1
 
 # Model residuals
 friedman residuals var data.csv --lags=2
 friedman residuals bvar data.csv --lags=4 --draws=2000
 friedman residuals arima data.csv --p=1 --d=1 --q=1
 friedman residuals vecm data.csv --rank=1
+friedman residuals static data.csv --nfactors=3
+friedman residuals garch data.csv --column=1 --p=1 --q=1
 
 # From stored model tag
 friedman predict var001
