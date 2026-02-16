@@ -651,7 +651,11 @@ function _arima_coef_table(model; format::String="table", output::String="", tit
 
     coef_df = try
         se = stderror(model)
-        DataFrame(parameter=param_names, estimate=round.(c; digits=6), std_error=round.(se; digits=6))
+        z = c ./ se
+        pv = [2.0 * (1.0 - _normal_cdf(abs(zi))) for zi in z]
+        DataFrame(parameter=param_names, estimate=round.(c; digits=6),
+                  std_error=round.(se; digits=6),
+                  z_stat=round.(z; digits=3), p_value=round.(pv; digits=4))
     catch
         DataFrame(parameter=param_names, estimate=round.(c; digits=6))
     end

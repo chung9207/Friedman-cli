@@ -7,7 +7,7 @@ function register_irf_commands!()
             Option("lags"; short="p", type=Int, default=nothing, description="Lag order (default: auto)"),
             Option("shock"; type=Int, default=1, description="Shock variable index (1-based)"),
             Option("horizons"; short="h", type=Int, default=20, description="IRF horizon"),
-            Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun|arias|fastica|jade|sobi|dcov|hsic|student_t|mixture_normal|pml|skew_normal|markov_switching|garch_id"),
+            Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun|arias|uhlig|fastica|jade|sobi|dcov|hsic|student_t|mixture_normal|pml|skew_normal|markov_switching|garch_id"),
             Option("ci"; type=String, default="bootstrap", description="none|bootstrap|theoretical"),
             Option("replications"; type=Int, default=1000, description="Bootstrap replications"),
             Option("config"; type=String, default="", description="TOML config for identification"),
@@ -118,6 +118,18 @@ function _irf_var(; data::String, lags=nothing, shock::Int=1, horizons::Int=20,
     # Arias identification handled separately
     if id == "arias"
         _var_irf_arias(model, config, horizons, varnames, shock; format=format, output=output)
+        storage_save_auto!("irf", Dict{String,Any}("type" => "var", "id" => "arias",
+            "shock" => shock, "horizons" => horizons, "n_vars" => n),
+            Dict{String,Any}("command" => "irf var", "data" => data))
+        return
+    end
+
+    # Uhlig identification handled separately
+    if id == "uhlig"
+        _var_irf_uhlig(model, config, horizons, varnames, shock; format=format, output=output)
+        storage_save_auto!("irf", Dict{String,Any}("type" => "var", "id" => "uhlig",
+            "shock" => shock, "horizons" => horizons, "n_vars" => n),
+            Dict{String,Any}("command" => "irf var", "data" => data))
         return
     end
 
@@ -183,6 +195,48 @@ function _var_irf_arias(model, config::String, horizons::Int,
     shock_name = _shock_name(varnames, shock)
     output_result(irf_df; format=Symbol(format), output=output,
                   title="IRF to $shock_name shock (Arias et al. identification)")
+end
+
+function _var_irf_uhlig(model, config::String, horizons::Int,
+                        varnames::Vector{String}, shock::Int; format::String="table", output::String="")
+    isempty(config) && error("Uhlig identification requires a --config file with restrictions")
+    cfg = load_config(config)
+    id_cfg = get(cfg, "identification", Dict())
+
+    zeros_list = get(id_cfg, "zero_restrictions", [])
+    signs_list = get(id_cfg, "sign_restrictions", [])
+
+    n = nvars(model)
+    zero_restrs = [zero_restriction(r["var"], r["shock"]; horizon=r["horizon"]) for r in zeros_list]
+    sign_restrs = [sign_restriction(r["var"], r["shock"], Symbol(r["sign"]); horizon=r["horizon"]) for r in signs_list]
+
+    restrictions = SVARRestrictions(n; zeros=zero_restrs, signs=sign_restrs)
+
+    uhlig_params = get_uhlig_params(cfg)
+    result = identify_uhlig(model, restrictions, horizons;
+        n_starts=uhlig_params["n_starts"], n_refine=uhlig_params["n_refine"],
+        max_iter_coarse=uhlig_params["max_iter_coarse"], max_iter_fine=uhlig_params["max_iter_fine"],
+        tol_coarse=uhlig_params["tol_coarse"], tol_fine=uhlig_params["tol_fine"])
+
+    # Convergence info
+    println("Uhlig identification: penalty=$(round(result.penalty; digits=6)), converged=$(result.converged)")
+    for (si, sp) in enumerate(result.shock_penalties)
+        println("  Shock $si penalty: $(round(sp; digits=6))")
+    end
+    println()
+
+    irf_vals = result.irf  # H x n x n
+    n_h = size(irf_vals, 1)
+
+    irf_df = DataFrame()
+    irf_df.horizon = 0:(n_h-1)
+    for (vi, vname) in enumerate(varnames)
+        irf_df[!, vname] = irf_vals[:, vi, shock]
+    end
+
+    shock_name = _shock_name(varnames, shock)
+    output_result(irf_df; format=Symbol(format), output=output,
+                  title="IRF to $shock_name shock (Uhlig identification)")
 end
 
 # ── BVAR IRF ─────────────────────────────────────────────

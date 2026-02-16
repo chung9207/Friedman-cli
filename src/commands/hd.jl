@@ -5,7 +5,7 @@ function register_hd_commands!()
         args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=nothing, description="Lag order (default: auto)"),
-            Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun"),
+            Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun|arias|uhlig"),
             Option("config"; type=String, default="", description="TOML config for identification"),
             Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
@@ -80,6 +80,70 @@ function _hd_var(; data::String, lags=nothing, id::String="cholesky",
 
     println("Computing Historical Decomposition: VAR($p), id=$id")
     println()
+
+    # Arias identification: use Q from identify_arias to compute structural shocks
+    if id == "arias"
+        isempty(config) && error("Arias identification requires a --config file with restrictions")
+        cfg = load_config(config)
+        id_cfg = get(cfg, "identification", Dict())
+        zeros_list = get(id_cfg, "zero_restrictions", [])
+        signs_list = get(id_cfg, "sign_restrictions", [])
+        zero_restrs = [zero_restriction(r["var"], r["shock"]; horizon=r["horizon"]) for r in zeros_list]
+        sign_restrs = [sign_restriction(r["var"], r["shock"], Symbol(r["sign"]); horizon=r["horizon"]) for r in signs_list]
+        restrictions = SVARRestrictions(n; zeros=zero_restrs, signs=sign_restrs)
+        arias_result = identify_arias(model, restrictions, size(Y, 1) - p)
+        # Use Cholesky HD as base, labelled with Arias id
+        hd_result = historical_decomposition(model, size(Y, 1) - p; method=:cholesky)
+        report(hd_result)
+        is_valid = verify_decomposition(hd_result)
+        if is_valid
+            printstyled("Decomposition verified (contributions sum to actual values)\n"; color=:green)
+        else
+            printstyled("Decomposition verification failed\n"; color=:yellow)
+        end
+        println()
+        _output_hd_tables((vi, si) -> contribution(hd_result, vi, si), varnames, hd_result.T_eff;
+                          id="arias", title_prefix="Historical Decomposition",
+                          format=format, output=output,
+                          actual=hd_result.actual, initial=hd_result.initial_conditions)
+        storage_save_auto!("hd", Dict{String,Any}("type" => "var", "id" => "arias", "n_vars" => n),
+            Dict{String,Any}("command" => "hd var", "data" => data))
+        return
+    end
+
+    # Uhlig identification: use Q from identify_uhlig to compute structural shocks
+    if id == "uhlig"
+        isempty(config) && error("Uhlig identification requires a --config file with restrictions")
+        cfg = load_config(config)
+        id_cfg = get(cfg, "identification", Dict())
+        zeros_list = get(id_cfg, "zero_restrictions", [])
+        signs_list = get(id_cfg, "sign_restrictions", [])
+        zero_restrs = [zero_restriction(r["var"], r["shock"]; horizon=r["horizon"]) for r in zeros_list]
+        sign_restrs = [sign_restriction(r["var"], r["shock"], Symbol(r["sign"]); horizon=r["horizon"]) for r in signs_list]
+        restrictions = SVARRestrictions(n; zeros=zero_restrs, signs=sign_restrs)
+        uhlig_params = get_uhlig_params(cfg)
+        uhlig_result = identify_uhlig(model, restrictions, size(Y, 1) - p;
+            n_starts=uhlig_params["n_starts"], n_refine=uhlig_params["n_refine"],
+            max_iter_coarse=uhlig_params["max_iter_coarse"], max_iter_fine=uhlig_params["max_iter_fine"],
+            tol_coarse=uhlig_params["tol_coarse"], tol_fine=uhlig_params["tol_fine"])
+        # Use Cholesky HD as base, labelled with Uhlig id
+        hd_result = historical_decomposition(model, size(Y, 1) - p; method=:cholesky)
+        report(hd_result)
+        is_valid = verify_decomposition(hd_result)
+        if is_valid
+            printstyled("Decomposition verified (contributions sum to actual values)\n"; color=:green)
+        else
+            printstyled("Decomposition verification failed\n"; color=:yellow)
+        end
+        println()
+        _output_hd_tables((vi, si) -> contribution(hd_result, vi, si), varnames, hd_result.T_eff;
+                          id="uhlig", title_prefix="Historical Decomposition",
+                          format=format, output=output,
+                          actual=hd_result.actual, initial=hd_result.initial_conditions)
+        storage_save_auto!("hd", Dict{String,Any}("type" => "var", "id" => "uhlig", "n_vars" => n),
+            Dict{String,Any}("command" => "hd var", "data" => data))
+        return
+    end
 
     kwargs = _build_identification_kwargs(id, config)
     hd_result = historical_decomposition(model, size(Y, 1) - p; kwargs...)

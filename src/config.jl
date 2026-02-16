@@ -106,6 +106,24 @@ function get_nongaussian(config::Dict)
     return result
 end
 
+"""
+    get_uhlig_params(config) → Dict
+
+Extract Uhlig SVAR identification tuning parameters from a config dict.
+"""
+function get_uhlig_params(config::Dict)
+    id_cfg = get(config, "identification", Dict())
+    uhlig = get(id_cfg, "uhlig", Dict())
+    Dict{String,Any}(
+        "n_starts"        => get(uhlig, "n_starts", 50),
+        "n_refine"        => get(uhlig, "n_refine", 10),
+        "max_iter_coarse" => get(uhlig, "max_iter_coarse", 500),
+        "max_iter_fine"   => get(uhlig, "max_iter_fine", 2000),
+        "tol_coarse"      => get(uhlig, "tol_coarse", 1e-4),
+        "tol_fine"        => get(uhlig, "tol_fine", 1e-8),
+    )
+end
+
 # Internal helpers
 
 function _parse_matrix(rows::Vector)
