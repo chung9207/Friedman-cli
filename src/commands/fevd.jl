@@ -6,7 +6,7 @@ function register_fevd_commands!()
         options=[
             Option("lags"; short="p", type=Int, default=nothing, description="Lag order (default: auto)"),
             Option("horizons"; short="h", type=Int, default=20, description="Forecast horizon"),
-            Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun"),
+            Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun|arias|uhlig"),
             Option("config"; type=String, default="", description="TOML config for identification"),
             Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
@@ -99,6 +99,86 @@ function _fevd_var(; data::String, lags=nothing, horizons::Int=20,
 
     println("Computing FEVD: VAR($p), horizons=$horizons, id=$id")
     println()
+
+    # Arias identification: use identify_arias → irf_mean → compute FEVD from structural IRFs
+    if id == "arias"
+        isempty(config) && error("Arias identification requires a --config file with restrictions")
+        cfg = load_config(config)
+        id_cfg = get(cfg, "identification", Dict())
+        zeros_list = get(id_cfg, "zero_restrictions", [])
+        signs_list = get(id_cfg, "sign_restrictions", [])
+        zero_restrs = [zero_restriction(r["var"], r["shock"]; horizon=r["horizon"]) for r in zeros_list]
+        sign_restrs = [sign_restriction(r["var"], r["shock"], Symbol(r["sign"]); horizon=r["horizon"]) for r in signs_list]
+        restrictions = SVARRestrictions(n; zeros=zero_restrs, signs=sign_restrs)
+        arias_result = identify_arias(model, restrictions, horizons)
+        irf_vals = irf_mean(arias_result)  # H x n x n
+        n_h = size(irf_vals, 1)
+        # Compute FEVD proportions from structural IRFs
+        proportions = zeros(n, n, n_h)
+        for h in 1:n_h
+            total_var = zeros(n)
+            for vi in 1:n
+                for si in 1:n
+                    cum_sq = sum(irf_vals[t, vi, si]^2 for t in 1:h)
+                    proportions[vi, si, h] = cum_sq
+                    total_var[vi] += cum_sq
+                end
+            end
+            for vi in 1:n
+                if total_var[vi] > 0
+                    proportions[vi, :, h] ./= total_var[vi]
+                end
+            end
+        end
+        _output_fevd_tables(proportions, varnames, n_h;
+                            id="arias", title_prefix="FEVD", format=format, output=output)
+        storage_save_auto!("fevd", Dict{String,Any}("type" => "var", "id" => "arias",
+            "horizons" => horizons, "n_vars" => n),
+            Dict{String,Any}("command" => "fevd var", "data" => data))
+        return
+    end
+
+    # Uhlig identification: use identify_uhlig → compute FEVD from structural IRFs
+    if id == "uhlig"
+        isempty(config) && error("Uhlig identification requires a --config file with restrictions")
+        cfg = load_config(config)
+        id_cfg = get(cfg, "identification", Dict())
+        zeros_list = get(id_cfg, "zero_restrictions", [])
+        signs_list = get(id_cfg, "sign_restrictions", [])
+        zero_restrs = [zero_restriction(r["var"], r["shock"]; horizon=r["horizon"]) for r in zeros_list]
+        sign_restrs = [sign_restriction(r["var"], r["shock"], Symbol(r["sign"]); horizon=r["horizon"]) for r in signs_list]
+        restrictions = SVARRestrictions(n; zeros=zero_restrs, signs=sign_restrs)
+        uhlig_params = get_uhlig_params(cfg)
+        uhlig_result = identify_uhlig(model, restrictions, horizons;
+            n_starts=uhlig_params["n_starts"], n_refine=uhlig_params["n_refine"],
+            max_iter_coarse=uhlig_params["max_iter_coarse"], max_iter_fine=uhlig_params["max_iter_fine"],
+            tol_coarse=uhlig_params["tol_coarse"], tol_fine=uhlig_params["tol_fine"])
+        irf_vals = uhlig_result.irf  # H x n x n
+        n_h = size(irf_vals, 1)
+        # Compute FEVD proportions from structural IRFs
+        proportions = zeros(n, n, n_h)
+        for h in 1:n_h
+            total_var = zeros(n)
+            for vi in 1:n
+                for si in 1:n
+                    cum_sq = sum(irf_vals[t, vi, si]^2 for t in 1:h)
+                    proportions[vi, si, h] = cum_sq
+                    total_var[vi] += cum_sq
+                end
+            end
+            for vi in 1:n
+                if total_var[vi] > 0
+                    proportions[vi, :, h] ./= total_var[vi]
+                end
+            end
+        end
+        _output_fevd_tables(proportions, varnames, n_h;
+                            id="uhlig", title_prefix="FEVD", format=format, output=output)
+        storage_save_auto!("fevd", Dict{String,Any}("type" => "var", "id" => "uhlig",
+            "horizons" => horizons, "n_vars" => n),
+            Dict{String,Any}("command" => "fevd var", "data" => data))
+        return
+    end
 
     kwargs = _build_identification_kwargs(id, config)
     fevd_result = fevd(model, horizons; kwargs...)

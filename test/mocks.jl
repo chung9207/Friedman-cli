@@ -68,6 +68,11 @@ struct AriasSVARResult{T}
     restrictions::SVARRestrictions
 end
 
+struct UhligSVARResult{T}
+    Q::Matrix{T}; irf::Array{T,3}; penalty::T; shock_penalties::Vector{T}
+    restrictions::SVARRestrictions; converged::Bool
+end
+
 # ─── LP Types ─────────────────────────────────────────────
 
 struct LPModel{T}
@@ -280,6 +285,7 @@ loglikelihood(m::VARModel) = -500.0
 loglikelihood(m::Union{ARModel,MAModel,ARMAModel,ARIMAModel}) = m.ll
 stderror(m::GMMModel) = fill(0.1, length(m.theta))
 stderror(m::Union{ARModel,MAModel,ARMAModel,ARIMAModel}) = fill(0.01, length(m.coefficients))
+stderror(m::Union{ARCHModel,GARCHModel,EGARCHModel,GJRGARCHModel}) = fill(0.01, length(m.coefficients))
 
 # predict: return fitted values
 predict(m::VARModel) = m.Y[m.p+1:end, :]
@@ -308,6 +314,7 @@ report(::FEVD) = nothing
 report(::BayesianFEVD) = nothing
 report(::HistoricalDecomposition) = nothing
 report(::BayesianHistoricalDecomposition) = nothing
+report(::UhligSVARResult) = nothing
 
 is_stationary(m::VARModel) = (is_stationary=true, eigenvalues=[0.5+0.1im, 0.5-0.1im, 0.3+0.0im])
 is_stationary(m::DynamicFactorModel) = (is_stationary=true,)
@@ -423,6 +430,15 @@ end
 using Statistics: mean as _mean
 function irf_mean(result::AriasSVARResult)
     dropdims(_mean(result.irf_draws; dims=1); dims=1)
+end
+
+function identify_uhlig(model::VARModel, restrictions::SVARRestrictions, horizon::Int;
+                        n_starts=50, n_refine=10, max_iter_coarse=500, max_iter_fine=2000,
+                        tol_coarse=1e-4, tol_fine=1e-8)
+    n = size(model.Y, 2)
+    Q = Matrix{Float64}(I(n))
+    irf_vals = ones(horizon + 1, n, n) * 0.1
+    UhligSVARResult(Q, irf_vals, 1e-6, fill(1e-7, n), restrictions, true)
 end
 
 # Chain parameter extraction (BVAR forecast)
@@ -968,7 +984,7 @@ end
 export VARModel, MockChains, BVARPosterior, MinnesotaHyperparameters
 export ImpulseResponse, BayesianImpulseResponse, FEVD, BayesianFEVD
 export HistoricalDecomposition, BayesianHistoricalDecomposition
-export ZeroRestriction, SignRestriction, SVARRestrictions, AriasSVARResult
+export ZeroRestriction, SignRestriction, SVARRestrictions, AriasSVARResult, UhligSVARResult
 export LPModel, LPIVModel, SmoothLPModel, StateLPModel, PropensityLPModel
 export LPImpulseResponse, StructuralLP, LPFEVD, LPForecast
 export FactorModel, DynamicFactorModel, GeneralizedDynamicFactorModel, FactorForecast
@@ -988,7 +1004,7 @@ export select_lag_order, estimate_var, estimate_bvar, posterior_mean_model, post
 export optimize_hyperparameters, coef, loglikelihood, stderror, predict, residuals, report
 export is_stationary, companion_matrix, companion_matrix_factors, nvars
 export irf, fevd, historical_decomposition, verify_decomposition, contribution
-export zero_restriction, sign_restriction, identify_arias, irf_mean
+export zero_restriction, sign_restriction, identify_arias, irf_mean, identify_uhlig
 export estimate_lp, lp_irf, estimate_lp_iv, lp_iv_irf, weak_instrument_test
 export estimate_smooth_lp, smooth_lp_irf, cross_validate_lambda
 export estimate_state_lp, state_irf, test_regime_difference

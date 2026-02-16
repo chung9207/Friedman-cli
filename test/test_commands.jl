@@ -184,6 +184,28 @@ function _make_arias_config(dir)
     return path
 end
 
+"""Create a TOML config for Uhlig identification."""
+function _make_uhlig_config(dir)
+    path = joinpath(dir, "uhlig.toml")
+    open(path, "w") do io
+        write(io, """
+        [[identification.zero_restrictions]]
+        var = 1
+        shock = 1
+        horizon = 0
+        [[identification.sign_restrictions]]
+        var = 2
+        shock = 1
+        sign = "positive"
+        horizon = 0
+        [identification.uhlig]
+        n_starts = 50
+        n_refine = 10
+        """)
+    end
+    return path
+end
+
 """Create a TOML config for GMM."""
 function _make_gmm_config(dir; colnames=["var1","var2","var3"])
     path = joinpath(dir, "gmm.toml")
@@ -235,7 +257,7 @@ end
 @testset "Shared utilities" begin
 
     @testset "ID_METHOD_MAP" begin
-        @test length(ID_METHOD_MAP) == 15
+        @test length(ID_METHOD_MAP) == 16
         @test ID_METHOD_MAP["cholesky"] == :cholesky
         @test ID_METHOD_MAP["sign"] == :sign
         @test ID_METHOD_MAP["narrative"] == :narrative
@@ -251,6 +273,7 @@ end
         @test ID_METHOD_MAP["skew_normal"] == :skew_normal
         @test ID_METHOD_MAP["markov_switching"] == :markov_switching
         @test ID_METHOD_MAP["garch_id"] == :garch
+        @test ID_METHOD_MAP["uhlig"] == :uhlig
     end
 
     @testset "_load_and_estimate_var" begin
@@ -1191,6 +1214,26 @@ end  # Shared utilities
         @test occursin("ar1", out) || occursin("ar", out)
     end
 
+    @testset "_arima_coef_table — includes SE and z-stat" begin
+        model = estimate_ar(randn(100), 2)
+        out = _capture() do
+            _arima_coef_table(model; format="table", title="AR Coefs")
+        end
+        @test occursin("z_stat", out) || occursin("std_error", out)
+    end
+
+    @testset "_estimate_arch — includes SE columns" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _estimate_arch(; data=csv, column=1, q=1, format="table")
+                end
+            end
+            @test occursin("std_error", out) || occursin("z_stat", out)
+        end
+    end
+
 end  # Estimate handlers
 
 # ═══════════════════════════════════════════════════════════════
@@ -1621,6 +1664,33 @@ end  # Test handlers
         end
     end
 
+    @testset "_irf_var — uhlig identification" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            cfg = _make_uhlig_config(dir)
+            out = cd(dir) do
+                _capture() do
+                    _irf_var(; data=csv, lags=2, shock=1, horizons=10, id="uhlig",
+                              config=cfg, format="table")
+                end
+            end
+            @test occursin("Uhlig", out)
+            @test occursin("penalty", out)
+        end
+    end
+
+    @testset "_irf_var — uhlig without config errors" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            @test_throws ErrorException cd(dir) do
+                _capture() do
+                    _irf_var(; data=csv, lags=2, shock=1, horizons=10, id="uhlig",
+                              config="", format="table")
+                end
+            end
+        end
+    end
+
     @testset "_irf_var — sign identification with config" begin
         mktempdir() do dir
             csv = _make_csv(dir; T=100, n=3)
@@ -1791,6 +1861,36 @@ end  # IRF handlers
         end
     end
 
+    @testset "_fevd_var — uhlig identification" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            cfg = _make_uhlig_config(dir)
+            out = cd(dir) do
+                _capture() do
+                    _fevd_var(; data=csv, lags=2, horizons=10, id="uhlig",
+                               config=cfg, format="table")
+                end
+            end
+            @test occursin("FEVD", out)
+            @test occursin("uhlig", out)
+        end
+    end
+
+    @testset "_fevd_var — arias identification" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            cfg = _make_arias_config(dir)
+            out = cd(dir) do
+                _capture() do
+                    _fevd_var(; data=csv, lags=2, horizons=10, id="arias",
+                               config=cfg, format="table")
+                end
+            end
+            @test occursin("FEVD", out)
+            @test occursin("arias", out)
+        end
+    end
+
     @testset "_fevd_bvar" begin
         mktempdir() do dir
             csv = _make_csv(dir; T=100, n=3)
@@ -1845,6 +1945,34 @@ end  # FEVD handlers
             end
             @test occursin("Historical Decomposition", out)
             @test occursin("verified", out) || occursin("Decomposition", out)
+        end
+    end
+
+    @testset "_hd_var — uhlig identification" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            cfg = _make_uhlig_config(dir)
+            out = cd(dir) do
+                _capture() do
+                    _hd_var(; data=csv, lags=2, id="uhlig", config=cfg, format="table")
+                end
+            end
+            @test occursin("Historical Decomposition", out)
+            @test occursin("uhlig", out)
+        end
+    end
+
+    @testset "_hd_var — arias identification" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            cfg = _make_arias_config(dir)
+            out = cd(dir) do
+                _capture() do
+                    _hd_var(; data=csv, lags=2, id="arias", config=cfg, format="table")
+                end
+            end
+            @test occursin("Historical Decomposition", out)
+            @test occursin("arias", out)
         end
     end
 

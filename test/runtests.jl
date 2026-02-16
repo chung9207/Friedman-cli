@@ -365,11 +365,11 @@ using Test
         @test contains(help_text, "friedman var")
 
         # Entry help includes version number
-        entry = Entry("friedman", node; version=v"0.2.0")
+        entry = Entry("friedman", node; version=v"0.2.1")
         buf = IOBuffer()
         print_help(buf, entry)
         help_text = String(take!(buf))
-        @test contains(help_text, "0.2.0")
+        @test contains(help_text, "0.2.1")
 
         # Leaf with optional argument shows [arg] not <arg>
         leaf_opt_arg = LeafCommand("test", handler;
@@ -484,9 +484,9 @@ using Test
         @test called_with[][:data] == "test.csv"
 
         # dispatch() with ["--version"] prints version
-        entry = Entry("friedman", outer_node; version=v"0.2.0")
+        entry = Entry("friedman", outer_node; version=v"0.2.1")
         version_output = strip(capture_stdout(() -> dispatch(entry, ["--version"])))
-        @test contains(version_output, "0.2.0")
+        @test contains(version_output, "0.2.1")
 
         # dispatch() with [] shows help (no error)
         help_output = capture_stdout(() -> dispatch(entry, String[]))
@@ -534,7 +534,7 @@ using Test
 
         # -V short flag triggers version
         v_output = strip(capture_stdout(() -> dispatch(entry, ["-V"])))
-        @test contains(v_output, "0.2.0")
+        @test contains(v_output, "0.2.1")
     end
 
     @testset "DispatchError on unknown command" begin
@@ -1458,7 +1458,7 @@ using Test
                 "rename" => LeafCommand("rename", handler; description="Rename"),
                 "project" => NodeCommand("project", Dict{String,Union{NodeCommand,LeafCommand}}(), "Project")),
             "Friedman CLI")
-        entry = Entry("friedman", root; version=v"0.2.0")
+        entry = Entry("friedman", root; version=v"0.2.1")
 
         # Top level HAS irf, fevd, hd (action-first)
         @test haskey(root.subcmds, "irf")
@@ -3129,6 +3129,38 @@ using TOML
             @test ng["n_regimes"] == 2
             @test ng["distribution"] == "student_t"  # default
         end
+    end
+
+    @testset "get_uhlig_params" begin
+        # Empty config → defaults
+        uhlig_empty = get_uhlig_params(Dict())
+        @test uhlig_empty["n_starts"] == 50
+        @test uhlig_empty["n_refine"] == 10
+        @test uhlig_empty["max_iter_coarse"] == 500
+        @test uhlig_empty["max_iter_fine"] == 2000
+        @test uhlig_empty["tol_coarse"] == 1e-4
+        @test uhlig_empty["tol_fine"] == 1e-8
+
+        # Custom values
+        cfg = Dict("identification" => Dict("uhlig" => Dict(
+            "n_starts" => 100,
+            "n_refine" => 20,
+            "max_iter_coarse" => 1000,
+            "max_iter_fine" => 5000,
+            "tol_coarse" => 1e-3,
+            "tol_fine" => 1e-10,
+        )))
+        uhlig = get_uhlig_params(cfg)
+        @test uhlig["n_starts"] == 100
+        @test uhlig["n_refine"] == 20
+        @test uhlig["max_iter_fine"] == 5000
+        @test uhlig["tol_fine"] == 1e-10
+
+        # Partial config — missing keys get defaults
+        cfg_partial = Dict("identification" => Dict("uhlig" => Dict("n_starts" => 200)))
+        uhlig_partial = get_uhlig_params(cfg_partial)
+        @test uhlig_partial["n_starts"] == 200
+        @test uhlig_partial["n_refine"] == 10  # default
     end
 end
 

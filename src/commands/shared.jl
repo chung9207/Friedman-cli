@@ -154,11 +154,30 @@ end
 
 # ── Volatility Output Helpers ──────────────────────────────
 
+"""Standard normal CDF approximation (Abramowitz & Stegun)."""
+function _normal_cdf(x::Real)
+    t = 1.0 / (1.0 + 0.2316419 * abs(x))
+    d = 0.3989422804014327  # 1/sqrt(2*pi)
+    p = d * exp(-x * x / 2.0) * t *
+        (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))))
+    x >= 0.0 ? 1.0 - p : p
+end
+
 """Shared volatility model estimation output: coefficients + persistence."""
 function _vol_estimate_output(model, vname::String, param_names::Vector{String},
                                model_label::String; format::String="table", output::String="")
     c = coef(model)
-    coef_df = DataFrame(parameter=param_names[1:length(c)], estimate=round.(c; digits=6))
+    names = param_names[1:length(c)]
+    coef_df = try
+        se = stderror(model)
+        z = c ./ se
+        pv = [2.0 * (1.0 - _normal_cdf(abs(zi))) for zi in z]
+        DataFrame(parameter=names, estimate=round.(c; digits=6),
+                  std_error=round.(se; digits=6),
+                  z_stat=round.(z; digits=3), p_value=round.(pv; digits=4))
+    catch
+        DataFrame(parameter=names, estimate=round.(c; digits=6))
+    end
     output_result(coef_df; format=Symbol(format), output=output,
                   title="$model_label Coefficients ($vname)")
     println()
@@ -201,6 +220,7 @@ const ID_METHOD_MAP = Dict(
     "skew_normal"       => :skew_normal,
     "markov_switching"  => :markov_switching,
     "garch_id"          => :garch,
+    "uhlig"             => :uhlig,
 )
 
 """
