@@ -92,5 +92,5 @@ struct Entry
     version::VersionNumber
 end
 
-Entry(name::String, root::NodeCommand; version::VersionNumber=v"0.1.0") =
+Entry(name::String, root::NodeCommand; version::VersionNumber=v"0.2.0") =
     Entry(name, root, version)
