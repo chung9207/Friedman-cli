@@ -96,7 +96,9 @@ function register_estimate_commands!()
             Option("criterion"; type=String, default="ic1", description="ic1|ic2|ic3 for auto selection"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Estimate static factor model (PCA)")
 
     est_dynamic = LeafCommand("dynamic", _estimate_dynamic;
@@ -107,7 +109,9 @@ function register_estimate_commands!()
             Option("method"; type=String, default="twostep", description="twostep|em"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Estimate dynamic factor model")
 
     est_gdfm = LeafCommand("gdfm", _estimate_gdfm;
@@ -127,7 +131,9 @@ function register_estimate_commands!()
             Option("q"; type=Int, default=1, description="ARCH order"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Estimate ARCH(q) model")
 
     est_garch = LeafCommand("garch", _estimate_garch;
@@ -138,7 +144,9 @@ function register_estimate_commands!()
             Option("q"; type=Int, default=1, description="ARCH order"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Estimate GARCH(p,q) model")
 
     est_egarch = LeafCommand("egarch", _estimate_egarch;
@@ -149,7 +157,9 @@ function register_estimate_commands!()
             Option("q"; type=Int, default=1, description="ARCH order"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Estimate EGARCH(p,q) model")
 
     est_gjr_garch = LeafCommand("gjr_garch", _estimate_gjr_garch;
@@ -160,7 +170,9 @@ function register_estimate_commands!()
             Option("q"; type=Int, default=1, description="ARCH order"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Estimate GJR-GARCH(p,q) model")
 
     est_sv = LeafCommand("sv", _estimate_sv;
@@ -170,7 +182,9 @@ function register_estimate_commands!()
             Option("draws"; short="n", type=Int, default=5000, description="MCMC draws"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Estimate Stochastic Volatility model")
 
     est_fastica = LeafCommand("fastica", _estimate_fastica;
@@ -737,7 +751,8 @@ end
 # ── Factor Models ──────────────────────────────────────────
 
 function _estimate_static(; data::String, nfactors=nothing, criterion::String="ic1",
-                           output::String="", format::String="table")
+                           output::String="", format::String="table",
+                           plot::Bool=false, plot_save::String="")
     X, varnames = load_multivariate_data(data)
 
     r = if isnothing(nfactors)
@@ -755,6 +770,7 @@ function _estimate_static(; data::String, nfactors=nothing, criterion::String="i
     println()
 
     model = estimate_factors(X, r)
+    _maybe_plot(model; plot=plot, plot_save=plot_save)
 
     scree = scree_plot_data(model)
     scree_df = DataFrame(component=scree.factors, eigenvalue=scree.explained_variance,
@@ -769,7 +785,8 @@ function _estimate_static(; data::String, nfactors=nothing, criterion::String="i
 end
 
 function _estimate_dynamic(; data::String, nfactors=nothing, factor_lags::Int=1,
-                            method::String="twostep", output::String="", format::String="table")
+                            method::String="twostep", output::String="", format::String="table",
+                            plot::Bool=false, plot_save::String="")
     X, varnames = load_multivariate_data(data)
 
     r = if isnothing(nfactors)
@@ -786,6 +803,7 @@ function _estimate_dynamic(; data::String, nfactors=nothing, factor_lags::Int=1,
     println()
 
     model = estimate_dynamic_factors(X, r, factor_lags; method=Symbol(method))
+    _maybe_plot(model; plot=plot, plot_save=plot_save)
 
     stable_result = is_stationary(model)
     stable = stable_result isa Bool ? stable_result : stable_result.is_stationary
@@ -851,11 +869,13 @@ end
 # ── Volatility Models (NEW) ───────────────────────────────
 
 function _estimate_arch(; data::String, column::Int=1, q::Int=1,
-                         output::String="", format::String="table")
+                         output::String="", format::String="table",
+                         plot::Bool=false, plot_save::String="")
     y, vname = load_univariate_series(data, column)
     println("Estimating ARCH($q): variable=$vname, observations=$(length(y))")
     println()
     model = estimate_arch(y, q)
+    _maybe_plot(model; plot=plot, plot_save=plot_save)
     param_names = ["mu"; "omega"; ["alpha$i" for i in 1:q]]
     _vol_estimate_output(model, vname, param_names, "ARCH($q)"; format=format, output=output)
     uc = unconditional_variance(model)
@@ -863,11 +883,13 @@ function _estimate_arch(; data::String, column::Int=1, q::Int=1,
 end
 
 function _estimate_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
-                          output::String="", format::String="table")
+                          output::String="", format::String="table",
+                          plot::Bool=false, plot_save::String="")
     y, vname = load_univariate_series(data, column)
     println("Estimating GARCH($p,$q): variable=$vname, observations=$(length(y))")
     println()
     model = estimate_garch(y, p, q)
+    _maybe_plot(model; plot=plot, plot_save=plot_save)
     param_names = ["mu"; "omega"; ["alpha$i" for i in 1:q]; ["beta$i" for i in 1:p]]
     _vol_estimate_output(model, vname, param_names, "GARCH($p,$q)"; format=format, output=output)
     hl = halflife(model)
@@ -877,21 +899,25 @@ function _estimate_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
 end
 
 function _estimate_egarch(; data::String, column::Int=1, p::Int=1, q::Int=1,
-                           output::String="", format::String="table")
+                           output::String="", format::String="table",
+                           plot::Bool=false, plot_save::String="")
     y, vname = load_univariate_series(data, column)
     println("Estimating EGARCH($p,$q): variable=$vname, observations=$(length(y))")
     println()
     model = estimate_egarch(y, p, q)
+    _maybe_plot(model; plot=plot, plot_save=plot_save)
     param_names = ["mu"; "omega"; ["alpha$i" for i in 1:q]; ["gamma$i" for i in 1:q]; ["beta$i" for i in 1:p]]
     _vol_estimate_output(model, vname, param_names, "EGARCH($p,$q)"; format=format, output=output)
 end
 
 function _estimate_gjr_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
-                              output::String="", format::String="table")
+                              output::String="", format::String="table",
+                              plot::Bool=false, plot_save::String="")
     y, vname = load_univariate_series(data, column)
     println("Estimating GJR-GARCH($p,$q): variable=$vname, observations=$(length(y))")
     println()
     model = estimate_gjr_garch(y, p, q)
+    _maybe_plot(model; plot=plot, plot_save=plot_save)
     param_names = ["mu"; "omega"; ["alpha$i" for i in 1:q]; ["gamma$i" for i in 1:q]; ["beta$i" for i in 1:p]]
     _vol_estimate_output(model, vname, param_names, "GJR-GARCH($p,$q)"; format=format, output=output)
     hl = halflife(model)
@@ -899,11 +925,13 @@ function _estimate_gjr_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
 end
 
 function _estimate_sv(; data::String, column::Int=1, draws::Int=5000,
-                       output::String="", format::String="table")
+                       output::String="", format::String="table",
+                       plot::Bool=false, plot_save::String="")
     y, vname = load_univariate_series(data, column)
     println("Estimating Stochastic Volatility: variable=$vname, observations=$(length(y)), draws=$draws")
     println()
     model = estimate_sv(y; n_samples=draws)
+    _maybe_plot(model; plot=plot, plot_save=plot_save)
     param_names = ["mu", "phi", "sigma_eta"]
     _vol_estimate_output(model, vname, param_names, "SV"; format=format, output=output)
 end

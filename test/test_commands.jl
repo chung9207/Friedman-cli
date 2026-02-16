@@ -72,6 +72,7 @@ include(joinpath(project_root, "src", "commands", "data.jl"))
 include(joinpath(project_root, "src", "commands", "list.jl"))
 include(joinpath(project_root, "src", "commands", "rename.jl"))
 include(joinpath(project_root, "src", "commands", "project.jl"))
+include(joinpath(project_root, "src", "commands", "plot.jl"))
 
 # ─── Test Helpers ───────────────────────────────────────────────
 
@@ -4888,5 +4889,671 @@ end  # Enhanced Granger handlers
     end
 
 end  # Data handlers
+
+# ──────────────────────────────────────────────────────────────────
+# Plot Support Tests
+# ──────────────────────────────────────────────────────────────────
+
+@testset "Plot Support" begin
+
+    @testset "_maybe_plot — no-op when both flags false" begin
+        mktempdir() do dir
+            cd(dir) do
+                out = _capture() do
+                    _maybe_plot(HPFilterResult(ones(10), zeros(10), 1600.0, 10);
+                        plot=false, plot_save="")
+                end
+                @test out == ""
+            end
+        end
+    end
+
+    @testset "_maybe_plot — plot_save writes HTML file" begin
+        mktempdir() do dir
+            cd(dir) do
+                html_path = joinpath(dir, "test_plot.html")
+                out = _capture() do
+                    _maybe_plot(HPFilterResult(ones(10), zeros(10), 1600.0, 10);
+                        plot=false, plot_save=html_path)
+                end
+                @test isfile(html_path)
+                content = read(html_path, String)
+                @test occursin("mock plot", content)
+                @test occursin("Plot saved", out)
+            end
+        end
+    end
+
+    @testset "_maybe_plot — plot flag prints browser message" begin
+        mktempdir() do dir
+            cd(dir) do
+                out = _capture() do
+                    _maybe_plot(HPFilterResult(ones(10), zeros(10), 1600.0, 10);
+                        plot=true, plot_save="")
+                end
+                @test occursin("Plot opened in browser", out)
+            end
+        end
+    end
+
+    @testset "_maybe_plot — both plot and plot_save" begin
+        mktempdir() do dir
+            cd(dir) do
+                html_path = joinpath(dir, "both.html")
+                out = _capture() do
+                    _maybe_plot(HPFilterResult(ones(10), zeros(10), 1600.0, 10);
+                        plot=true, plot_save=html_path)
+                end
+                @test isfile(html_path)
+                @test occursin("Plot saved", out)
+                @test occursin("Plot opened in browser", out)
+            end
+        end
+    end
+
+    @testset "register_plot_commands! returns LeafCommand" begin
+        cmd = register_plot_commands!()
+        @test cmd isa LeafCommand
+        @test cmd.name == "plot"
+        @test length(cmd.args) == 1
+        @test cmd.args[1].name == "tag"
+        @test any(o -> o.name == "save", cmd.options)
+        @test any(o -> o.name == "title", cmd.options)
+        @test any(f -> f.name == "no-open", cmd.flags)
+    end
+
+    @testset "_plot — loads stored tag and plots" begin
+        mktempdir() do dir
+            cd(dir) do
+                # Store a hand-crafted IRF Dict matching real MEMs field structure
+                irf_data = Dict{String,Any}(
+                    "_type" => "ImpulseResponse{Float64}",
+                    "values" => ones(20, 3, 3), "ci_lower" => zeros(0,0,0),
+                    "ci_upper" => zeros(0,0,0), "horizon" => 20,
+                    "variables" => ["y1","y2","y3"], "shocks" => ["s1","s2","s3"],
+                    "ci_type" => "cholesky")
+                tag = storage_save_auto!("irf", irf_data,
+                    Dict{String,Any}("command" => "irf var"))
+                html_path = joinpath(dir, "irf_plot.html")
+
+                out = _capture() do
+                    _plot(; tag=tag, save=html_path, no_open=true)
+                end
+                @test isfile(html_path)
+                @test occursin("Plot saved", out)
+            end
+        end
+    end
+
+    @testset "_plot — error on missing tag" begin
+        mktempdir() do dir
+            cd(dir) do
+                @test_throws ErrorException _plot(; tag="noexist999", save="", no_open=true)
+            end
+        end
+    end
+
+    @testset "_plot — error on non-plottable type" begin
+        mktempdir() do dir
+            cd(dir) do
+                # Save entry with no _type field
+                storage_save!("bad001", "bad",
+                    Dict{String,Any}("some_field" => 42),
+                    Dict{String,Any}())
+                @test_throws ErrorException _plot(; tag="bad001", save="", no_open=true)
+            end
+        end
+    end
+
+    @testset "_plot — warning on --no-open without --save" begin
+        mktempdir() do dir
+            cd(dir) do
+                irf_data = Dict{String,Any}(
+                    "_type" => "ImpulseResponse{Float64}",
+                    "values" => ones(20, 3, 3), "ci_lower" => zeros(0,0,0),
+                    "ci_upper" => zeros(0,0,0), "horizon" => 20,
+                    "variables" => ["y1","y2","y3"], "shocks" => ["s1","s2","s3"],
+                    "ci_type" => "cholesky")
+                tag = storage_save_auto!("irf", irf_data)
+
+                out = _capture() do
+                    _plot(; tag=tag, save="", no_open=true)
+                end
+                @test occursin("Warning", out)
+            end
+        end
+    end
+
+    @testset "_plot — with --title option" begin
+        mktempdir() do dir
+            cd(dir) do
+                irf_data = Dict{String,Any}(
+                    "_type" => "ImpulseResponse{Float64}",
+                    "values" => ones(20, 3, 3), "ci_lower" => zeros(0,0,0),
+                    "ci_upper" => zeros(0,0,0), "horizon" => 20,
+                    "variables" => ["y1","y2","y3"], "shocks" => ["s1","s2","s3"],
+                    "ci_type" => "cholesky")
+                tag = storage_save_auto!("irf", irf_data)
+                html_path = joinpath(dir, "titled.html")
+
+                out = _capture() do
+                    _plot(; tag=tag, title="Custom Title", save=html_path, no_open=true)
+                end
+                @test isfile(html_path)
+                @test occursin("Plot saved", out)
+            end
+        end
+    end
+
+    # ── Deserializer Tests ──────────────────────────────────────
+    # These use hand-crafted Dicts matching real MEMs field structures
+    # (mock types have simplified fields, so serialize_model(mock) won't work)
+
+    @testset "_deserialize_for_plot — ImpulseResponse" begin
+        d = Dict{String,Any}(
+            "_type" => "ImpulseResponse{Float64}",
+            "values" => randn(20, 3, 3), "ci_lower" => randn(20, 3, 3),
+            "ci_upper" => randn(20, 3, 3), "horizon" => 20,
+            "variables" => ["y1","y2","y3"], "shocks" => ["s1","s2","s3"],
+            "ci_type" => "cholesky")
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa ImpulseResponse
+        @test obj.horizon == 20
+        @test obj.variables == ["y1","y2","y3"]
+    end
+
+    @testset "_deserialize_for_plot — BayesianImpulseResponse" begin
+        d = Dict{String,Any}(
+            "_type" => "BayesianImpulseResponse{Float64}",
+            "quantiles" => randn(20, 3, 3, 3), "mean" => randn(20, 3, 3),
+            "horizon" => 20, "variables" => ["y1","y2","y3"],
+            "shocks" => ["s1","s2","s3"], "quantile_levels" => [0.16, 0.5, 0.84])
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa BayesianImpulseResponse
+        @test obj.horizon == 20
+    end
+
+    @testset "_deserialize_for_plot — FEVD" begin
+        d = Dict{String,Any}(
+            "_type" => "FEVD{Float64}",
+            "decomposition" => randn(20, 3, 3), "proportions" => rand(20, 3, 3))
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa FEVD
+    end
+
+    @testset "_deserialize_for_plot — BayesianFEVD" begin
+        d = Dict{String,Any}(
+            "_type" => "BayesianFEVD{Float64}",
+            "quantiles" => randn(20, 3, 3, 3), "mean" => rand(20, 3, 3),
+            "horizon" => 20, "variables" => ["y1","y2","y3"],
+            "shocks" => ["s1","s2","s3"], "quantile_levels" => [0.16, 0.5, 0.84])
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa BayesianFEVD
+        @test obj.horizon == 20
+    end
+
+    @testset "_deserialize_for_plot — LPFEVD" begin
+        d = Dict{String,Any}(
+            "_type" => "LPFEVD{Float64}",
+            "proportions" => rand(20, 3, 3), "bias_corrected" => rand(20, 3, 3),
+            "se" => rand(20, 3, 3), "ci_lower" => rand(20, 3, 3),
+            "ci_upper" => rand(20, 3, 3), "method" => "R2",
+            "horizon" => 20, "n_boot" => 200, "conf_level" => 0.95,
+            "bias_correction" => true)
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa LPFEVD
+    end
+
+    @testset "_deserialize_for_plot — HistoricalDecomposition" begin
+        d = Dict{String,Any}(
+            "_type" => "HistoricalDecomposition{Float64}",
+            "contributions" => randn(50, 3, 3), "initial_conditions" => randn(3, 3),
+            "actual" => randn(50, 3), "shocks" => randn(50, 3),
+            "T_eff" => 50, "variables" => ["y1","y2","y3"],
+            "shock_names" => ["s1","s2","s3"], "method" => "cholesky")
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa HistoricalDecomposition
+        @test obj.T_eff == 50
+    end
+
+    @testset "_deserialize_for_plot — BayesianHistoricalDecomposition" begin
+        d = Dict{String,Any}(
+            "_type" => "BayesianHistoricalDecomposition{Float64}",
+            "quantiles" => randn(50, 3, 3, 3), "mean" => randn(50, 3, 3),
+            "initial_quantiles" => randn(3, 3, 3), "initial_mean" => randn(3, 3),
+            "shocks_mean" => randn(50, 3), "actual" => randn(50, 3),
+            "T_eff" => 50, "variables" => ["y1","y2","y3"],
+            "shock_names" => ["s1","s2","s3"], "quantile_levels" => [0.16, 0.5, 0.84],
+            "method" => "cholesky")
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa BayesianHistoricalDecomposition
+        @test obj.T_eff == 50
+    end
+
+    @testset "_deserialize_for_plot — HPFilterResult" begin
+        original = HPFilterResult(randn(100), randn(100), 1600.0, 100)
+        d = serialize_model(original)
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa HPFilterResult
+        @test obj.lambda == 1600.0
+    end
+
+    @testset "_deserialize_for_plot — HamiltonFilterResult" begin
+        original = HamiltonFilterResult(randn(100), randn(100), randn(5), 8, 4, 100, 13:100)
+        d = serialize_model(original)
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa HamiltonFilterResult
+        @test obj.h == 8
+    end
+
+    @testset "_deserialize_for_plot — BeveridgeNelsonResult" begin
+        original = BeveridgeNelsonResult(randn(100), randn(100), 0.01, 1.5, (1, 1, 1), 100)
+        d = serialize_model(original)
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa BeveridgeNelsonResult
+        @test obj.T_obs == 100
+    end
+
+    @testset "_deserialize_for_plot — BaxterKingResult" begin
+        original = BaxterKingResult(randn(76), randn(76), randn(25), 6, 32, 12, 100, 13:88)
+        d = serialize_model(original)
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa BaxterKingResult
+        @test obj.K == 12
+    end
+
+    @testset "_deserialize_for_plot — BoostedHPResult" begin
+        original = BoostedHPResult(randn(100), randn(100), 1600.0, 5, :BIC,
+            randn(5), randn(5), 100)
+        d = serialize_model(original)
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa BoostedHPResult
+        @test obj.iterations == 5
+    end
+
+    @testset "_deserialize_for_plot — ARCHModel" begin
+        d = Dict{String,Any}(
+            "_type" => "ARCHModel{Float64}",
+            "y" => randn(100), "q" => 1, "mu" => 0.01, "omega" => 0.1,
+            "alpha" => [0.3], "conditional_variance" => abs.(randn(100)),
+            "standardized_residuals" => randn(100), "residuals" => randn(100),
+            "fitted" => randn(100), "loglik" => -150.0, "aic" => 310.0,
+            "bic" => 320.0, "method" => "mle", "converged" => true, "iterations" => 50)
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa ARCHModel
+        @test obj.q == 1
+    end
+
+    @testset "_deserialize_for_plot — GARCHModel" begin
+        d = Dict{String,Any}(
+            "_type" => "GARCHModel{Float64}",
+            "y" => randn(100), "p" => 1, "q" => 1, "mu" => 0.01, "omega" => 0.1,
+            "alpha" => [0.3], "beta" => [0.5],
+            "conditional_variance" => abs.(randn(100)),
+            "standardized_residuals" => randn(100), "residuals" => randn(100),
+            "fitted" => randn(100), "loglik" => -150.0, "aic" => 310.0,
+            "bic" => 320.0, "method" => "mle", "converged" => true, "iterations" => 50)
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa GARCHModel
+        @test obj.p == 1
+    end
+
+    @testset "_deserialize_for_plot — EGARCHModel" begin
+        d = Dict{String,Any}(
+            "_type" => "EGARCHModel{Float64}",
+            "y" => randn(100), "p" => 1, "q" => 1, "mu" => 0.01, "omega" => 0.1,
+            "alpha" => [0.3], "gamma" => [0.1], "beta" => [0.5],
+            "conditional_variance" => abs.(randn(100)),
+            "standardized_residuals" => randn(100), "residuals" => randn(100),
+            "fitted" => randn(100), "loglik" => -150.0, "aic" => 310.0,
+            "bic" => 320.0, "method" => "mle", "converged" => true, "iterations" => 50)
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa EGARCHModel
+    end
+
+    @testset "_deserialize_for_plot — GJRGARCHModel" begin
+        d = Dict{String,Any}(
+            "_type" => "GJRGARCHModel{Float64}",
+            "y" => randn(100), "p" => 1, "q" => 1, "mu" => 0.01, "omega" => 0.1,
+            "alpha" => [0.3], "gamma" => [0.1], "beta" => [0.5],
+            "conditional_variance" => abs.(randn(100)),
+            "standardized_residuals" => randn(100), "residuals" => randn(100),
+            "fitted" => randn(100), "loglik" => -150.0, "aic" => 310.0,
+            "bic" => 320.0, "method" => "mle", "converged" => true, "iterations" => 50)
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa GJRGARCHModel
+    end
+
+    @testset "_deserialize_for_plot — SVModel" begin
+        d = Dict{String,Any}(
+            "_type" => "SVModel{Float64}",
+            "y" => randn(100), "h_draws" => randn(500, 100),
+            "mu_post" => randn(500), "phi_post" => randn(500),
+            "sigma_eta_post" => randn(500), "volatility_mean" => randn(100),
+            "volatility_quantiles" => randn(100, 3),
+            "quantile_levels" => [0.16, 0.5, 0.84],
+            "dist" => "normal", "leverage" => false, "n_samples" => 500)
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa SVModel
+        @test obj.n_samples == 500
+    end
+
+    @testset "_deserialize_for_plot — FactorModel" begin
+        d = Dict{String,Any}(
+            "_type" => "FactorModel{Float64}",
+            "X" => randn(100, 5), "factors" => randn(100, 2),
+            "loadings" => randn(5, 2), "eigenvalues" => [3.0, 1.5],
+            "explained_variance" => [0.6, 0.3],
+            "cumulative_variance" => [0.6, 0.9], "r" => 2, "standardized" => true)
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa FactorModel
+        @test obj.r == 2
+    end
+
+    @testset "_deserialize_for_plot — DynamicFactorModel" begin
+        d = Dict{String,Any}(
+            "_type" => "DynamicFactorModel{Float64}",
+            "X" => randn(100, 5), "factors" => randn(100, 2),
+            "loadings" => randn(5, 2), "A" => [randn(2, 2)],
+            "factor_residuals" => randn(99, 2),
+            "Sigma_eta" => randn(2, 2), "Sigma_e" => randn(5, 5),
+            "eigenvalues" => [3.0, 1.5], "explained_variance" => [0.6, 0.3],
+            "cumulative_variance" => [0.6, 0.9],
+            "r" => 2, "p" => 1, "method" => "twostep",
+            "standardized" => true, "converged" => true,
+            "iterations" => 100, "loglik" => -250.0)
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa DynamicFactorModel
+        @test obj.r == 2
+        @test obj.p == 1
+    end
+
+    @testset "_deserialize_for_plot — ARIMAForecast" begin
+        d = Dict{String,Any}(
+            "_type" => "ARIMAForecast{Float64}",
+            "forecast" => randn(12), "ci_lower" => randn(12),
+            "ci_upper" => randn(12), "se" => abs.(randn(12)),
+            "horizon" => 12, "conf_level" => 0.95)
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa ARIMAForecast
+        @test obj.horizon == 12
+    end
+
+    @testset "_deserialize_for_plot — VolatilityForecast" begin
+        d = Dict{String,Any}(
+            "_type" => "VolatilityForecast{Float64}",
+            "forecast" => abs.(randn(12)), "ci_lower" => abs.(randn(12)),
+            "ci_upper" => abs.(randn(12)), "se" => abs.(randn(12)),
+            "horizon" => 12, "conf_level" => 0.95, "model_type" => "garch")
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa VolatilityForecast
+        @test obj.horizon == 12
+    end
+
+    @testset "_deserialize_for_plot — VECMForecast" begin
+        original = VECMForecast(randn(12, 3), randn(12, 3), randn(12, 3), randn(12, 3),
+            12, :bootstrap)
+        d = serialize_model(original)
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa VECMForecast
+        @test obj.horizon == 12
+    end
+
+    @testset "_deserialize_for_plot — LPForecast" begin
+        d = Dict{String,Any}(
+            "_type" => "LPForecast{Float64}",
+            "forecasts" => randn(12, 3), "ci_lower" => randn(12, 3),
+            "ci_upper" => randn(12, 3), "se" => abs.(randn(12, 3)),
+            "horizon" => 12, "response_vars" => [1, 2, 3],
+            "shock_var" => 1, "shock_path" => [1.0],
+            "conf_level" => 0.95, "ci_method" => "analytical")
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa LPForecast
+        @test obj.horizon == 12
+    end
+
+    @testset "_deserialize_for_plot — FactorForecast" begin
+        d = Dict{String,Any}(
+            "_type" => "FactorForecast{Float64}",
+            "factors" => randn(12, 2), "observables" => randn(12, 5),
+            "factors_lower" => randn(12, 2), "factors_upper" => randn(12, 2),
+            "observables_lower" => randn(12, 5), "observables_upper" => randn(12, 5),
+            "factors_se" => abs.(randn(12, 2)), "observables_se" => abs.(randn(12, 5)),
+            "horizon" => 12, "conf_level" => 0.95, "ci_method" => "analytical")
+        obj = _deserialize_for_plot(d, d["_type"])
+        @test obj isa FactorForecast
+        @test obj.horizon == 12
+    end
+
+    @testset "_deserialize_for_plot — error on unknown type" begin
+        d = Dict{String,Any}("_type" => "UnknownType")
+        @test_throws ErrorException _deserialize_for_plot(d, "UnknownType")
+    end
+
+    @testset "_deserialize_for_plot — strips module prefix" begin
+        original = HPFilterResult(randn(100), randn(100), 1600.0, 100)
+        d = serialize_model(original)
+        # Simulate what would happen with real MEMs types (module prefix + type param)
+        obj = _deserialize_for_plot(d, "MacroEconometricModels.HPFilterResult{Float64}")
+        @test obj isa HPFilterResult
+    end
+
+    # ── --plot-save integration on handlers ──────────────────────
+
+    @testset "_irf_var — --plot-save produces HTML" begin
+        mktempdir() do dir
+            cd(dir) do
+                csv = _make_csv(dir)
+                html_path = joinpath(dir, "irf.html")
+                out = _capture() do
+                    _irf_var(; data=csv, horizons=20, id="cholesky",
+                        ci="none", replications=100,
+                        format="table", output="",
+                        plot=false, plot_save=html_path)
+                end
+                @test isfile(html_path)
+                content = read(html_path, String)
+                @test occursin("mock plot", content)
+            end
+        end
+    end
+
+    @testset "_fevd_var — --plot-save produces HTML" begin
+        mktempdir() do dir
+            cd(dir) do
+                csv = _make_csv(dir)
+                html_path = joinpath(dir, "fevd.html")
+                out = _capture() do
+                    _fevd_var(; data=csv, horizons=20, id="cholesky",
+                        format="table", output="",
+                        plot=false, plot_save=html_path)
+                end
+                @test isfile(html_path)
+                content = read(html_path, String)
+                @test occursin("mock plot", content)
+            end
+        end
+    end
+
+    @testset "_hd_var — --plot-save produces HTML" begin
+        mktempdir() do dir
+            cd(dir) do
+                csv = _make_csv(dir)
+                html_path = joinpath(dir, "hd.html")
+                out = _capture() do
+                    _hd_var(; data=csv, id="cholesky",
+                        format="table", output="",
+                        plot=false, plot_save=html_path)
+                end
+                @test isfile(html_path)
+                content = read(html_path, String)
+                @test occursin("mock plot", content)
+            end
+        end
+    end
+
+    @testset "_filter_hp — --plot-save produces HTML" begin
+        mktempdir() do dir
+            cd(dir) do
+                csv = _make_csv(dir; n=1)
+                html_path = joinpath(dir, "hp.html")
+                out = _capture() do
+                    _filter_hp(; data=csv, lambda=1600.0,
+                        format="table", output="",
+                        plot=false, plot_save=html_path)
+                end
+                # _per_var_output_path inserts variable name: hp.html → hp_var1.html
+                actual_path = joinpath(dir, "hp_var1.html")
+                @test isfile(actual_path)
+                content = read(actual_path, String)
+                @test occursin("mock plot", content)
+            end
+        end
+    end
+
+    @testset "_estimate_arch — --plot-save produces HTML" begin
+        mktempdir() do dir
+            cd(dir) do
+                csv = _make_csv(dir; n=1)
+                html_path = joinpath(dir, "arch.html")
+                out = _capture() do
+                    _estimate_arch(; data=csv, q=1, column=1,
+                        format="table", output="",
+                        plot=false, plot_save=html_path)
+                end
+                @test isfile(html_path)
+                content = read(html_path, String)
+                @test occursin("mock plot", content)
+            end
+        end
+    end
+
+    @testset "_estimate_static — --plot-save produces HTML" begin
+        mktempdir() do dir
+            cd(dir) do
+                csv = _make_csv(dir; T=100, n=5)
+                html_path = joinpath(dir, "static.html")
+                out = _capture() do
+                    _estimate_static(; data=csv, nfactors=0,
+                        format="table", output="",
+                        plot=false, plot_save=html_path)
+                end
+                @test isfile(html_path)
+                content = read(html_path, String)
+                @test occursin("mock plot", content)
+            end
+        end
+    end
+
+    @testset "_forecast_arima — --plot-save produces HTML" begin
+        mktempdir() do dir
+            cd(dir) do
+                csv = _make_csv(dir; n=1)
+                html_path = joinpath(dir, "arima_fc.html")
+                out = _capture() do
+                    _forecast_arima(; data=csv, p=0, d=0, q=0,
+                        horizons=12, column=1, confidence=0.95,
+                        format="table", output="",
+                        plot=false, plot_save=html_path)
+                end
+                @test isfile(html_path)
+                content = read(html_path, String)
+                @test occursin("mock plot", content)
+            end
+        end
+    end
+
+    @testset "_forecast_vecm — --plot-save produces HTML" begin
+        mktempdir() do dir
+            cd(dir) do
+                csv = _make_csv(dir; T=100, n=3)
+                html_path = joinpath(dir, "vecm_fc.html")
+                out = _capture() do
+                    _forecast_vecm(; data=csv, lags=2, rank="auto",
+                        horizons=12,
+                        deterministic="constant",
+                        ci_method="bootstrap", replications=100, confidence=0.95,
+                        format="table", output="",
+                        plot=false, plot_save=html_path)
+                end
+                @test isfile(html_path)
+                content = read(html_path, String)
+                @test occursin("mock plot", content)
+            end
+        end
+    end
+
+    # ── Round-trip storage → plot ─────────────────────────────────
+
+    @testset "IRF round-trip: estimate → irf → plot tag" begin
+        mktempdir() do dir
+            cd(dir) do
+                csv = _make_csv(dir)
+                # Run irf which saves to storage with serialize_model
+                out1 = _capture() do
+                    _irf_var(; data=csv, horizons=20, id="cholesky",
+                        ci="none", replications=100,
+                        format="table", output="",
+                        plot=false, plot_save="")
+                end
+                @test occursin("Saved as: irf001", out1)
+
+                # Now plot from tag
+                html_path = joinpath(dir, "roundtrip.html")
+                out2 = _capture() do
+                    _plot(; tag="irf001", save=html_path, no_open=true)
+                end
+                @test isfile(html_path)
+                @test occursin("Plot saved", out2)
+            end
+        end
+    end
+
+    @testset "Filter round-trip: filter → plot tag" begin
+        mktempdir() do dir
+            cd(dir) do
+                csv = _make_csv(dir; n=1)
+                out1 = _capture() do
+                    _filter_hp(; data=csv, lambda=1600.0,
+                        format="table", output="",
+                        plot=false, plot_save="")
+                end
+                @test occursin("Saved as:", out1)
+
+                # Extract the tag from output
+                m = match(r"Saved as: (\w+)", out1)
+                @test !isnothing(m)
+                tag = String(m[1])
+
+                html_path = joinpath(dir, "filter_rt.html")
+                out2 = _capture() do
+                    _plot(; tag=tag, save=html_path, no_open=true)
+                end
+                @test isfile(html_path)
+            end
+        end
+    end
+
+    @testset "FEVD round-trip: fevd var → plot tag" begin
+        mktempdir() do dir
+            cd(dir) do
+                csv = _make_csv(dir; T=100, n=3)
+                out1 = _capture() do
+                    _fevd_var(; data=csv, horizons=20, id="cholesky",
+                        format="table", output="",
+                        plot=false, plot_save="")
+                end
+                @test occursin("Saved as: fevd001", out1)
+
+                html_path = joinpath(dir, "fevd_rt.html")
+                out2 = _capture() do
+                    _plot(; tag="fevd001", save=html_path, no_open=true)
+                end
+                @test isfile(html_path)
+            end
+        end
+    end
+
+end  # Plot Support
 
 end  # Command Handlers

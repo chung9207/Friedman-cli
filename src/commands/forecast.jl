@@ -58,7 +58,9 @@ function register_forecast_commands!()
             Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Compute direct LP forecasts")
 
     fc_arima = LeafCommand("arima", _forecast_arima;
@@ -78,7 +80,9 @@ function register_forecast_commands!()
             Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="ARIMA forecast (auto-selects order when --p omitted)")
 
     fc_static = LeafCommand("static", _forecast_static;
@@ -91,7 +95,9 @@ function register_forecast_commands!()
             Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Forecast observables using static factor model")
 
     fc_dynamic = LeafCommand("dynamic", _forecast_dynamic;
@@ -104,7 +110,9 @@ function register_forecast_commands!()
             Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Forecast observables using dynamic factor model")
 
     fc_gdfm = LeafCommand("gdfm", _forecast_gdfm;
@@ -116,7 +124,9 @@ function register_forecast_commands!()
             Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Forecast observables using GDFM")
 
     fc_arch = LeafCommand("arch", _forecast_arch;
@@ -128,7 +138,9 @@ function register_forecast_commands!()
             Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Forecast volatility using ARCH model")
 
     fc_garch = LeafCommand("garch", _forecast_garch;
@@ -141,7 +153,9 @@ function register_forecast_commands!()
             Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Forecast volatility using GARCH model")
 
     fc_egarch = LeafCommand("egarch", _forecast_egarch;
@@ -154,7 +168,9 @@ function register_forecast_commands!()
             Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Forecast volatility using EGARCH model")
 
     fc_gjr_garch = LeafCommand("gjr_garch", _forecast_gjr_garch;
@@ -167,7 +183,9 @@ function register_forecast_commands!()
             Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Forecast volatility using GJR-GARCH model")
 
     fc_sv = LeafCommand("sv", _forecast_sv;
@@ -179,7 +197,9 @@ function register_forecast_commands!()
             Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Forecast volatility using Stochastic Volatility model")
 
     fc_vecm = LeafCommand("vecm", _forecast_vecm;
@@ -195,7 +215,9 @@ function register_forecast_commands!()
             Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Compute native VECM forecasts (preserves cointegrating relationships)")
 
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
@@ -349,7 +371,8 @@ function _forecast_lp(; data::String, shock::Int=1, horizons::Int=12,
                        vcov::String="newey_west",
                        ci_method::String="analytical", conf_level::Float64=0.95,
                        n_boot::Int=500, from_tag::String="",
-                       output::String="", format::String="table")
+                       output::String="", format::String="table",
+                       plot::Bool=false, plot_save::String="")
     if isempty(data) && isempty(from_tag)
         error("Either <data> argument or --from-tag option is required")
     end
@@ -369,6 +392,8 @@ function _forecast_lp(; data::String, shock::Int=1, horizons::Int=12,
     fc = forecast(model, shock_path;
         ci_method=Symbol(ci_method), conf_level=conf_level, n_boot=n_boot)
 
+    _maybe_plot(fc; plot=plot, plot_save=plot_save)
+
     shock_name = _shock_name(varnames, shock)
 
     fc_df = DataFrame()
@@ -387,8 +412,8 @@ function _forecast_lp(; data::String, shock::Int=1, horizons::Int=12,
     output_result(fc_df; format=Symbol(format), output=output,
                   title="LP Forecast (shock=$shock_name, h=$horizons, $(Int(round(conf_level*100)))% CI)")
 
-    storage_save_auto!("forecast", Dict{String,Any}("type" => "lp", "shock" => shock, "horizons" => horizons),
-        Dict{String,Any}("command" => "forecast lp", "data" => data))
+    storage_save_auto!("forecast", serialize_model(fc),
+        Dict{String,Any}("command" => "forecast lp", "data" => data, "shock" => shock, "horizons" => horizons))
 end
 
 # ── ARIMA Forecast ───────────────────────────────────────
@@ -398,7 +423,8 @@ function _forecast_arima(; data::String, column::Int=1, p=nothing, d::Int=0, q::
                            criterion::String="bic", horizons::Int=12,
                            confidence::Float64=0.95, method::String="css_mle",
                            from_tag::String="",
-                           format::String="table", output::String="")
+                           format::String="table", output::String="",
+                           plot::Bool=false, plot_save::String="")
     if isempty(data) && isempty(from_tag)
         error("Either <data> argument or --from-tag option is required")
     end
@@ -428,6 +454,8 @@ function _forecast_arima(; data::String, column::Int=1, p=nothing, d::Int=0, q::
 
     fc = forecast(model, horizons; conf_level=confidence)
 
+    _maybe_plot(fc; plot=plot, plot_save=plot_save)
+
     p_sel = ar_order(model)
     d_sel = diff_order(model)
     q_sel = ma_order(model)
@@ -444,9 +472,8 @@ function _forecast_arima(; data::String, column::Int=1, p=nothing, d::Int=0, q::
     output_result(fc_df; format=Symbol(format), output=output,
                   title="$label Forecast for $vname (h=$horizons, $(Int(round(confidence*100)))% CI)")
 
-    storage_save_auto!("forecast", Dict{String,Any}("type" => "arima", "model" => label,
-        "horizons" => horizons),
-        Dict{String,Any}("command" => "forecast arima", "data" => data))
+    storage_save_auto!("forecast", serialize_model(fc),
+        Dict{String,Any}("command" => "forecast arima", "data" => data, "model" => label, "horizons" => horizons))
 end
 
 # ── Factor Model Forecasts ───────────────────────────────
@@ -454,7 +481,8 @@ end
 function _forecast_static(; data::String, nfactors=nothing, horizons::Int=12,
                             ci_method::String="none", conf_level::Float64=0.95,
                             from_tag::String="",
-                            output::String="", format::String="table")
+                            output::String="", format::String="table",
+                            plot::Bool=false, plot_save::String="")
     if isempty(data) && isempty(from_tag)
         error("Either <data> argument or --from-tag option is required")
     end
@@ -478,6 +506,8 @@ function _forecast_static(; data::String, nfactors=nothing, horizons::Int=12,
 
     fm = estimate_factors(X, r)
     fc = forecast(fm, horizons; ci_method=Symbol(ci_method), conf_level=conf_level)
+
+    _maybe_plot(fc; plot=plot, plot_save=plot_save)
 
     fc_df = DataFrame()
     fc_df.horizon = 1:horizons
@@ -504,15 +534,15 @@ function _forecast_static(; data::String, nfactors=nothing, horizons::Int=12,
         end
     end
 
-    storage_save_auto!("forecast", Dict{String,Any}("type" => "static", "horizons" => horizons,
-        "n_factors" => r),
-        Dict{String,Any}("command" => "forecast static", "data" => data))
+    storage_save_auto!("forecast", serialize_model(fc),
+        Dict{String,Any}("command" => "forecast static", "data" => data, "horizons" => horizons, "n_factors" => r))
 end
 
 function _forecast_dynamic(; data::String, nfactors=nothing, horizons::Int=12,
                              factor_lags::Int=1, method::String="twostep",
                              from_tag::String="",
-                             output::String="", format::String="table")
+                             output::String="", format::String="table",
+                             plot::Bool=false, plot_save::String="")
     if isempty(data) && isempty(from_tag)
         error("Either <data> argument or --from-tag option is required")
     end
@@ -536,6 +566,8 @@ function _forecast_dynamic(; data::String, nfactors=nothing, horizons::Int=12,
 
     fm = estimate_dynamic_factors(X, r, factor_lags; method=Symbol(method))
     fc = forecast(fm, horizons)
+
+    _maybe_plot(fc; plot=plot, plot_save=plot_save)
 
     # Reconstruct observables via loadings
     # fc may be a FactorForecast object, NamedTuple, or raw matrix
@@ -561,14 +593,14 @@ function _forecast_dynamic(; data::String, nfactors=nothing, horizons::Int=12,
     output_result(fc_df; format=Symbol(format), output=output,
                   title="Dynamic Factor Forecast (h=$horizons, $(length(varnames)) variables)")
 
-    storage_save_auto!("forecast", Dict{String,Any}("type" => "dynamic", "horizons" => horizons,
-        "n_factors" => r),
-        Dict{String,Any}("command" => "forecast dynamic", "data" => data))
+    storage_save_auto!("forecast", serialize_model(fc),
+        Dict{String,Any}("command" => "forecast dynamic", "data" => data, "horizons" => horizons, "n_factors" => r))
 end
 
 function _forecast_gdfm(; data::String, nfactors=nothing, dynamic_rank=nothing,
                           horizons::Int=12, from_tag::String="",
-                          output::String="", format::String="table")
+                          output::String="", format::String="table",
+                          plot::Bool=false, plot_save::String="")
     if isempty(data) && isempty(from_tag)
         error("Either <data> argument or --from-tag option is required")
     end
@@ -646,7 +678,8 @@ end
 
 function _forecast_arch(; data::String, column::Int=1, q::Int=1, horizons::Int=12,
                           from_tag::String="",
-                          output::String="", format::String="table")
+                          output::String="", format::String="table",
+                          plot::Bool=false, plot_save::String="")
     if isempty(data) && isempty(from_tag)
         error("Either <data> argument or --from-tag option is required")
     end
@@ -661,15 +694,19 @@ function _forecast_arch(; data::String, column::Int=1, q::Int=1, horizons::Int=1
 
     model = estimate_arch(y, q)
     fc = forecast(model, horizons)
+
+    _maybe_plot(fc; plot=plot, plot_save=plot_save)
+
     _vol_forecast_output(fc, vname, label, horizons; format=format, output=output)
 
-    storage_save_auto!("forecast", Dict{String,Any}("type" => "arch", "horizons" => horizons),
-        Dict{String,Any}("command" => "forecast arch", "data" => data))
+    storage_save_auto!("forecast", serialize_model(fc),
+        Dict{String,Any}("command" => "forecast arch", "data" => data, "horizons" => horizons))
 end
 
 function _forecast_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
                            horizons::Int=12, from_tag::String="",
-                           output::String="", format::String="table")
+                           output::String="", format::String="table",
+                           plot::Bool=false, plot_save::String="")
     if isempty(data) && isempty(from_tag)
         error("Either <data> argument or --from-tag option is required")
     end
@@ -684,19 +721,23 @@ function _forecast_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
 
     model = estimate_garch(y, p, q)
     fc = forecast(model, horizons)
+
+    _maybe_plot(fc; plot=plot, plot_save=plot_save)
+
     _vol_forecast_output(fc, vname, label, horizons; format=format, output=output)
 
     uc = unconditional_variance(model)
     println()
     println("Unconditional variance: $(round(uc; digits=4))")
 
-    storage_save_auto!("forecast", Dict{String,Any}("type" => "garch", "horizons" => horizons),
-        Dict{String,Any}("command" => "forecast garch", "data" => data))
+    storage_save_auto!("forecast", serialize_model(fc),
+        Dict{String,Any}("command" => "forecast garch", "data" => data, "horizons" => horizons))
 end
 
 function _forecast_egarch(; data::String, column::Int=1, p::Int=1, q::Int=1,
                             horizons::Int=12, from_tag::String="",
-                            output::String="", format::String="table")
+                            output::String="", format::String="table",
+                            plot::Bool=false, plot_save::String="")
     if isempty(data) && isempty(from_tag)
         error("Either <data> argument or --from-tag option is required")
     end
@@ -711,15 +752,19 @@ function _forecast_egarch(; data::String, column::Int=1, p::Int=1, q::Int=1,
 
     model = estimate_egarch(y, p, q)
     fc = forecast(model, horizons)
+
+    _maybe_plot(fc; plot=plot, plot_save=plot_save)
+
     _vol_forecast_output(fc, vname, label, horizons; format=format, output=output)
 
-    storage_save_auto!("forecast", Dict{String,Any}("type" => "egarch", "horizons" => horizons),
-        Dict{String,Any}("command" => "forecast egarch", "data" => data))
+    storage_save_auto!("forecast", serialize_model(fc),
+        Dict{String,Any}("command" => "forecast egarch", "data" => data, "horizons" => horizons))
 end
 
 function _forecast_gjr_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
                                horizons::Int=12, from_tag::String="",
-                               output::String="", format::String="table")
+                               output::String="", format::String="table",
+                               plot::Bool=false, plot_save::String="")
     if isempty(data) && isempty(from_tag)
         error("Either <data> argument or --from-tag option is required")
     end
@@ -734,15 +779,19 @@ function _forecast_gjr_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
 
     model = estimate_gjr_garch(y, p, q)
     fc = forecast(model, horizons)
+
+    _maybe_plot(fc; plot=plot, plot_save=plot_save)
+
     _vol_forecast_output(fc, vname, label, horizons; format=format, output=output)
 
-    storage_save_auto!("forecast", Dict{String,Any}("type" => "gjr_garch", "horizons" => horizons),
-        Dict{String,Any}("command" => "forecast gjr_garch", "data" => data))
+    storage_save_auto!("forecast", serialize_model(fc),
+        Dict{String,Any}("command" => "forecast gjr_garch", "data" => data, "horizons" => horizons))
 end
 
 function _forecast_sv(; data::String, column::Int=1, draws::Int=5000,
                         horizons::Int=12, from_tag::String="",
-                        output::String="", format::String="table")
+                        output::String="", format::String="table",
+                        plot::Bool=false, plot_save::String="")
     if isempty(data) && isempty(from_tag)
         error("Either <data> argument or --from-tag option is required")
     end
@@ -756,10 +805,13 @@ function _forecast_sv(; data::String, column::Int=1, draws::Int=5000,
 
     model = estimate_sv(y; n_samples=draws)
     fc = forecast(model, horizons)
+
+    _maybe_plot(fc; plot=plot, plot_save=plot_save)
+
     _vol_forecast_output(fc, vname, "SV", horizons; format=format, output=output)
 
-    storage_save_auto!("forecast", Dict{String,Any}("type" => "sv", "horizons" => horizons),
-        Dict{String,Any}("command" => "forecast sv", "data" => data))
+    storage_save_auto!("forecast", serialize_model(fc),
+        Dict{String,Any}("command" => "forecast sv", "data" => data, "horizons" => horizons))
 end
 
 # ── VECM Forecast ───────────────────────────────────────
@@ -768,7 +820,8 @@ function _forecast_vecm(; data::String, lags::Int=2, rank::String="auto",
                           deterministic::String="constant", horizons::Int=12,
                           ci_method::String="none", replications::Int=500,
                           confidence::Float64=0.95, from_tag::String="",
-                          output::String="", format::String="table")
+                          output::String="", format::String="table",
+                          plot::Bool=false, plot_save::String="")
     if isempty(data) && isempty(from_tag)
         error("Either <data> argument or --from-tag option is required")
     end
@@ -783,6 +836,8 @@ function _forecast_vecm(; data::String, lags::Int=2, rank::String="auto",
     println()
 
     fc = forecast(vecm, horizons; ci_method=Symbol(ci_method), reps=replications, conf_level=confidence)
+
+    _maybe_plot(fc; plot=plot, plot_save=plot_save)
 
     fc_df = DataFrame()
     fc_df.horizon = 1:horizons
@@ -801,7 +856,6 @@ function _forecast_vecm(; data::String, lags::Int=2, rank::String="auto",
     output_result(fc_df; format=Symbol(format), output=output,
                   title="VECM Forecast (rank=$r, h=$horizons$ci_label)")
 
-    storage_save_auto!("forecast", Dict{String,Any}("type" => "vecm", "horizons" => horizons,
-        "rank" => r, "n_vars" => n),
-        Dict{String,Any}("command" => "forecast vecm", "data" => data))
+    storage_save_auto!("forecast", serialize_model(fc),
+        Dict{String,Any}("command" => "forecast vecm", "data" => data, "horizons" => horizons, "rank" => r, "n_vars" => n))
 end

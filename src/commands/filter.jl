@@ -24,7 +24,9 @@ function register_filter_commands!()
             Option("columns"; short="c", type=String, default="", description="Column indices, comma-separated (default: all numeric)"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Hodrick-Prescott filter")
 
     filt_hamilton = LeafCommand("hamilton", _filter_hamilton;
@@ -35,7 +37,9 @@ function register_filter_commands!()
             Option("columns"; short="c", type=String, default="", description="Column indices, comma-separated (default: all numeric)"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Hamilton (2018) regression filter")
 
     filt_bn = LeafCommand("bn", _filter_bn;
@@ -46,7 +50,9 @@ function register_filter_commands!()
             Option("columns"; short="c", type=String, default="", description="Column indices, comma-separated (default: all numeric)"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Beveridge-Nelson decomposition")
 
     filt_bk = LeafCommand("bk", _filter_bk;
@@ -58,7 +64,9 @@ function register_filter_commands!()
             Option("columns"; short="c", type=String, default="", description="Column indices, comma-separated (default: all numeric)"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Baxter-King band-pass filter")
 
     filt_bhp = LeafCommand("bhp", _filter_bhp;
@@ -71,7 +79,9 @@ function register_filter_commands!()
             Option("columns"; short="c", type=String, default="", description="Column indices, comma-separated (default: all numeric)"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Boosted HP filter (Phillips & Shi 2021)")
 
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
@@ -119,7 +129,8 @@ end
 # ── HP Filter ────────────────────────────────────────────
 
 function _filter_hp(; data::String, lambda::Float64=1600.0, columns::String="",
-                     output::String="", format::String="table")
+                     output::String="", format::String="table",
+                     plot::Bool=false, plot_save::String="")
     df = load_data(data)
     Y = df_to_matrix(df)
     varnames = variable_names(df)
@@ -133,11 +144,14 @@ function _filter_hp(; data::String, lambda::Float64=1600.0, columns::String="",
     result_df.t = 1:T_obs
     cycles = Vector{Float64}[]
     originals = Vector{Float64}[]
+    last_result = nothing
 
     for ci in col_idx
         vname = varnames[ci]
         y = Y[:, ci]
         res = hp_filter(y; lambda=lambda)
+        last_result = res
+        _maybe_plot(res; plot=plot, plot_save=isempty(plot_save) ? "" : _per_var_output_path(plot_save, vname))
         t = trend(res)
         c = cycle(res)
         result_df[!, "$(vname)_trend"] = round.(t; digits=6)
@@ -151,14 +165,15 @@ function _filter_hp(; data::String, lambda::Float64=1600.0, columns::String="",
                   title="HP Filter (λ=$(lambda))")
     _print_variance_ratios(sel_names, cycles, originals)
 
-    storage_save_auto!("hp", Dict{String,Any}("type" => "hp", "lambda" => lambda, "T" => T_obs),
-        Dict{String,Any}("command" => "filter hp", "data" => data))
+    storage_save_auto!("hp", isnothing(last_result) ? Dict{String,Any}("type"=>"hp") : serialize_model(last_result),
+        Dict{String,Any}("command" => "filter hp", "data" => data, "lambda" => lambda, "T" => T_obs))
 end
 
 # ── Hamilton Filter ──────────────────────────────────────
 
 function _filter_hamilton(; data::String, horizon::Int=8, lags::Int=4, columns::String="",
-                           output::String="", format::String="table")
+                           output::String="", format::String="table",
+                           plot::Bool=false, plot_save::String="")
     df = load_data(data)
     Y = df_to_matrix(df)
     varnames = variable_names(df)
@@ -172,11 +187,14 @@ function _filter_hamilton(; data::String, horizon::Int=8, lags::Int=4, columns::
     cycles = Vector{Float64}[]
     originals = Vector{Float64}[]
     first_valid = nothing
+    last_result = nothing
 
     for ci in col_idx
         vname = varnames[ci]
         y = Y[:, ci]
         res = hamilton_filter(y; h=horizon, p=lags)
+        last_result = res
+        _maybe_plot(res; plot=plot, plot_save=isempty(plot_save) ? "" : _per_var_output_path(plot_save, vname), original=y)
         t = trend(res)
         c = cycle(res)
         vr = res.valid_range
@@ -206,14 +224,15 @@ function _filter_hamilton(; data::String, horizon::Int=8, lags::Int=4, columns::
                   title="Hamilton Filter (h=$horizon, p=$lags)")
     _print_variance_ratios(sel_names, cycles, originals)
 
-    storage_save_auto!("hamilton", Dict{String,Any}("type" => "hamilton", "horizon" => horizon, "lags" => lags, "T" => T_obs),
-        Dict{String,Any}("command" => "filter hamilton", "data" => data))
+    storage_save_auto!("hamilton", isnothing(last_result) ? Dict{String,Any}("type"=>"hamilton") : serialize_model(last_result),
+        Dict{String,Any}("command" => "filter hamilton", "data" => data, "horizon" => horizon, "lags" => lags, "T" => T_obs))
 end
 
 # ── Beveridge-Nelson Decomposition ───────────────────────
 
 function _filter_bn(; data::String, p=nothing, q=nothing, columns::String="",
-                     output::String="", format::String="table")
+                     output::String="", format::String="table",
+                     plot::Bool=false, plot_save::String="")
     df = load_data(data)
     Y = df_to_matrix(df)
     varnames = variable_names(df)
@@ -229,6 +248,7 @@ function _filter_bn(; data::String, p=nothing, q=nothing, columns::String="",
     result_df.t = 1:T_obs
     cycles = Vector{Float64}[]
     originals = Vector{Float64}[]
+    last_result = nothing
 
     kwargs = Dict{Symbol,Any}()
     isnothing(p) || (kwargs[:p] = p)
@@ -238,6 +258,8 @@ function _filter_bn(; data::String, p=nothing, q=nothing, columns::String="",
         vname = varnames[ci]
         y = Y[:, ci]
         res = beveridge_nelson(y; kwargs...)
+        last_result = res
+        _maybe_plot(res; plot=plot, plot_save=isempty(plot_save) ? "" : _per_var_output_path(plot_save, vname))
         t = trend(res)
         c = cycle(res)
         result_df[!, "$(vname)_trend"] = round.(t; digits=6)
@@ -251,14 +273,15 @@ function _filter_bn(; data::String, p=nothing, q=nothing, columns::String="",
                   title="Beveridge-Nelson Decomposition")
     _print_variance_ratios(sel_names, cycles, originals)
 
-    storage_save_auto!("bn", Dict{String,Any}("type" => "bn", "p" => p_label, "q" => q_label, "T" => T_obs),
-        Dict{String,Any}("command" => "filter bn", "data" => data))
+    storage_save_auto!("bn", isnothing(last_result) ? Dict{String,Any}("type"=>"bn") : serialize_model(last_result),
+        Dict{String,Any}("command" => "filter bn", "data" => data, "p" => p_label, "q" => q_label, "T" => T_obs))
 end
 
 # ── Baxter-King Band-Pass Filter ─────────────────────────
 
 function _filter_bk(; data::String, pl::Int=6, pu::Int=32, K::Int=12, columns::String="",
-                     output::String="", format::String="table")
+                     output::String="", format::String="table",
+                     plot::Bool=false, plot_save::String="")
     df = load_data(data)
     Y = df_to_matrix(df)
     varnames = variable_names(df)
@@ -272,11 +295,14 @@ function _filter_bk(; data::String, pl::Int=6, pu::Int=32, K::Int=12, columns::S
     cycles = Vector{Float64}[]
     originals = Vector{Float64}[]
     first_valid = nothing
+    last_result = nothing
 
     for ci in col_idx
         vname = varnames[ci]
         y = Y[:, ci]
         res = baxter_king(y; pl=pl, pu=pu, K=K)
+        last_result = res
+        _maybe_plot(res; plot=plot, plot_save=isempty(plot_save) ? "" : _per_var_output_path(plot_save, vname), original=y)
         t = trend(res)
         c = cycle(res)
         vr = res.valid_range
@@ -307,15 +333,16 @@ function _filter_bk(; data::String, pl::Int=6, pu::Int=32, K::Int=12, columns::S
                   title="Baxter-King Filter (pl=$pl, pu=$pu, K=$K)")
     _print_variance_ratios(sel_names, cycles, originals)
 
-    storage_save_auto!("bk", Dict{String,Any}("type" => "bk", "pl" => pl, "pu" => pu, "K" => K, "T" => T_obs),
-        Dict{String,Any}("command" => "filter bk", "data" => data))
+    storage_save_auto!("bk", isnothing(last_result) ? Dict{String,Any}("type"=>"bk") : serialize_model(last_result),
+        Dict{String,Any}("command" => "filter bk", "data" => data, "pl" => pl, "pu" => pu, "K" => K, "T" => T_obs))
 end
 
 # ── Boosted HP Filter ────────────────────────────────────
 
 function _filter_bhp(; data::String, lambda::Float64=1600.0, stopping::String="BIC",
                       max_iter::Int=100, sig_p::Float64=0.05, columns::String="",
-                      output::String="", format::String="table")
+                      output::String="", format::String="table",
+                      plot::Bool=false, plot_save::String="")
     df = load_data(data)
     Y = df_to_matrix(df)
     varnames = variable_names(df)
@@ -330,11 +357,14 @@ function _filter_bhp(; data::String, lambda::Float64=1600.0, stopping::String="B
     result_df.t = 1:T_obs
     cycles = Vector{Float64}[]
     originals = Vector{Float64}[]
+    last_result = nothing
 
     for ci in col_idx
         vname = varnames[ci]
         y = Y[:, ci]
         res = boosted_hp(y; lambda=lambda, stopping=stop_sym, max_iter=max_iter, sig_p=sig_p)
+        last_result = res
+        _maybe_plot(res; plot=plot, plot_save=isempty(plot_save) ? "" : _per_var_output_path(plot_save, vname))
         t = trend(res)
         c = cycle(res)
         result_df[!, "$(vname)_trend"] = round.(t; digits=6)
@@ -350,7 +380,6 @@ function _filter_bhp(; data::String, lambda::Float64=1600.0, stopping::String="B
                   title="Boosted HP Filter (λ=$(lambda), stopping=$stopping)")
     _print_variance_ratios(sel_names, cycles, originals)
 
-    storage_save_auto!("bhp", Dict{String,Any}("type" => "bhp", "lambda" => lambda,
-        "stopping" => stopping, "T" => T_obs),
-        Dict{String,Any}("command" => "filter bhp", "data" => data))
+    storage_save_auto!("bhp", isnothing(last_result) ? Dict{String,Any}("type"=>"bhp") : serialize_model(last_result),
+        Dict{String,Any}("command" => "filter bhp", "data" => data, "lambda" => lambda, "stopping" => stopping, "T" => T_obs))
 end

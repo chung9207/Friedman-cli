@@ -52,6 +52,7 @@ include("commands/data.jl")
 include("commands/list.jl")
 include("commands/rename.jl")
 include("commands/project.jl")
+include("commands/plot.jl")
 
 const FRIEDMAN_VERSION = v"0.2.1"
 
@@ -75,6 +76,7 @@ function build_app()
         "list"      => register_list_commands!(),
         "rename"   => register_rename_commands!(),
         "project"  => register_project_commands!(),
+        "plot"     => register_plot_commands!(),
     )
 
     root = NodeCommand("friedman", root_cmds,

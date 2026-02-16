@@ -48,25 +48,53 @@ MinnesotaHyperparameters(; tau=0.2, decay=1.0, lambda=0.5, mu=1.0, omega=[1.0]) 
 
 struct ImpulseResponse{T}
     values::Array{T,3}; ci_lower::Union{Array{T,3},Nothing}; ci_upper::Union{Array{T,3},Nothing}
+    horizon::Int; variables::Vector{String}; shocks::Vector{String}; ci_type::Symbol
 end
+# Convenience 3-arg constructor for backward compat with existing handler tests
+ImpulseResponse(v::Array{T,3}, cl, cu) where T = ImpulseResponse(v, cl, cu, size(v,1),
+    ["var$i" for i in 1:size(v,2)], ["shock$i" for i in 1:size(v,3)], :cholesky)
+
 struct BayesianImpulseResponse{T}
-    mean::Array{T,3}; quantiles::Array{T,4}; quantile_levels::Vector{T}
+    quantiles::Array{T,4}; mean::Array{T,3}
+    horizon::Int; variables::Vector{String}; shocks::Vector{String}; quantile_levels::Vector{T}
 end
+# Convenience 3-arg constructor for backward compat
+BayesianImpulseResponse(m::Array{T,3}, q::Array{T,4}, ql::Vector{T}) where T =
+    BayesianImpulseResponse(q, m, size(m,1),
+    ["var$i" for i in 1:size(m,2)], ["shock$i" for i in 1:size(m,3)], ql)
 
 struct FEVD{T}
     decomposition::Array{T,3}; proportions::Array{T,3}
 end
 struct BayesianFEVD{T}
-    mean::Array{T,3}; quantiles::Array{T,4}; quantile_levels::Vector{T}
+    quantiles::Array{T,4}; mean::Array{T,3}
+    horizon::Int; variables::Vector{String}; shocks::Vector{String}; quantile_levels::Vector{T}
 end
+# Convenience 3-arg constructor for backward compat
+BayesianFEVD(m::Array{T,3}, q::Array{T,4}, ql::Vector{T}) where T =
+    BayesianFEVD(q, m, size(m,1),
+    ["var$i" for i in 1:size(m,2)], ["shock$i" for i in 1:size(m,3)], ql)
 
 struct HistoricalDecomposition{T}
     contributions::Array{T,3}; initial_conditions::Matrix{T}; actual::Matrix{T}
-    shocks::Matrix{T}; T_eff::Int
+    shocks::Matrix{T}; T_eff::Int; variables::Vector{String}; shock_names::Vector{String}
+    method::Symbol
 end
+# Convenience 5-arg constructor for backward compat
+HistoricalDecomposition(c::Array{T,3}, ic, a, s, te::Int) where T =
+    HistoricalDecomposition(c, ic, a, s, te,
+    ["var$i" for i in 1:size(c,2)], ["shock$i" for i in 1:size(c,3)], :cholesky)
+
 struct BayesianHistoricalDecomposition{T}
-    mean::Array{T,3}; initial_mean::Matrix{T}; quantiles::Array{T,4}; quantile_levels::Vector{T}
+    quantiles::Array{T,4}; mean::Array{T,3}; initial_quantiles::Array{T,3}
+    initial_mean::Matrix{T}; shocks_mean::Matrix{T}; actual::Matrix{T}
+    T_eff::Int; variables::Vector{String}; shock_names::Vector{String}
+    quantile_levels::Vector{T}; method::Symbol
 end
+# Convenience 4-arg constructor for backward compat
+BayesianHistoricalDecomposition(m::Array{T,3}, im::Matrix{T}, q::Array{T,4}, ql::Vector{T}) where T =
+    BayesianHistoricalDecomposition(q, m, zeros(T, 0, 0, 0), im, zeros(T, 0, 0), zeros(T, 0, 0),
+    size(m,1), ["var$i" for i in 1:size(m,2)], ["shock$i" for i in 1:size(m,3)], ql, :cholesky)
 
 struct ZeroRestriction
     variable::Int; shock::Int; horizon::Int
@@ -115,31 +143,61 @@ struct StructuralLP{T}
     method::Symbol; se::Array{T,3}; lp_models::Vector{LPModel{T}}
 end
 struct LPFEVD{T}
-    R2::Array{T,3}; lp_a::Array{T,3}; lp_b::Array{T,3}
-    bias_corrected::Array{T,3}; bootstrap_se::Array{T,3}
-    horizons::Int; variables::Int; shocks::Int
+    proportions::Array{T,3}; bias_corrected::Array{T,3}; se::Array{T,3}
+    ci_lower::Array{T,3}; ci_upper::Array{T,3}
+    method::Symbol; horizon::Int; n_boot::Int; conf_level::T; bias_correction::Bool
 end
+# Convenience constructor for backward compat (old tests use R2/lp_a/lp_b fields)
+LPFEVD(R2::Array{T,3}, lp_a, lp_b, bc, bse, h::Int, v::Int, s::Int) where T =
+    LPFEVD(R2, bc, bse, R2, R2, :R2, h, 200, T(0.95), true)
+
 struct LPForecast{T}
     forecasts::Matrix{T}; ci_lower::Matrix{T}; ci_upper::Matrix{T}
-    se::Matrix{T}; horizon::Int
+    se::Matrix{T}; horizon::Int; response_vars::Vector{Int}; shock_var::Int
+    shock_path::Vector{T}; conf_level::T; ci_method::Symbol
 end
+# Convenience 5-arg constructor for backward compat
+LPForecast(f::Matrix{T}, cl, cu, se, h::Int) where T =
+    LPForecast(f, cl, cu, se, h, collect(1:size(f,2)), 1, T[1.0], T(0.95), :analytical)
 
 # ─── Factor Types ─────────────────────────────────────────
 
 struct FactorModel{T}
-    data::Matrix{T}; factors::Matrix{T}; loadings::Matrix{T}; eigenvalues::Vector{T}
+    X::Matrix{T}; factors::Matrix{T}; loadings::Matrix{T}; eigenvalues::Vector{T}
+    explained_variance::Vector{T}; cumulative_variance::Vector{T}; r::Int; standardized::Bool
 end
+# Convenience 4-arg constructor for backward compat
+FactorModel(d::Matrix{T}, f, l, e) where T =
+    FactorModel(d, f, l, e, fill(T(0.5), length(e)), cumsum(fill(T(0.5), length(e))),
+    size(f, 2), true)
+
 struct DynamicFactorModel{T}
-    factors::Matrix{T}; loadings::Matrix{T}; coefficients::Matrix{T}
+    X::Matrix{T}; factors::Matrix{T}; loadings::Matrix{T}; A::Vector{Matrix{T}}
+    factor_residuals::Matrix{T}; Sigma_eta::Matrix{T}; Sigma_e::Matrix{T}
+    eigenvalues::Vector{T}; explained_variance::Vector{T}; cumulative_variance::Vector{T}
+    r::Int; p::Int; method::Symbol; standardized::Bool; converged::Bool
+    iterations::Int; loglik::T
 end
+# Convenience 3-arg constructor for backward compat
+DynamicFactorModel(f::Matrix{T}, l, c) where T =
+    DynamicFactorModel(zeros(T, 100, size(l,1)), f, l, Matrix{T}[c],
+    zeros(T, 99, size(f,2)), Matrix{T}(I(size(f,2))), Matrix{T}(I(size(l,1))),
+    ones(T, size(f,2)), fill(T(0.5), size(f,2)), cumsum(fill(T(0.5), size(f,2))),
+    size(f, 2), 1, :twostep, true, true, 100, T(-250.0))
 struct GeneralizedDynamicFactorModel{T}
     common_component::Matrix{T}; loadings::Matrix{T}
 end
 struct FactorForecast{T}
     factors::Matrix{T}; observables::Matrix{T}
-    observables_lower::Union{Matrix{T},Nothing}; observables_upper::Union{Matrix{T},Nothing}
-    observables_se::Union{Matrix{T},Nothing}; horizon::Int; conf_level::T
+    factors_lower::Matrix{T}; factors_upper::Matrix{T}
+    observables_lower::Matrix{T}; observables_upper::Matrix{T}
+    factors_se::Matrix{T}; observables_se::Matrix{T}
+    horizon::Int; conf_level::T; ci_method::Symbol
 end
+# Convenience constructor for backward compat (some old tests may use 7-arg form)
+FactorForecast(f::Matrix{T}, o, ol, ou, ose, h::Int, cl::T) where T =
+    FactorForecast(f, o, f, f, isnothing(ol) ? o : ol, isnothing(ou) ? o : ou,
+    f, isnothing(ose) ? o : ose, h, cl, :analytical)
 
 # ─── ARIMA Types ──────────────────────────────────────────
 
@@ -156,8 +214,12 @@ struct ARIMAModel{T}
     coefficients::Vector{T}; p::Int; d::Int; q::Int; sigma::T; aic_val::T; bic_val::T; ll::T
 end
 struct ARIMAForecast{T}
-    forecast::Vector{T}; ci_lower::Vector{T}; ci_upper::Vector{T}; se::Vector{T}; horizon::Int
+    forecast::Vector{T}; ci_lower::Vector{T}; ci_upper::Vector{T}; se::Vector{T}
+    horizon::Int; conf_level::T
 end
+# Convenience 5-arg constructor for backward compat
+ARIMAForecast(f::Vector{T}, cl, cu, se, h::Int) where T =
+    ARIMAForecast(f, cl, cu, se, h, T(0.95))
 
 # ─── Non-Gaussian Types ──────────────────────────────────
 
@@ -221,23 +283,76 @@ end
 # ─── Volatility Types ────────────────────────────────────
 
 struct ARCHModel{T<:Real}
-    coefficients::Vector{T}
+    y::Vector{T}; q::Int; mu::T; omega::T; alpha::Vector{T}
+    conditional_variance::Vector{T}; standardized_residuals::Vector{T}
+    residuals::Vector{T}; fitted::Vector{T}
+    loglik::T; aic::T; bic::T; method::Symbol; converged::Bool; iterations::Int
 end
+# Convenience 1-arg constructor for backward compat
+# Convenience: c has length q+2 (mu, omega, alpha_1...alpha_q)
+ARCHModel(c::Vector{T}) where T = let q = length(c) - 2
+    ARCHModel(zeros(T, 100), q, c[1], c[2], c[3:end],
+        ones(T, 100), zeros(T, 100), zeros(T, 100), zeros(T, 100),
+        T(-150.0), T(310.0), T(320.0), :mle, true, 50)
+end
+
 struct GARCHModel{T<:Real}
-    coefficients::Vector{T}
+    y::Vector{T}; p::Int; q::Int; mu::T; omega::T; alpha::Vector{T}; beta::Vector{T}
+    conditional_variance::Vector{T}; standardized_residuals::Vector{T}
+    residuals::Vector{T}; fitted::Vector{T}
+    loglik::T; aic::T; bic::T; method::Symbol; converged::Bool; iterations::Int
 end
+# Convenience: c has length p+q+2 (mu, omega, alpha_1...alpha_q, beta_1...beta_p)
+GARCHModel(c::Vector{T}) where T = let np = length(c) - 2; q = div(np, 2); p = np - q
+    GARCHModel(zeros(T, 100), p, q, c[1], c[2], c[3:3+q-1], c[3+q:end],
+        ones(T, 100), zeros(T, 100), zeros(T, 100), zeros(T, 100),
+        T(-150.0), T(310.0), T(320.0), :mle, true, 50)
+end
+
 struct EGARCHModel{T<:Real}
-    coefficients::Vector{T}
+    y::Vector{T}; p::Int; q::Int; mu::T; omega::T; alpha::Vector{T}; gamma::Vector{T}; beta::Vector{T}
+    conditional_variance::Vector{T}; standardized_residuals::Vector{T}
+    residuals::Vector{T}; fitted::Vector{T}
+    loglik::T; aic::T; bic::T; method::Symbol; converged::Bool; iterations::Int
 end
+# Convenience: c has length 2*q+p+2 (mu, omega, alpha_1...alpha_q, gamma_1...gamma_q, beta_1...beta_p)
+EGARCHModel(c::Vector{T}) where T = let np = length(c) - 2; q = div(np, 3); p = np - 2*q
+    EGARCHModel(zeros(T, 100), p, q, c[1], c[2], c[3:3+q-1], c[3+q:3+2*q-1], c[3+2*q:end],
+        ones(T, 100), zeros(T, 100), zeros(T, 100), zeros(T, 100),
+        T(-150.0), T(310.0), T(320.0), :mle, true, 50)
+end
+
 struct GJRGARCHModel{T<:Real}
-    coefficients::Vector{T}
+    y::Vector{T}; p::Int; q::Int; mu::T; omega::T; alpha::Vector{T}; gamma::Vector{T}; beta::Vector{T}
+    conditional_variance::Vector{T}; standardized_residuals::Vector{T}
+    residuals::Vector{T}; fitted::Vector{T}
+    loglik::T; aic::T; bic::T; method::Symbol; converged::Bool; iterations::Int
 end
+# Convenience: c has length 2*q+p+2 (mu, omega, alpha_1...alpha_q, gamma_1...gamma_q, beta_1...beta_p)
+GJRGARCHModel(c::Vector{T}) where T = let np = length(c) - 2; q = div(np, 3); p = np - 2*q
+    GJRGARCHModel(zeros(T, 100), p, q, c[1], c[2], c[3:3+q-1], c[3+q:3+2*q-1], c[3+2*q:end],
+        ones(T, 100), zeros(T, 100), zeros(T, 100), zeros(T, 100),
+        T(-150.0), T(310.0), T(320.0), :mle, true, 50)
+end
+
 struct SVModel{T<:Real}
-    coefficients::Vector{T}
+    y::Vector{T}; h_draws::Matrix{T}
+    mu_post::Vector{T}; phi_post::Vector{T}; sigma_eta_post::Vector{T}
+    volatility_mean::Vector{T}; volatility_quantiles::Matrix{T}; quantile_levels::Vector{T}
+    dist::Symbol; leverage::Bool; n_samples::Int
 end
+# Convenience 1-arg constructor: c is ignored, just for backward compat
+SVModel(c::Vector{T}) where T = SVModel(zeros(T, 100), zeros(T, 10, 100),
+    zeros(T, 10), zeros(T, 10), zeros(T, 10), ones(T, 100),
+    ones(T, 100, 3), T[0.16, 0.5, 0.84], :normal, false, 10)
+
 struct VolatilityForecast{T<:Real}
-    forecast::Vector{T}; horizon::Int
+    forecast::Vector{T}; ci_lower::Vector{T}; ci_upper::Vector{T}; se::Vector{T}
+    horizon::Int; conf_level::T; model_type::Symbol
 end
+# Convenience 2-arg constructor for backward compat
+VolatilityForecast(f::Vector{T}, h::Int) where T =
+    VolatilityForecast(f, f, f, abs.(f) .* T(0.1), h, T(0.95), :garch)
 
 # ─── VECM Types ──────────────────────────────────────────
 
@@ -301,7 +416,10 @@ loglikelihood(m::VARModel) = -500.0
 loglikelihood(m::Union{ARModel,MAModel,ARMAModel,ARIMAModel}) = m.ll
 stderror(m::GMMModel) = fill(0.1, length(m.theta))
 stderror(m::Union{ARModel,MAModel,ARMAModel,ARIMAModel}) = fill(0.01, length(m.coefficients))
-stderror(m::Union{ARCHModel,GARCHModel,EGARCHModel,GJRGARCHModel}) = fill(0.01, length(m.coefficients))
+stderror(m::ARCHModel) = fill(0.01, 2 + m.q)  # mu, omega, alpha...
+stderror(m::GARCHModel) = fill(0.01, 2 + m.q + m.p)  # mu, omega, alpha..., beta...
+stderror(m::EGARCHModel) = fill(0.01, 2 + m.q + m.q + m.p)  # mu, omega, alpha..., gamma..., beta...
+stderror(m::GJRGARCHModel) = fill(0.01, 2 + m.q + m.q + m.p)  # mu, omega, alpha..., gamma..., beta...
 
 # predict: return fitted values
 predict(m::VARModel) = m.Y[m.p+1:end, :]
@@ -315,13 +433,15 @@ residuals(m::Union{ARModel,MAModel,ARMAModel,ARIMAModel}) = fill(0.01, 50)
 predict(m::FactorModel) = m.factors * m.loadings'  # T × n common component
 predict(m::DynamicFactorModel) = m.factors * m.loadings'  # T × n common component
 predict(m::GeneralizedDynamicFactorModel) = m.common_component  # T × n
-residuals(m::FactorModel) = m.data .- m.factors * m.loadings'  # T × n idiosyncratic
+residuals(m::FactorModel) = m.X .- m.factors * m.loadings'  # T × n idiosyncratic
 residuals(m::DynamicFactorModel) = ones(size(m.factors, 1), size(m.loadings, 1)) * 0.01
 residuals(m::GeneralizedDynamicFactorModel) = ones(size(m.common_component)) * 0.01
 
 # Volatility model predict/residuals
-predict(m::Union{ARCHModel,GARCHModel,EGARCHModel,GJRGARCHModel,SVModel}) = fill(0.01, 50)
-residuals(m::Union{ARCHModel,GARCHModel,EGARCHModel,GJRGARCHModel,SVModel}) = fill(0.01, 50)
+predict(m::Union{ARCHModel,GARCHModel,EGARCHModel,GJRGARCHModel}) = m.fitted
+predict(m::SVModel) = m.volatility_mean
+residuals(m::Union{ARCHModel,GARCHModel,EGARCHModel,GJRGARCHModel}) = m.residuals
+residuals(m::SVModel) = m.y .- m.volatility_mean
 
 report(::VARModel) = nothing
 report(::ImpulseResponse) = nothing
@@ -345,7 +465,7 @@ function companion_matrix(B::AbstractMatrix, n::Int, p::Int)
     np > n && (C[n+1:np, 1:np-n] = Matrix{Float64}(I(np - n)))
     C
 end
-companion_matrix_factors(m::DynamicFactorModel) = m.coefficients
+companion_matrix_factors(m::DynamicFactorModel) = length(m.A) > 0 ? m.A[1] : zeros(m.r, m.r)
 nvars(m::VARModel) = size(m.Y, 2)
 
 # IRF
@@ -597,19 +717,20 @@ function common_variance_share(model::GeneralizedDynamicFactorModel)
     fill(0.5, n)
 end
 function forecast(model::FactorModel, h::Int; ci_method=:none, conf_level=0.95)
-    n = size(model.data, 2)
+    n = size(model.X, 2)
+    r = size(model.factors, 2)
     obs = ones(h, n) * 0.1
-    has_ci = ci_method != :none
-    FactorForecast(ones(h, size(model.factors,2))*0.1, obs,
-        has_ci ? obs .- 0.5 : nothing, has_ci ? obs .+ 0.5 : nothing,
-        has_ci ? ones(h, n)*0.1 : nothing, h, conf_level)
+    fac = ones(h, r) * 0.1
+    FactorForecast(fac, obs, fac, fac, obs .- 0.5, obs .+ 0.5,
+        abs.(fac) .* 0.1, ones(h, n)*0.1, h, conf_level, :analytical)
 end
 function forecast(model::DynamicFactorModel, h::Int; ci=false, ci_method=:none, conf_level=0.95, n_boot=500, ci_level=0.95)
     r = size(model.factors, 2)
     n = size(model.loadings, 1)
     factors = ones(h, r) * 0.1
     obs = factors * model.loadings'
-    FactorForecast(factors, obs, nothing, nothing, nothing, h, conf_level)
+    FactorForecast(factors, obs, factors, factors, obs .- 0.5, obs .+ 0.5,
+        abs.(factors) .* 0.1, ones(h, n)*0.1, h, conf_level, :analytical)
 end
 
 # Unit root / cointegration tests
@@ -660,7 +781,11 @@ estimate_garch(y, p, q) = GARCHModel(ones(p+q+2) * 0.1)
 estimate_egarch(y, p, q) = EGARCHModel(ones(2*q+p+2) * 0.1)
 estimate_gjr_garch(y, p, q) = GJRGARCHModel(ones(2*q+p+2) * 0.1)
 estimate_sv(y; n_samples=5000) = SVModel(ones(3) * 0.1)
-coef(m::Union{ARCHModel,GARCHModel,EGARCHModel,GJRGARCHModel,SVModel}) = m.coefficients
+coef(m::ARCHModel) = [m.mu, m.omega, m.alpha...]
+coef(m::GARCHModel) = [m.mu, m.omega, m.alpha..., m.beta...]
+coef(m::EGARCHModel) = [m.mu, m.omega, m.alpha..., m.gamma..., m.beta...]
+coef(m::GJRGARCHModel) = [m.mu, m.omega, m.alpha..., m.gamma..., m.beta...]
+coef(m::SVModel) = [mean(m.mu_post), mean(m.phi_post), mean(m.sigma_eta_post)]
 persistence(m::Union{ARCHModel,GARCHModel,EGARCHModel,GJRGARCHModel,SVModel}) = 0.85
 halflife(m::Union{GARCHModel,GJRGARCHModel}) = 4.3
 unconditional_variance(m::Union{ARCHModel,GARCHModel}) = 0.02
@@ -1183,6 +1308,18 @@ function apply_filter(y::AbstractVector, method::Symbol; kwargs...)
         error("unknown filter method: $method")
     end
 end
+
+# ─── Plot Support ───────────────────────────────────────────
+
+struct PlotOutput
+    html::String
+end
+
+plot_result(x; kwargs...) = PlotOutput("<html><body>mock plot for $(typeof(x))</body></html>")
+save_plot(p::PlotOutput, path::String) = (write(path, p.html); path)
+display_plot(p::PlotOutput) = nothing  # no-op in tests
+
+export PlotOutput, plot_result, save_plot, display_plot
 
 export TimeSeriesData, DataDiagnostic, DataSummary
 export load_example, to_matrix, varnames, frequency, desc, vardesc, nobs, nvars

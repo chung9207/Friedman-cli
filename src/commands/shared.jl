@@ -593,6 +593,27 @@ function _build_pvar_coef_table(model, varnames::Vector{String}, p::Int)
     return coef_df
 end
 
+# ── Plot Helpers ──────────────────────────────────────────
+
+"""
+    _maybe_plot(result; plot, plot_save, kwargs...)
+
+Optionally plot a result using MacroEconometricModels' interactive D3.js plotting.
+If `plot` is true, opens in browser. If `plot_save` is non-empty, saves to HTML file.
+"""
+function _maybe_plot(result; plot::Bool=false, plot_save::String="", kwargs...)
+    !plot && isempty(plot_save) && return
+    p = plot_result(result; kwargs...)
+    if !isempty(plot_save)
+        save_plot(p, plot_save)
+        printstyled("  Plot saved: $plot_save\n"; color=:green)
+    end
+    if plot
+        display_plot(p)
+        printstyled("  Plot opened in browser\n"; color=:cyan)
+    end
+end
+
 """
     _resolve_from_tag(from_tag) → (data_path, stored_params)
 
