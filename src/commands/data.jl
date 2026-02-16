@@ -196,7 +196,7 @@ function _data_describe(; data::String, format::String="table", output::String="
     vn = variable_names(df)
     n_obs, n_vars = size(Y)
 
-    tsd = TimeSeriesData(Y, vn, :unknown, fill(1, n_vars), collect(1:n_obs), "", fill("", n_vars))
+    tsd = TimeSeriesData(Y; varnames=vn, tcode=fill(1, n_vars), time_index=collect(1:n_obs))
     summary = describe_data(tsd)
 
     result_df = DataFrame(
@@ -224,7 +224,7 @@ function _data_diagnose(; data::String, format::String="table", output::String="
     vn = variable_names(df)
     n_obs, n_vars = size(Y)
 
-    tsd = TimeSeriesData(Y, vn, :unknown, fill(1, n_vars), collect(1:n_obs), "", fill("", n_vars))
+    tsd = TimeSeriesData(Y; varnames=vn, tcode=fill(1, n_vars), time_index=collect(1:n_obs))
     diag = diagnose(tsd)
 
     result_df = DataFrame(
@@ -258,7 +258,7 @@ function _data_fix(; data::String, method::String="listwise", output::String="",
     vn = variable_names(df)
     n_obs, n_vars = size(Y)
 
-    tsd = TimeSeriesData(Y, vn, :unknown, fill(1, n_vars), collect(1:n_obs), "", fill("", n_vars))
+    tsd = TimeSeriesData(Y; varnames=vn, tcode=fill(1, n_vars), time_index=collect(1:n_obs))
     fixed = fix(tsd; method=Symbol(method))
     fixed_mat = to_matrix(fixed)
 
@@ -286,7 +286,7 @@ function _data_transform(; data::String, tcodes::String="", output::String="", f
     codes = [parse(Int, strip(s)) for s in split(tcodes, ",") if !isempty(strip(s))]
     length(codes) == n_vars || error("number of tcodes ($(length(codes))) must match number of variables ($n_vars)")
 
-    tsd = TimeSeriesData(Y, vn, :unknown, codes, collect(1:n_obs), "", fill("", n_vars))
+    tsd = TimeSeriesData(Y; varnames=vn, tcode=codes, time_index=collect(1:n_obs))
     transformed = apply_tcode(tsd, codes)
     trans_mat = to_matrix(transformed)
 
@@ -334,27 +334,32 @@ function _data_filter(; data::String, method::String="hp", component::String="cy
         vname = vn[ci]
         y = Y[:, ci]
 
-        kwargs = Dict{Symbol,Any}()
-        if method_sym == :hp || method_sym == :bhp
-            kwargs[:lambda] = lambda
+        # Call specific filter functions directly (apply_filter no longer accepts raw vectors in v0.2.2)
+        res = if method_sym == :hp
+            hp_filter(y; lambda=lambda)
         elseif method_sym == :hamilton
-            kwargs[:horizon] = horizon
-            kwargs[:lags] = lags
+            hamilton_filter(y; h=horizon, p=lags)
+        elseif method_sym == :bn
+            beveridge_nelson(y)
+        elseif method_sym == :bk
+            baxter_king(y)
+        elseif method_sym == :bhp
+            boosted_hp(y; lambda=lambda)
         end
-
-        res = apply_filter(y, method_sym; kwargs...)
 
         t = trend(res)
         c = cycle(res)
 
         # Handle valid_range for Hamilton and BK
+        # trend()/cycle() may be full-length or valid-range-only
         if hasproperty(res, :valid_range)
             vr = res.valid_range
             if !first_done
                 result_df.t = collect(vr)
                 first_done = true
             end
-            selected = component == "cycle" ? c[vr] : t[vr]
+            val = component == "cycle" ? c : t
+            selected = length(val) == T_obs ? val[vr] : val
         else
             if !first_done
                 result_df.t = 1:T_obs
@@ -382,7 +387,7 @@ function _data_validate(; data::String, model::String="", format::String="table"
     vn = variable_names(df)
     n_obs, n_vars = size(Y)
 
-    tsd = TimeSeriesData(Y, vn, :unknown, fill(1, n_vars), collect(1:n_obs), "", fill("", n_vars))
+    tsd = TimeSeriesData(Y; varnames=vn, tcode=fill(1, n_vars), time_index=collect(1:n_obs))
 
     try
         validate_for_model(tsd, Symbol(model))

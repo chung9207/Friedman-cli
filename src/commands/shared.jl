@@ -185,6 +185,8 @@ function _vol_estimate_output(model, vname::String, param_names::Vector{String},
     c = coef(model)
     names = param_names[1:length(c)]
     coef_df = try
+        # SVModel has no vcov/stderror — StatsAPI defaults cause infinite recursion
+        model isa SVModel && throw(ErrorException("no SE for SV"))
         se = stderror(model)
         z = c ./ se
         pv = [2.0 * (1.0 - _normal_cdf(abs(zi))) for zi in z]

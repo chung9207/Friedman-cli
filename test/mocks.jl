@@ -1056,6 +1056,12 @@ struct TimeSeriesData{T<:Real}
     data::Matrix{T}; varnames::Vector{String}; frequency::Symbol
     tcode::Vector{Int}; time_index::Vector{Int}; desc::String; vardesc::Vector{String}
 end
+# Keyword constructor matching MacroEconometricModels v0.2.2 interface
+function TimeSeriesData(data::AbstractMatrix{T}; varnames=String[], frequency=:unknown,
+                        tcode=fill(1, size(data, 2)), time_index=collect(1:size(data, 1)),
+                        desc="", vardesc=fill("", size(data, 2)), source_refs=Symbol[]) where T<:Real
+    TimeSeriesData{T}(Matrix{T}(data), varnames, frequency, tcode, time_index, desc, vardesc)
+end
 
 struct DataDiagnostic
     n_nan::Vector{Int}; n_inf::Vector{Int}; is_constant::Vector{Bool}

@@ -186,9 +186,12 @@ function _filter_hamilton(; data::String, horizon::Int=8, lags::Int=4, columns::
             result_df.t = collect(vr)
         end
 
-        result_df[!, "$(vname)_trend"] = round.(t[vr]; digits=6)
-        result_df[!, "$(vname)_cycle"] = round.(c[vr]; digits=6)
-        push!(cycles, c[vr])
+        # trend()/cycle() may be full-length or valid-range-only
+        tv = length(t) == T_obs ? t[vr] : t
+        cv = length(c) == T_obs ? c[vr] : c
+        result_df[!, "$(vname)_trend"] = round.(tv; digits=6)
+        result_df[!, "$(vname)_cycle"] = round.(cv; digits=6)
+        push!(cycles, cv)
         push!(originals, y[vr])
     end
 
@@ -283,9 +286,12 @@ function _filter_bk(; data::String, pl::Int=6, pu::Int=32, K::Int=12, columns::S
             result_df.t = collect(vr)
         end
 
-        result_df[!, "$(vname)_trend"] = round.(t[vr]; digits=6)
-        result_df[!, "$(vname)_cycle"] = round.(c[vr]; digits=6)
-        push!(cycles, c[vr])
+        # trend()/cycle() may be full-length or valid-range-only
+        tv = length(t) == T_obs ? t[vr] : t
+        cv = length(c) == T_obs ? c[vr] : c
+        result_df[!, "$(vname)_trend"] = round.(tv; digits=6)
+        result_df[!, "$(vname)_cycle"] = round.(cv; digits=6)
+        push!(cycles, cv)
         push!(originals, y[vr])
     end
 
