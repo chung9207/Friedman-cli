@@ -359,4 +359,4 @@ weighting = "twostep"
 
 ## License
 
-MIT
+GPL-3.0-or-later
