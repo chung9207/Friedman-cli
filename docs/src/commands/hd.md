@@ -1,6 +1,6 @@
 # hd
 
-Compute historical decomposition of shocks. 3 subcommands: `var` (frequentist), `bvar` (Bayesian), `lp` (local projections). All support `--from-tag`.
+Compute historical decomposition of shocks. 4 subcommands: `var`, `bvar`, `lp`, `vecm`. All support `--from-tag`.
 
 Historical decomposition decomposes observed data into contributions from each structural shock plus initial conditions.
 
@@ -18,7 +18,7 @@ friedman hd var001    # from stored tag
 | Option | Short | Type | Default | Description |
 |--------|-------|------|---------|-------------|
 | `--lags` | `-p` | Int | auto | Lag order |
-| `--id` | | String | `cholesky` | `cholesky`, `sign`, `narrative`, `longrun` |
+| `--id` | | String | `cholesky` | `cholesky`, `sign`, `narrative`, `longrun`, `arias`, `uhlig` |
 | `--config` | | String | | TOML config for identification |
 | `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
@@ -65,3 +65,26 @@ friedman hd lp data.csv --id=sign --config=sign_restrictions.toml --vcov=white
 | `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+
+## hd vecm
+
+Historical decomposition for Vector Error Correction Models. The VECM is converted to its VAR representation for decomposition.
+
+```bash
+friedman hd vecm data.csv --id=cholesky
+friedman hd vecm data.csv --rank=2 --deterministic=constant --lags=4
+friedman hd vecm001    # from stored tag
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--lags` | `-p` | Int | auto | Lag order |
+| `--rank` | `-r` | Int | auto | Cointegration rank (auto via Johansen) |
+| `--deterministic` | | String | `constant` | `none`, `constant`, `trend` |
+| `--id` | | String | `cholesky` | Identification method |
+| `--config` | | String | | TOML config for identification |
+| `--from-tag` | | String | | Load model from stored tag |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Per-variable table with columns: period, actual value, initial conditions, contribution from each shock.

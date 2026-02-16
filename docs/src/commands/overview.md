@@ -7,21 +7,26 @@ Friedman-cli uses an **action-first** command hierarchy: commands are organized 
 ```
 friedman
 ├── estimate     var | bvar | lp | arima | gmm | static | dynamic | gdfm |
-│                arch | garch | egarch | gjr_garch | sv | fastica | ml
+│                arch | garch | egarch | gjr_garch | sv | fastica | ml | vecm | pvar
 ├── test         adf | kpss | pp | za | np | johansen | normality |
 │                identifiability | heteroskedasticity | arch_lm | ljung_box |
-│                var (lagselect | stability)
-├── irf          var | bvar | lp
-├── fevd         var | bvar | lp
-├── hd           var | bvar | lp
+│                granger | lr | lm | var (lagselect | stability) |
+│                pvar (hansen_j | mmsc | lagselect | stability)
+├── irf          var | bvar | lp | vecm | pvar
+├── fevd         var | bvar | lp | vecm | pvar
+├── hd           var | bvar | lp | vecm
 ├── forecast     var | bvar | lp | arima | static | dynamic | gdfm |
-│                arch | garch | egarch | gjr_garch | sv
+│                arch | garch | egarch | gjr_garch | sv | vecm
+├── predict      var | bvar | arima | vecm
+├── residuals    var | bvar | arima | vecm
+├── filter       hp | hamilton | bn | bk | bhp
+├── data         list | load | describe | diagnose | fix | transform | filter | validate
 ├── list         models | results
 ├── rename       (renames stored tags)
 └── project      list | show
 ```
 
-**Total: 9 top-level commands, ~54 subcommands.**
+**Total: 13 top-level commands, ~97 subcommands.**
 
 ## Common Options
 
@@ -69,7 +74,7 @@ friedman irf var data.csv --from-tag=var001
 The tag resolution system (`resolve_stored_tags`) runs before dispatch and rewrites the arguments:
 - `["irf", "var001"]` becomes `["irf", "var", "--from-tag=var001"]`
 
-This works for `irf`, `fevd`, `hd`, and `forecast` commands.
+This works for `irf`, `fevd`, `hd`, `forecast`, `predict`, and `residuals` commands.
 
 ## Option Syntax
 

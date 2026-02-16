@@ -63,6 +63,7 @@ Friedman.get_identification
 Friedman.get_prior
 Friedman.get_gmm
 Friedman.get_nongaussian
+Friedman.get_uhlig_params
 ```
 
 ## Storage
@@ -101,6 +102,8 @@ Friedman.register_project!
 Friedman.ID_METHOD_MAP
 Friedman._load_and_estimate_var
 Friedman._load_and_estimate_bvar
+Friedman._load_and_estimate_vecm
+Friedman._load_and_estimate_pvar
 Friedman._build_prior
 Friedman._build_check_func
 Friedman._build_identification_kwargs

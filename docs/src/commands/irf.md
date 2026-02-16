@@ -1,6 +1,6 @@
 # irf
 
-Compute impulse response functions. 3 subcommands: `var` (frequentist), `bvar` (Bayesian), `lp` (local projections). All support `--from-tag` to reuse stored models.
+Compute impulse response functions. 5 subcommands: `var`, `bvar`, `lp`, `vecm`, `pvar`. All support `--from-tag` to reuse stored models.
 
 ## irf var
 
@@ -55,6 +55,7 @@ friedman irf var001
 | `narrative` | Narrative sign restrictions | Yes (narrative block) |
 | `longrun` | Long-run (Blanchard-Quah) | No |
 | `arias` | Arias et al. zero + sign | Yes (restrictions) |
+| `uhlig` | Uhlig (Mountford & Uhlig 2009) penalty-based | Yes (restrictions + uhlig params) |
 | `fastica` | FastICA | No |
 | `jade` | JADE | No |
 | `sobi` | SOBI | No |
@@ -125,3 +126,59 @@ friedman irf lp data.csv --id=cholesky --ci=bootstrap --replications=500
 | `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+
+## irf vecm
+
+IRFs for Vector Error Correction Models. The VECM is converted to its VAR representation and then IRFs are computed.
+
+```bash
+friedman irf vecm data.csv --shock=1 --horizons=20
+friedman irf vecm data.csv --rank=2 --deterministic=constant --lags=4
+friedman irf vecm data.csv --id=cholesky --ci=bootstrap --replications=500
+friedman irf vecm001    # from stored tag
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--lags` | `-p` | Int | auto | Lag order |
+| `--shock` | | Int | 1 | Shock variable index (1-based) |
+| `--horizons` | `-h` | Int | 20 | IRF horizon |
+| `--rank` | `-r` | Int | auto | Cointegration rank (auto via Johansen) |
+| `--deterministic` | | String | `constant` | `none`, `constant`, `trend` |
+| `--id` | | String | `cholesky` | Identification method |
+| `--ci` | | String | `bootstrap` | `none`, `bootstrap` |
+| `--replications` | | Int | 1000 | Bootstrap replications |
+| `--config` | | String | | TOML config for identification restrictions |
+| `--from-tag` | | String | | Load model from stored tag |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** IRFs per variable with confidence bands.
+
+## irf pvar
+
+Panel VAR impulse response functions. Supports orthogonalized (OIRF) and generalized (GIRF) impulse responses.
+
+```bash
+friedman irf pvar data.csv --id-col=country --time-col=year --horizons=20
+friedman irf pvar data.csv --irf-type=girf --horizons=12
+friedman irf pvar data.csv --ci=bootstrap --replications=500
+friedman irf pvar001    # from stored tag
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--lags` | `-p` | Int | auto | Lag order |
+| `--shock` | | Int | 1 | Shock variable index (1-based) |
+| `--horizons` | `-h` | Int | 20 | IRF horizon |
+| `--id-col` | | String | | Panel group identifier column |
+| `--time-col` | | String | | Panel time identifier column |
+| `--irf-type` | | String | `oirf` | `oirf` (orthogonalized), `girf` (generalized) |
+| `--ci` | | String | `bootstrap` | `none`, `bootstrap` |
+| `--replications` | | Int | 500 | Bootstrap replications |
+| `--conf-level` | | Float64 | 0.95 | Confidence level |
+| `--from-tag` | | String | | Load model from stored tag |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** IRFs per variable with bootstrap confidence bands.

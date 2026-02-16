@@ -1,6 +1,6 @@
 # Architecture
 
-Friedman-cli is a ~5,400 line Julia CLI application with a custom command-line framework adapted from Comonicon.jl.
+Friedman-cli is a ~9,400 line Julia CLI application with a custom command-line framework adapted from Comonicon.jl.
 
 ## Execution Flow
 
@@ -12,12 +12,16 @@ bin/friedman ARGS
     → resolve_stored_tags(args)            # tag resolution: ["irf", "var001"]
                                            #   → ["irf", "var", "--from-tag=var001"]
     → build_app()                          # constructs Entry with full command tree
-      → register_estimate_commands!()      # 9 register functions
+      → register_estimate_commands!()      # 13 register functions
       → register_test_commands!()
       → register_irf_commands!()
       → register_fevd_commands!()
       → register_hd_commands!()
       → register_forecast_commands!()
+      → register_predict_commands!()
+      → register_residuals_commands!()
+      → register_filter_commands!()
+      → register_data_commands!()
       → register_list_commands!()
       → register_rename_commands!()
       → register_project_commands!()
@@ -127,12 +131,16 @@ src/
   settings.jl             # Global ~/.friedman/ management
   commands/
     shared.jl             # ID_METHOD_MAP, shared estimation helpers
-    estimate.jl           # 15 estimation subcommands
-    test.jl               # 12+ test subcommands
-    irf.jl                # 3 IRF subcommands
-    fevd.jl               # 3 FEVD subcommands
-    hd.jl                 # 3 HD subcommands
-    forecast.jl           # 12 forecast subcommands
+    estimate.jl           # 17 estimation subcommands
+    test.jl               # 16+ test subcommands (+ nested var 2, pvar 4)
+    irf.jl                # 5 IRF subcommands
+    fevd.jl               # 5 FEVD subcommands
+    hd.jl                 # 4 HD subcommands
+    forecast.jl           # 13 forecast subcommands
+    predict.jl            # 4 predict subcommands
+    residuals.jl          # 4 residuals subcommands
+    filter.jl             # 5 filter subcommands
+    data.jl               # 8 data subcommands
     list.jl               # 2 list subcommands
     rename.jl             # 1 rename command
     project.jl            # 2 project subcommands

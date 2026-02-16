@@ -1,6 +1,6 @@
 # estimate
 
-Estimate econometric models. 15 subcommands covering VAR, BVAR, local projections, ARIMA, GMM, factor models, volatility models, and non-Gaussian SVAR identification.
+Estimate econometric models. 17 subcommands covering VAR, BVAR, VECM, Panel VAR, local projections, ARIMA, GMM, factor models, volatility models, and non-Gaussian SVAR identification.
 
 All estimation commands auto-save results with tags (e.g., `var001`, `bvar001`).
 
@@ -343,3 +343,51 @@ friedman estimate ml data.csv --distribution=skew_normal
 | `--output` | `-o` | String | | Export file path |
 
 **Output:** Structural impact matrix (B0), model fit (log-likelihood, AIC, BIC), distribution parameters, parameter estimates with standard errors.
+
+## estimate vecm
+
+Estimate a Vector Error Correction Model via Johansen MLE. Cointegration rank is auto-selected via trace test when `--rank` is omitted.
+
+```bash
+friedman estimate vecm data.csv --lags=2
+friedman estimate vecm data.csv --rank=1 --deterministic=constant
+friedman estimate vecm data.csv --lags=4 --rank=2 --method=johansen
+friedman estimate vecm data.csv --significance=0.01
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--lags` | `-p` | Int | auto | Lag order |
+| `--rank` | `-r` | Int | auto (Johansen) | Cointegration rank |
+| `--deterministic` | | String | `constant` | `none`, `constant`, `trend` |
+| `--method` | | String | `johansen` | Estimation method |
+| `--significance` | | Float64 | 0.05 | Significance level for auto rank selection |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Cointegration rank, loading matrix (alpha), cointegrating vectors (beta), short-run coefficients.
+
+## estimate pvar
+
+Estimate a Panel VAR model via GMM or fixed-effects OLS.
+
+```bash
+friedman estimate pvar data.csv --id-col=country --time-col=year --lags=2
+friedman estimate pvar data.csv --id-col=country --time-col=year --method=feols
+friedman estimate pvar data.csv --id-col=country --time-col=year --vars=gdp,inflation,rate
+friedman estimate pvar data.csv --id-col=country --time-col=year --transformation=fd
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--lags` | `-p` | Int | auto | Lag order |
+| `--id-col` | | String | (required) | Panel group identifier column |
+| `--time-col` | | String | (required) | Panel time identifier column |
+| `--vars` | | String | | Comma-separated list of dependent variables |
+| `--method` | | String | `gmm` | `gmm`, `feols` |
+| `--transformation` | | String | `fd` | `fd` (first difference), `demean` |
+| `--steps` | | String | `twostep` | `onestep`, `twostep` |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Coefficient matrix with standard errors and p-values.

@@ -1,6 +1,6 @@
 # forecast
 
-Compute forecasts. 12 subcommands covering VAR, BVAR, LP, ARIMA, factor models, and volatility models. All support `--from-tag` for stored model reuse.
+Compute forecasts. 13 subcommands covering VAR, BVAR, LP, ARIMA, factor models, volatility models, and VECM. All support `--from-tag` for stored model reuse.
 
 ## forecast var
 
@@ -228,3 +228,28 @@ friedman forecast sv data.csv --column=1 --draws=5000 --horizons=12
 | `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+
+## forecast vecm
+
+VECM forecasts with bootstrap confidence intervals.
+
+```bash
+friedman forecast vecm data.csv --horizons=12
+friedman forecast vecm data.csv --rank=2 --deterministic=constant --lags=4
+friedman forecast vecm data.csv --confidence=0.90 --replications=1000
+friedman forecast vecm001    # from stored tag
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--lags` | `-p` | Int | auto | Lag order |
+| `--horizons` | `-h` | Int | 12 | Forecast horizon |
+| `--rank` | `-r` | Int | auto | Cointegration rank (auto via Johansen) |
+| `--deterministic` | | String | `constant` | `none`, `constant`, `trend` |
+| `--confidence` | | Float64 | 0.95 | Confidence level |
+| `--replications` | | Int | 500 | Bootstrap replications |
+| `--from-tag` | | String | | Load model from stored tag |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Per-variable forecasts with bootstrap confidence bands.

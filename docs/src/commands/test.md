@@ -1,6 +1,6 @@
 # test
 
-Statistical tests: unit root, cointegration, diagnostics, and identification tests. 12 subcommands plus a nested `var` node with 2 additional subcommands.
+Statistical tests: unit root, cointegration, diagnostics, identification, and model comparison tests. 16 subcommands plus nested `var` (2) and `pvar` (4) nodes.
 
 ## Unit Root Tests
 
@@ -232,3 +232,145 @@ friedman test ljung_box data.csv --column=1 --lags=10
 | `--lags` | `-p` | Int | 10 | Number of lags |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+
+## Model Comparison Tests
+
+### test granger
+
+Granger causality test for VAR or VECM models.
+
+```bash
+friedman test granger data.csv --cause=1 --effect=2 --lags=4
+friedman test granger data.csv --cause=1 --effect=2 --model=vecm --rank=1
+friedman test granger data.csv --all --lags=4
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--lags` | `-p` | Int | auto | Lag order |
+| `--cause` | | Int | 1 | Cause variable index (1-based) |
+| `--effect` | | Int | 2 | Effect variable index (1-based) |
+| `--model` | | String | `var` | `var`, `vecm` |
+| `--rank` | `-r` | Int | auto | Cointegration rank (VECM only) |
+| `--all` | | Flag | | Test all pairwise Granger causality |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Test statistic, p-value, rejection decision.
+
+### test lr
+
+Likelihood ratio test comparing two nested models by tag.
+
+```bash
+friedman test lr --restricted=var001 --unrestricted=var002
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--restricted` | | String | (required) | Tag for the restricted model |
+| `--unrestricted` | | String | (required) | Tag for the unrestricted model |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** LR statistic, degrees of freedom, p-value, rejection decision.
+
+### test lm
+
+Lagrange multiplier test comparing two nested models by tag.
+
+```bash
+friedman test lm --restricted=var001 --unrestricted=var002
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--restricted` | | String | (required) | Tag for the restricted model |
+| `--unrestricted` | | String | (required) | Tag for the unrestricted model |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** LM statistic, degrees of freedom, p-value, rejection decision.
+
+## Panel VAR Diagnostics
+
+Nested under `test pvar`. 4 subcommands for Panel VAR model diagnostics.
+
+### test pvar hansen\_j
+
+Hansen's J overidentification test for Panel VAR.
+
+```bash
+friedman test pvar hansen_j data.csv --id-col=country --time-col=year --lags=2
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--lags` | `-p` | Int | auto | Lag order |
+| `--id-col` | | String | (required) | Panel group identifier column |
+| `--time-col` | | String | (required) | Panel time identifier column |
+| `--vars` | | String | | Comma-separated dependent variables |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** J statistic, p-value, degrees of freedom.
+
+### test pvar mmsc
+
+Andrews-Lu MMSC model and moment selection criteria for optimal lag order.
+
+```bash
+friedman test pvar mmsc data.csv --id-col=country --time-col=year --max-lags=8
+friedman test pvar mmsc data.csv --id-col=country --time-col=year --criterion=bic
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--max-lags` | | Int | 8 | Maximum lag order to test |
+| `--criterion` | | String | `bic` | `aic`, `bic`, `hqc` |
+| `--id-col` | | String | (required) | Panel group identifier column |
+| `--time-col` | | String | (required) | Panel time identifier column |
+| `--vars` | | String | | Comma-separated dependent variables |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** MMSC criteria table for each lag order, optimal lag.
+
+### test pvar lagselect
+
+Select optimal lag order for a Panel VAR model.
+
+```bash
+friedman test pvar lagselect data.csv --id-col=country --time-col=year --max-lags=8
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--max-lags` | | Int | 8 | Maximum lag order to test |
+| `--criterion` | | String | `aic` | `aic`, `bic`, `hqc` |
+| `--id-col` | | String | (required) | Panel group identifier column |
+| `--time-col` | | String | (required) | Panel time identifier column |
+| `--vars` | | String | | Comma-separated dependent variables |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Information criteria table for each lag order, optimal lag.
+
+### test pvar stability
+
+Check Panel VAR stationarity via companion matrix eigenvalues.
+
+```bash
+friedman test pvar stability data.csv --id-col=country --time-col=year --lags=2
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--lags` | `-p` | Int | auto | Lag order |
+| `--id-col` | | String | (required) | Panel group identifier column |
+| `--time-col` | | String | (required) | Panel time identifier column |
+| `--vars` | | String | | Comma-separated dependent variables |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Companion matrix eigenvalues with moduli, stability verdict, max modulus.

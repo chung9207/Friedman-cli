@@ -104,6 +104,33 @@ horizon = 0
 
 Multiple `[[identification.zero_restrictions]]` and `[[identification.sign_restrictions]]` blocks can be specified (TOML array of tables syntax).
 
+## Uhlig Identification
+
+Uhlig (Mountford & Uhlig 2009) penalty-based identification. Uses the same zero/sign restriction format as Arias, plus optional tuning parameters. Used with `--id=uhlig`.
+
+```toml
+# Uses same restriction format as Arias
+[[identification.zero_restrictions]]
+var = 1
+shock = 1
+horizon = 0
+
+[[identification.sign_restrictions]]
+var = 2
+shock = 1
+sign = "positive"
+horizon = 0
+
+# Uhlig-specific tuning parameters (all optional)
+[identification.uhlig]
+n_starts = 100          # number of random starting points (default: 50)
+n_refine = 20           # best starts to refine (default: 10)
+max_iter_coarse = 1000  # coarse optimization iterations (default: 500)
+max_iter_fine = 5000    # fine optimization iterations (default: 2000)
+tol_coarse = 1e-5       # coarse tolerance (default: 1e-4)
+tol_fine = 1e-10        # fine tolerance (default: 1e-8)
+```
+
 ## Non-Gaussian SVAR
 
 Used by `test heteroskedasticity` with `--method=smooth_transition` or `--method=external`.

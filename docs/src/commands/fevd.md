@@ -1,6 +1,6 @@
 # fevd
 
-Compute forecast error variance decomposition. 3 subcommands: `var` (frequentist), `bvar` (Bayesian), `lp` (local projections with bias correction). All support `--from-tag`.
+Compute forecast error variance decomposition. 5 subcommands: `var`, `bvar`, `lp`, `vecm`, `pvar`. All support `--from-tag`.
 
 ## fevd var
 
@@ -16,7 +16,7 @@ friedman fevd var001    # from stored tag
 |--------|-------|------|---------|-------------|
 | `--lags` | `-p` | Int | auto | Lag order |
 | `--horizons` | `-h` | Int | 20 | Forecast horizon |
-| `--id` | | String | `cholesky` | `cholesky`, `sign`, `narrative`, `longrun` |
+| `--id` | | String | `cholesky` | `cholesky`, `sign`, `narrative`, `longrun`, `arias`, `uhlig` |
 | `--config` | | String | | TOML config for identification |
 | `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
@@ -61,6 +61,47 @@ friedman fevd lp data.csv --horizons=20 --id=cholesky
 | `--id` | | String | `cholesky` | `cholesky`, `sign`, `narrative`, `longrun` |
 | `--vcov` | | String | `newey_west` | `newey_west`, `white`, `driscoll_kraay` |
 | `--config` | | String | | TOML config for identification |
+| `--from-tag` | | String | | Load model from stored tag |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+## fevd vecm
+
+VECM-based FEVD. The VECM is converted to its VAR representation for decomposition.
+
+```bash
+friedman fevd vecm data.csv --horizons=20
+friedman fevd vecm data.csv --rank=2 --deterministic=constant --lags=4
+friedman fevd vecm001    # from stored tag
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--lags` | `-p` | Int | auto | Lag order |
+| `--horizons` | `-h` | Int | 20 | Forecast horizon |
+| `--rank` | `-r` | Int | auto | Cointegration rank (auto via Johansen) |
+| `--deterministic` | | String | `constant` | `none`, `constant`, `trend` |
+| `--id` | | String | `cholesky` | Identification method |
+| `--config` | | String | | TOML config for identification |
+| `--from-tag` | | String | | Load model from stored tag |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+## fevd pvar
+
+Panel VAR forecast error variance decomposition.
+
+```bash
+friedman fevd pvar data.csv --id-col=country --time-col=year --horizons=20
+friedman fevd pvar001    # from stored tag
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--lags` | `-p` | Int | auto | Lag order |
+| `--horizons` | `-h` | Int | 20 | Forecast horizon |
+| `--id-col` | | String | | Panel group identifier column |
+| `--time-col` | | String | | Panel time identifier column |
 | `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |

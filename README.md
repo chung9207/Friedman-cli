@@ -6,7 +6,7 @@
 
 Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl) (v0.2.1).
 
-13 top-level commands, ~85 subcommands. Action-first CLI: commands are organized by action (`estimate`, `irf`, `forecast`, ...) rather than by model type.
+13 top-level commands, ~97 subcommands. Action-first CLI: commands are organized by action (`estimate`, `irf`, `forecast`, ...) rather than by model type.
 
 ## Installation
 
@@ -32,12 +32,16 @@ julia --project bin/friedman [command] [subcommand] [args...] [options...]
 
 | Command | Subcommands | Description |
 |---------|-------------|-------------|
-| `estimate` | `var` `bvar` `lp` `arima` `gmm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `fastica` `ml` | Estimate models (15 model types) |
-| `test` | `adf` `kpss` `pp` `za` `np` `johansen` `normality` `identifiability` `heteroskedasticity` `arch_lm` `ljung_box` + `var` (`lagselect` `stability`) | Statistical tests (12 + nested) |
-| `irf` | `var` `bvar` `lp` | Impulse response functions |
-| `fevd` | `var` `bvar` `lp` | Forecast error variance decomposition |
-| `hd` | `var` `bvar` `lp` | Historical decomposition |
-| `forecast` | `var` `bvar` `lp` `arima` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` | Forecasting (12 model types) |
+| `estimate` | `var` `bvar` `lp` `arima` `gmm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `fastica` `ml` `vecm` `pvar` | Estimate models (17 model types) |
+| `test` | `adf` `kpss` `pp` `za` `np` `johansen` `normality` `identifiability` `heteroskedasticity` `arch_lm` `ljung_box` `granger` `lr` `lm` + `var` (`lagselect` `stability`) + `pvar` (`hansen_j` `mmsc` `lagselect` `stability`) | Statistical tests (16 + nested) |
+| `irf` | `var` `bvar` `lp` `vecm` `pvar` | Impulse response functions |
+| `fevd` | `var` `bvar` `lp` `vecm` `pvar` | Forecast error variance decomposition |
+| `hd` | `var` `bvar` `lp` `vecm` | Historical decomposition |
+| `forecast` | `var` `bvar` `lp` `arima` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `vecm` | Forecasting (13 model types) |
+| `predict` | `var` `bvar` `arima` `vecm` | In-sample fitted values |
+| `residuals` | `var` `bvar` `arima` `vecm` | Model residuals |
+| `filter` | `hp` `hamilton` `bn` `bk` `bhp` | Time series filters |
+| `data` | `list` `load` `describe` `diagnose` `fix` `transform` `filter` `validate` | Data management |
 | `list` | `models` `results` | List stored models and results |
 | `rename` | — | Rename stored tags |
 | `project` | `list` `show` | Manage project registry |
@@ -101,6 +105,14 @@ friedman estimate fastica data.csv --method=jade
 # Maximum likelihood non-Gaussian SVAR
 friedman estimate ml data.csv --distribution=student_t
 friedman estimate ml data.csv --distribution=mixture_normal
+
+# Vector Error Correction Model (Johansen)
+friedman estimate vecm data.csv --lags=2
+friedman estimate vecm data.csv --rank=1 --deterministic=constant
+
+# Panel VAR (GMM or FE-OLS)
+friedman estimate pvar data.csv --id-col=country --time-col=year --lags=2
+friedman estimate pvar data.csv --id-col=country --time-col=year --method=feols
 ```
 
 ### Volatility Models
@@ -147,6 +159,20 @@ friedman test heteroskedasticity data.csv --method=markov --regimes=2
 # Residual diagnostics
 friedman test arch_lm data.csv --lags=4
 friedman test ljung_box data.csv --lags=10
+
+# Granger causality
+friedman test granger data.csv --cause=1 --effect=2 --lags=4
+friedman test granger data.csv --all --lags=4
+
+# Model comparison (LR and LM tests by stored tags)
+friedman test lr --restricted=var001 --unrestricted=var002
+friedman test lm --restricted=var001 --unrestricted=var002
+
+# Panel VAR diagnostics
+friedman test pvar hansen_j data.csv --id-col=country --time-col=year --lags=2
+friedman test pvar mmsc data.csv --id-col=country --time-col=year --max-lags=8
+friedman test pvar lagselect data.csv --id-col=country --time-col=year --max-lags=8
+friedman test pvar stability data.csv --id-col=country --time-col=year --lags=2
 ```
 
 ### Impulse Response Functions
@@ -167,6 +193,9 @@ friedman irf var data.csv --id=longrun --horizons=40
 # Arias et al. (2018) zero/sign restrictions
 friedman irf var data.csv --id=arias --config=arias_restrictions.toml
 
+# Uhlig (Mountford & Uhlig 2009) penalty-based identification
+friedman irf var data.csv --id=uhlig --config=uhlig_restrictions.toml
+
 # With bootstrap confidence intervals
 friedman irf var data.csv --shock=1 --ci=bootstrap --replications=1000
 
@@ -177,6 +206,13 @@ friedman irf bvar data.csv --draws=5000 --sampler=hmc --config=prior.toml
 # Structural LP IRFs
 friedman irf lp data.csv --id=cholesky --shock=1 --horizons=20
 friedman irf lp data.csv --shocks=1,2,3 --id=cholesky --horizons=30
+
+# VECM IRFs
+friedman irf vecm data.csv --shock=1 --horizons=20 --rank=2
+
+# Panel VAR IRFs (OIRF or GIRF)
+friedman irf pvar data.csv --id-col=country --time-col=year --horizons=20
+friedman irf pvar data.csv --irf-type=girf --horizons=12
 
 # From stored model tag
 friedman irf var001
@@ -195,6 +231,12 @@ friedman fevd bvar data.csv --horizons=20
 # LP FEVD (bias-corrected, Gorodnichenko & Lee 2019)
 friedman fevd lp data.csv --horizons=20 --id=cholesky
 
+# VECM FEVD
+friedman fevd vecm data.csv --horizons=20 --rank=2
+
+# Panel VAR FEVD
+friedman fevd pvar data.csv --id-col=country --time-col=year --horizons=20
+
 # From stored model tag
 friedman fevd var001
 ```
@@ -206,6 +248,9 @@ friedman hd var data.csv --id=cholesky
 friedman hd var data.csv --id=longrun --lags=4
 friedman hd bvar data.csv --draws=2000
 friedman hd lp data.csv --id=cholesky
+
+# VECM historical decomposition
+friedman hd vecm data.csv --id=cholesky --rank=2
 
 # From stored model tag
 friedman hd bvar001
@@ -238,8 +283,79 @@ friedman forecast egarch data.csv --column=1 --horizons=12
 friedman forecast gjr_garch data.csv --column=1 --horizons=12
 friedman forecast sv data.csv --column=1 --horizons=12
 
+# VECM forecast (bootstrap CIs)
+friedman forecast vecm data.csv --horizons=12 --rank=2
+
 # From stored model tag
 friedman forecast var001
+```
+
+### Predict & Residuals
+
+```bash
+# In-sample fitted values
+friedman predict var data.csv --lags=2
+friedman predict bvar data.csv --lags=4 --draws=2000
+friedman predict arima data.csv --p=1 --d=1 --q=1
+friedman predict vecm data.csv --rank=1
+
+# Model residuals
+friedman residuals var data.csv --lags=2
+friedman residuals bvar data.csv --lags=4 --draws=2000
+friedman residuals arima data.csv --p=1 --d=1 --q=1
+friedman residuals vecm data.csv --rank=1
+
+# From stored model tag
+friedman predict var001
+friedman residuals var001
+```
+
+### Filters
+
+```bash
+# Hodrick-Prescott filter
+friedman filter hp data.csv --column=1 --lambda=1600
+
+# Hamilton (2018) filter
+friedman filter hamilton data.csv --column=1 --h=8 --p=4
+
+# Beveridge-Nelson decomposition
+friedman filter bn data.csv --column=1
+
+# Baxter-King band-pass filter
+friedman filter bk data.csv --column=1 --pl=6 --pu=32
+
+# Boosted HP filter (Phillips & Shi 2021)
+friedman filter bhp data.csv --column=1 --lambda=1600 --stopping=BIC
+```
+
+### Data Management
+
+```bash
+# List available example datasets
+friedman data list
+
+# Load example dataset (FRED-MD, FRED-QD, PWT)
+friedman data load fred_md --output=fred_md.csv
+friedman data load fred_md --vars=INDPRO,CPIAUCSL --transform
+
+# Describe data (summary statistics)
+friedman data describe data.csv
+
+# Diagnose data quality (NaN, Inf, constant columns)
+friedman data diagnose data.csv
+
+# Fix data issues
+friedman data fix data.csv --method=interpolate --output=cleaned.csv
+
+# Apply transformation codes
+friedman data transform data.csv --tcodes=1,5,5,2 --output=transformed.csv
+
+# Filter data (unified interface)
+friedman data filter data.csv --method=hp --lambda=1600
+
+# Validate data for a specific model type
+friedman data validate data.csv --model=var
 ```
 
 ### Storage & Projects
@@ -337,6 +453,25 @@ var = 2
 shock = 1
 sign = "positive"
 horizon = 0
+```
+
+**Uhlig identification (penalty-based, same restriction format as Arias):**
+
+```toml
+[[identification.zero_restrictions]]
+var = 1
+shock = 1
+horizon = 0
+
+[[identification.sign_restrictions]]
+var = 2
+shock = 1
+sign = "positive"
+horizon = 0
+
+[identification.uhlig]
+n_starts = 100
+n_refine = 20
 ```
 
 **Non-Gaussian SVAR:**

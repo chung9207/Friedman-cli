@@ -21,7 +21,7 @@ Saved as: var001
 
 ### Using Stored Tags
 
-Stored tags can be used directly with post-estimation commands (`irf`, `fevd`, `hd`, `forecast`):
+Stored tags can be used directly with post-estimation commands (`irf`, `fevd`, `hd`, `forecast`, `predict`, `residuals`):
 
 ```bash
 # These are equivalent:
