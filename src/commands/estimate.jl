@@ -291,9 +291,6 @@ function _estimate_var(; data::String, lags=nothing, trend::String="constant",
 
     println()
     output_model_criteria(model; format=format, title="Information Criteria")
-
-    storage_save_auto!("var", serialize_model(model),
-        Dict{String,Any}("command" => "estimate var", "data" => data, "lags" => p))
 end
 
 # ── BVAR ───────────────────────────────────────────────────
@@ -330,10 +327,6 @@ function _estimate_bvar(; data::String, lags::Int=4, prior::String="minnesota",
 
     println()
     output_model_criteria(model; format=format, title="Information Criteria (Posterior $(titlecase(method)))")
-
-    storage_save_auto!("bvar", serialize_model(model),
-        Dict{String,Any}("command" => "estimate bvar", "data" => data, "lags" => p,
-                          "draws" => draws, "sampler" => sampler, "method" => method))
 end
 
 # ── LP ─────────────────────────────────────────────────────
@@ -408,10 +401,6 @@ function _estimate_lp_standard(data, shock, horizons, control_lags, vcov, output
         "Horizons" => horizons,
         "Control lags" => control_lags,
     ]; format=format, title="Estimation Summary")
-
-    storage_save_auto!("lp", Dict{String,Any}("type" => "standard", "shock" => shock,
-        "horizons" => horizons, "lags" => control_lags, "n_vars" => n),
-        Dict{String,Any}("command" => "estimate lp", "data" => data))
 end
 
 function _estimate_lp_iv(data, shock, horizons, control_lags, vcov, instruments, output, format)
@@ -450,10 +439,6 @@ function _estimate_lp_iv(data, shock, horizons, control_lags, vcov, instruments,
         "First-stage F" => round(wi.F_stat; digits=2),
         "Instruments" => size(Z, 2),
     ]; format=format, title="LP-IV Estimation Summary")
-
-    storage_save_auto!("lp", Dict{String,Any}("type" => "iv", "shock" => shock,
-        "horizons" => horizons, "n_vars" => n, "first_stage_F" => wi.F_stat),
-        Dict{String,Any}("command" => "estimate lp --method=iv", "data" => data))
 end
 
 function _estimate_lp_smooth(data, shock, horizons, knots, lambda, output, format)
@@ -483,10 +468,6 @@ function _estimate_lp_smooth(data, shock, horizons, knots, lambda, output, forma
         "B-spline knots" => knots,
         "Horizons" => horizons,
     ]; format=format, title="Smooth LP Estimation Summary")
-
-    storage_save_auto!("lp", Dict{String,Any}("type" => "smooth", "shock" => shock,
-        "horizons" => horizons, "lambda" => lam, "knots" => knots, "n_vars" => n),
-        Dict{String,Any}("command" => "estimate lp --method=smooth", "data" => data))
 end
 
 function _estimate_lp_state(data, shock, horizons, state_var, gamma, transition, output, format)
@@ -523,10 +504,6 @@ function _estimate_lp_state(data, shock, horizons, state_var, gamma, transition,
     else
         printstyled("  → No significant regime differences at 5%\n"; color=:yellow)
     end
-
-    storage_save_auto!("lp", Dict{String,Any}("type" => "state", "shock" => shock,
-        "horizons" => horizons, "state_var" => state_var, "gamma" => gamma, "n_vars" => n),
-        Dict{String,Any}("command" => "estimate lp --method=state", "data" => data))
 end
 
 function _estimate_lp_propensity(data, treatment, horizons, score_method, output, format)
@@ -556,10 +533,6 @@ function _estimate_lp_propensity(data, treatment, horizons, score_method, output
 
     _output_lp_coef_table(irf_result, varnames, horizons;
         title="Propensity Score LP: ATE Estimates ($treat_name)", format=format, output=output)
-
-    storage_save_auto!("lp", Dict{String,Any}("type" => "propensity", "treatment" => treatment,
-        "horizons" => horizons, "n_vars" => n, "score_method" => score_method),
-        Dict{String,Any}("command" => "estimate lp --method=propensity", "data" => data))
 end
 
 function _estimate_lp_robust(data, treatment, horizons, score_method, output, format)
@@ -589,10 +562,6 @@ function _estimate_lp_robust(data, treatment, horizons, score_method, output, fo
 
     _output_lp_coef_table(irf_result, varnames, horizons;
         title="Doubly Robust LP: ATE Estimates ($treat_name)", format=format, output=output)
-
-    storage_save_auto!("lp", Dict{String,Any}("type" => "robust", "treatment" => treatment,
-        "horizons" => horizons, "n_vars" => n, "score_method" => score_method),
-        Dict{String,Any}("command" => "estimate lp --method=robust", "data" => data))
 end
 
 # ── ARIMA ──────────────────────────────────────────────────
@@ -1073,10 +1042,6 @@ function _estimate_vecm(; data::String, lags::Int=2, rank::String="auto",
         "HQC" => round(vecm.hqic; digits=4),
         "Log-likelihood" => round(loglikelihood(vecm); digits=4),
     ]; format=format, title="Information Criteria")
-
-    storage_save_auto!("vecm", serialize_model(vecm),
-        Dict{String,Any}("command" => "estimate vecm", "data" => data, "lags" => p,
-                          "rank" => r, "method" => method))
 end
 
 # ── Panel VAR ─────────────────────────────────────────────
@@ -1127,10 +1092,5 @@ function _estimate_pvar(; data::String, id_col::String="", time_col::String="",
         "Method" => string(model.method),
         "Transformation" => string(model.transformation),
     ]; format=format, title="Panel Summary")
-
-    storage_save_auto!("pvar", Dict{String,Any}("type" => "pvar", "method" => method,
-        "lags" => p, "n_vars" => n, "n_groups" => panel.n_groups),
-        Dict{String,Any}("command" => "estimate pvar", "data" => data,
-                          "id_col" => id_col, "time_col" => time_col, "lags" => p))
 end
 

@@ -18,13 +18,12 @@
 
 function register_fevd_commands!()
     fevd_var = LeafCommand("var", _fevd_var;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=nothing, description="Lag order (default: auto)"),
             Option("horizons"; short="h", type=Int, default=20, description="Forecast horizon"),
             Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun|arias|uhlig"),
             Option("config"; type=String, default="", description="TOML config for identification"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -33,7 +32,7 @@ function register_fevd_commands!()
         description="Compute forecast error variance decomposition")
 
     fevd_bvar = LeafCommand("bvar", _fevd_bvar;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=4, description="Lag order"),
             Option("horizons"; short="h", type=Int, default=20, description="Forecast horizon"),
@@ -41,7 +40,6 @@ function register_fevd_commands!()
             Option("draws"; short="n", type=Int, default=2000, description="MCMC draws"),
             Option("sampler"; type=String, default="direct", description="direct|gibbs"),
             Option("config"; type=String, default="", description="TOML config for identification/prior"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -50,7 +48,7 @@ function register_fevd_commands!()
         description="Compute Bayesian forecast error variance decomposition")
 
     fevd_lp = LeafCommand("lp", _fevd_lp;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("horizons"; short="h", type=Int, default=20, description="Forecast horizon"),
             Option("lags"; short="p", type=Int, default=4, description="LP control lags"),
@@ -58,7 +56,6 @@ function register_fevd_commands!()
             Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun"),
             Option("vcov"; type=String, default="newey_west", description="newey_west|white|driscoll_kraay"),
             Option("config"; type=String, default="", description="TOML config for identification"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -67,7 +64,7 @@ function register_fevd_commands!()
         description="Compute forecast error variance decomposition via structural LP")
 
     fevd_vecm = LeafCommand("vecm", _fevd_vecm;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=2, description="Lag order (in levels)"),
             Option("rank"; short="r", type=String, default="auto", description="Cointegration rank (auto|1|2|...)"),
@@ -75,7 +72,6 @@ function register_fevd_commands!()
             Option("horizons"; short="h", type=Int, default=20, description="Forecast horizon"),
             Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun"),
             Option("config"; type=String, default="", description="TOML config for identification"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -84,13 +80,12 @@ function register_fevd_commands!()
         description="Compute FEVD via VECM → VAR representation")
 
     fevd_pvar = LeafCommand("pvar", _fevd_pvar;
-        args=[Argument("data"; required=false, default="", description="Path to CSV panel data file")],
+        args=[Argument("data"; description="Path to CSV panel data file")],
         options=[
             Option("id-col"; type=String, default="", description="Panel group identifier column"),
             Option("time-col"; type=String, default="", description="Time period column"),
             Option("lags"; short="p", type=Int, default=1, description="Lag order"),
             Option("horizons"; short="h", type=Int, default=10, description="Forecast horizon"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -112,15 +107,8 @@ end
 
 function _fevd_var(; data::String, lags=nothing, horizons::Int=20,
                     id::String="cholesky", config::String="",
-                    from_tag::String="",
                     output::String="", format::String="table",
                     plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     model, Y, varnames, p = _load_and_estimate_var(data, lags)
     n = size(Y, 2)
 
@@ -159,9 +147,6 @@ function _fevd_var(; data::String, lags=nothing, horizons::Int=20,
         end
         _output_fevd_tables(proportions, varnames, n_h;
                             id="arias", title_prefix="FEVD", format=format, output=output)
-        storage_save_auto!("fevd", Dict{String,Any}("type" => "var", "id" => "arias",
-            "horizons" => horizons, "n_vars" => n),
-            Dict{String,Any}("command" => "fevd var", "data" => data))
         return
     end
 
@@ -201,9 +186,6 @@ function _fevd_var(; data::String, lags=nothing, horizons::Int=20,
         end
         _output_fevd_tables(proportions, varnames, n_h;
                             id="uhlig", title_prefix="FEVD", format=format, output=output)
-        storage_save_auto!("fevd", Dict{String,Any}("type" => "var", "id" => "uhlig",
-            "horizons" => horizons, "n_vars" => n),
-            Dict{String,Any}("command" => "fevd var", "data" => data))
         return
     end
 
@@ -216,25 +198,15 @@ function _fevd_var(; data::String, lags=nothing, horizons::Int=20,
 
     _output_fevd_tables(fevd_result.proportions, varnames, horizons;
                         id=id, title_prefix="FEVD", format=format, output=output)
-
-    storage_save_auto!("fevd", serialize_model(fevd_result),
-        Dict{String,Any}("command" => "fevd var", "data" => data, "id" => id,
-                          "horizons" => horizons, "n_vars" => n))
 end
 
 # ── BVAR FEVD ────────────────────────────────────────────
 
 function _fevd_bvar(; data::String, lags::Int=4, horizons::Int=20,
                      id::String="cholesky", draws::Int=2000, sampler::String="direct",
-                     config::String="", from_tag::String="",
+                     config::String="",
                      output::String="", format::String="table",
                      plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
 
     println("Computing Bayesian FEVD: BVAR($p), horizons=$horizons, id=$id")
@@ -250,25 +222,14 @@ function _fevd_bvar(; data::String, lags::Int=4, horizons::Int=20,
 
     _output_fevd_tables(bfevd.mean, varnames, horizons;
                         id=id, title_prefix="Bayesian FEVD", format=format, output=output)
-
-    storage_save_auto!("fevd", serialize_model(bfevd),
-        Dict{String,Any}("command" => "fevd bvar", "data" => data, "id" => id,
-                          "horizons" => horizons, "n_vars" => n))
 end
 
 # ── LP FEVD ──────────────────────────────────────────────
 
 function _fevd_lp(; data::String, horizons::Int=20, lags::Int=4, var_lags=nothing,
                    id::String="cholesky", vcov::String="newey_west", config::String="",
-                   from_tag::String="",
                    output::String="", format::String="table",
                    plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     slp, Y, varnames = _load_and_structural_lp(data, horizons, lags, var_lags,
         id, vcov, config)
     n = size(Y, 2)
@@ -282,10 +243,6 @@ function _fevd_lp(; data::String, horizons::Int=20, lags::Int=4, var_lags=nothin
 
     _output_fevd_tables(fevd_result.bias_corrected, varnames, horizons;
                         id=id, title_prefix="LP FEVD", format=format, output=output)
-
-    storage_save_auto!("fevd", serialize_model(fevd_result),
-        Dict{String,Any}("command" => "fevd lp", "data" => data, "id" => id,
-                          "horizons" => horizons, "n_vars" => n))
 end
 
 # ── VECM FEVD ───────────────────────────────────────────
@@ -293,15 +250,8 @@ end
 function _fevd_vecm(; data::String, lags::Int=2, rank::String="auto",
                      deterministic::String="constant", horizons::Int=20,
                      id::String="cholesky", config::String="",
-                     from_tag::String="",
                      output::String="", format::String="table",
                      plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
     var_model = to_var(vecm)
     n = size(Y, 2)
@@ -319,35 +269,14 @@ function _fevd_vecm(; data::String, lags::Int=2, rank::String="auto",
 
     _output_fevd_tables(fevd_result.proportions, varnames, horizons;
                         id=id, title_prefix="VECM FEVD", format=format, output=output)
-
-    storage_save_auto!("fevd", serialize_model(fevd_result),
-        Dict{String,Any}("command" => "fevd vecm", "data" => data, "id" => id,
-                          "horizons" => horizons, "n_vars" => n, "rank" => r))
 end
 
 # ── Panel VAR FEVD ─────────────────────────────────────────
 
 function _fevd_pvar(; data::String, id_col::String="", time_col::String="",
                      lags::Int=1, horizons::Int=10,
-                     from_tag::String="",
                      output::String="", format::String="table",
                      plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data_path, params = _resolve_from_tag(from_tag)
-        data = data_path
-        if isempty(id_col)
-            id_col = get(params, "id_col", "")
-        end
-        if isempty(time_col)
-            time_col = get(params, "time_col", "")
-        end
-        if lags == 1
-            lags = get(params, "lags", lags)
-        end
-    end
     isempty(id_col) && error("Panel VAR FEVD requires --id-col")
     isempty(time_col) && error("Panel VAR FEVD requires --time-col")
 
@@ -364,9 +293,4 @@ function _fevd_pvar(; data::String, id_col::String="", time_col::String="",
     _output_fevd_tables(fevd_result.proportions, varnames, horizons;
                         id="cholesky", title_prefix="Panel VAR FEVD",
                         format=format, output=output)
-
-    storage_save_auto!("fevd", serialize_model(fevd_result),
-        Dict{String,Any}("command" => "fevd pvar", "data" => data,
-                          "id_col" => id_col, "time_col" => time_col,
-                          "lags" => lags, "horizons" => horizons, "n_vars" => n))
 end

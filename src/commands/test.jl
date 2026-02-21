@@ -235,10 +235,12 @@ function register_test_commands!()
 
     test_lr = LeafCommand("lr", _test_lr;
         args=[
-            Argument("tag1"; description="Restricted model tag"),
-            Argument("tag2"; description="Unrestricted model tag"),
+            Argument("data1"; description="Path to CSV data file for restricted model"),
+            Argument("data2"; description="Path to CSV data file for unrestricted model"),
         ],
         options=[
+            Option("lags1"; type=Int, default=nothing, description="Lag order for restricted model (default: auto)"),
+            Option("lags2"; type=Int, default=nothing, description="Lag order for unrestricted model (default: auto)"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
         ],
@@ -246,10 +248,12 @@ function register_test_commands!()
 
     test_lm = LeafCommand("lm", _test_lm;
         args=[
-            Argument("tag1"; description="Restricted model tag"),
-            Argument("tag2"; description="Unrestricted model tag"),
+            Argument("data1"; description="Path to CSV data file for restricted model"),
+            Argument("data2"; description="Path to CSV data file for unrestricted model"),
         ],
         options=[
+            Option("lags1"; type=Int, default=nothing, description="Lag order for restricted model (default: auto)"),
+            Option("lags2"; type=Int, default=nothing, description="Lag order for unrestricted model (default: auto)"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
         ],
@@ -947,17 +951,12 @@ end
 
 # ── LR Test ───────────────────────────────────────────────
 
-function _test_lr(; tag1::String, tag2::String, format::String="table", output::String="")
-    data1, params1 = _resolve_from_tag(tag1)
-    data2, params2 = _resolve_from_tag(tag2)
+function _test_lr(; data1::String, data2::String, lags1=nothing, lags2=nothing,
+                    format::String="table", output::String="")
+    m1, _, _, p1 = _load_and_estimate_var(data1, lags1)
+    m2, _, _, p2 = _load_and_estimate_var(data2, lags2)
 
-    lags1 = get(params1, "lags", 2)
-    lags2 = get(params2, "lags", 2)
-
-    m1, _, _, _ = _load_and_estimate_var(data1, lags1)
-    m2, _, _, _ = _load_and_estimate_var(data2, lags2)
-
-    println("Likelihood Ratio Test: $tag1 (restricted) vs $tag2 (unrestricted)")
+    println("Likelihood Ratio Test: restricted (p=$p1) vs unrestricted (p=$p2)")
     println()
 
     result = lr_test(m1, m2)
@@ -978,17 +977,12 @@ end
 
 # ── LM Test ───────────────────────────────────────────────
 
-function _test_lm(; tag1::String, tag2::String, format::String="table", output::String="")
-    data1, params1 = _resolve_from_tag(tag1)
-    data2, params2 = _resolve_from_tag(tag2)
+function _test_lm(; data1::String, data2::String, lags1=nothing, lags2=nothing,
+                    format::String="table", output::String="")
+    m1, _, _, p1 = _load_and_estimate_var(data1, lags1)
+    m2, _, _, p2 = _load_and_estimate_var(data2, lags2)
 
-    lags1 = get(params1, "lags", 2)
-    lags2 = get(params2, "lags", 2)
-
-    m1, _, _, _ = _load_and_estimate_var(data1, lags1)
-    m2, _, _, _ = _load_and_estimate_var(data2, lags2)
-
-    println("Lagrange Multiplier Test: $tag1 (restricted) vs $tag2 (unrestricted)")
+    println("Lagrange Multiplier Test: restricted (p=$p1) vs unrestricted (p=$p2)")
     println()
 
     result = lm_test(m1, m2)

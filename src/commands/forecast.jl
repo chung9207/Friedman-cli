@@ -19,33 +19,31 @@
 
 function register_forecast_commands!()
     fc_var = LeafCommand("var", _forecast_var;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=nothing, description="Lag order (default: auto)"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
             Option("confidence"; type=Float64, default=0.95, description="Confidence level for intervals"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
         ],
         description="Compute h-step ahead VAR forecasts")
 
     fc_bvar = LeafCommand("bvar", _forecast_bvar;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=4, description="Lag order"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
             Option("draws"; short="n", type=Int, default=2000, description="MCMC draws"),
             Option("sampler"; type=String, default="direct", description="direct|gibbs"),
             Option("config"; type=String, default="", description="TOML config for prior hyperparameters"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
         ],
         description="Compute Bayesian h-step ahead forecasts with credible intervals")
 
     fc_lp = LeafCommand("lp", _forecast_lp;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("shock"; type=Int, default=1, description="Shock variable index (1-based)"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
@@ -55,7 +53,6 @@ function register_forecast_commands!()
             Option("ci-method"; type=String, default="analytical", description="analytical|bootstrap|none"),
             Option("conf-level"; type=Float64, default=0.95, description="Confidence level"),
             Option("n-boot"; type=Int, default=500, description="Bootstrap replications"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -64,7 +61,7 @@ function register_forecast_commands!()
         description="Compute direct LP forecasts")
 
     fc_arima = LeafCommand("arima", _forecast_arima;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("column"; short="c", type=Int, default=1, description="Column index (1-based)"),
             Option("p"; type=Int, default=nothing, description="AR order (default: auto selection)"),
@@ -77,7 +74,6 @@ function register_forecast_commands!()
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
             Option("confidence"; type=Float64, default=0.95, description="Confidence level"),
             Option("method"; short="m", type=String, default="css_mle", description="ols|css|mle|css_mle"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -86,13 +82,12 @@ function register_forecast_commands!()
         description="ARIMA forecast (auto-selects order when --p omitted)")
 
     fc_static = LeafCommand("static", _forecast_static;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("nfactors"; short="r", type=Int, default=nothing, description="Number of factors (default: auto via IC)"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
             Option("ci-method"; type=String, default="none", description="none|bootstrap|parametric"),
             Option("conf-level"; type=Float64, default=0.95, description="Confidence level for intervals"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -101,13 +96,12 @@ function register_forecast_commands!()
         description="Forecast observables using static factor model")
 
     fc_dynamic = LeafCommand("dynamic", _forecast_dynamic;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("nfactors"; short="r", type=Int, default=nothing, description="Number of factors (default: auto)"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
             Option("factor-lags"; short="p", type=Int, default=1, description="Factor VAR lag order"),
             Option("method"; type=String, default="twostep", description="twostep|em"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -116,12 +110,11 @@ function register_forecast_commands!()
         description="Forecast observables using dynamic factor model")
 
     fc_gdfm = LeafCommand("gdfm", _forecast_gdfm;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("nfactors"; short="r", type=Int, default=nothing, description="Number of static factors (default: auto)"),
             Option("dynamic-rank"; short="q", type=Int, default=nothing, description="Dynamic rank (default: auto)"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -130,12 +123,11 @@ function register_forecast_commands!()
         description="Forecast observables using GDFM")
 
     fc_arch = LeafCommand("arch", _forecast_arch;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("column"; short="c", type=Int, default=1, description="Column index (1-based)"),
             Option("q"; type=Int, default=1, description="ARCH order"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -144,13 +136,12 @@ function register_forecast_commands!()
         description="Forecast volatility using ARCH model")
 
     fc_garch = LeafCommand("garch", _forecast_garch;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("column"; short="c", type=Int, default=1, description="Column index (1-based)"),
             Option("p"; type=Int, default=1, description="GARCH order"),
             Option("q"; type=Int, default=1, description="ARCH order"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -159,13 +150,12 @@ function register_forecast_commands!()
         description="Forecast volatility using GARCH model")
 
     fc_egarch = LeafCommand("egarch", _forecast_egarch;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("column"; short="c", type=Int, default=1, description="Column index (1-based)"),
             Option("p"; type=Int, default=1, description="EGARCH order"),
             Option("q"; type=Int, default=1, description="ARCH order"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -174,13 +164,12 @@ function register_forecast_commands!()
         description="Forecast volatility using EGARCH model")
 
     fc_gjr_garch = LeafCommand("gjr_garch", _forecast_gjr_garch;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("column"; short="c", type=Int, default=1, description="Column index (1-based)"),
             Option("p"; type=Int, default=1, description="GARCH order"),
             Option("q"; type=Int, default=1, description="ARCH order"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -189,12 +178,11 @@ function register_forecast_commands!()
         description="Forecast volatility using GJR-GARCH model")
 
     fc_sv = LeafCommand("sv", _forecast_sv;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("column"; short="c", type=Int, default=1, description="Column index (1-based)"),
             Option("draws"; short="n", type=Int, default=5000, description="MCMC draws"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -203,7 +191,7 @@ function register_forecast_commands!()
         description="Forecast volatility using Stochastic Volatility model")
 
     fc_vecm = LeafCommand("vecm", _forecast_vecm;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=2, description="Lag order (in levels)"),
             Option("rank"; short="r", type=String, default="auto", description="Cointegration rank (auto|1|2|...)"),
@@ -212,7 +200,6 @@ function register_forecast_commands!()
             Option("ci-method"; type=String, default="none", description="none|bootstrap|parametric"),
             Option("replications"; type=Int, default=500, description="Bootstrap replications"),
             Option("confidence"; type=Float64, default=0.95, description="Confidence level for intervals"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -241,14 +228,8 @@ end
 # ── VAR Forecast ─────────────────────────────────────────
 
 function _forecast_var(; data::String, lags=nothing, horizons::Int=12,
-                        confidence::Float64=0.95, from_tag::String="",
+                        confidence::Float64=0.95,
                         output::String="", format::String="table")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     model, Y, varnames, p = _load_and_estimate_var(data, lags)
     n = size(Y, 2)
 
@@ -292,9 +273,6 @@ function _forecast_var(; data::String, lags=nothing, horizons::Int=12,
 
     output_result(fc_df; format=Symbol(format), output=output,
                   title="VAR($p) Forecast (h=$horizons, $(Int(round(confidence*100)))% CI)")
-
-    storage_save_auto!("forecast", Dict{String,Any}("type" => "var", "horizons" => horizons, "n_vars" => n),
-        Dict{String,Any}("command" => "forecast var", "data" => data))
 end
 
 # Normal quantile without importing Distributions (Abramowitz & Stegun 26.2.23)
@@ -312,14 +290,8 @@ end
 
 function _forecast_bvar(; data::String, lags::Int=4, horizons::Int=12,
                          draws::Int=2000, sampler::String="direct",
-                         config::String="", from_tag::String="",
+                         config::String="",
                          output::String="", format::String="table")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
 
     println("Computing Bayesian forecast: BVAR($p), horizons=$horizons")
@@ -359,9 +331,6 @@ function _forecast_bvar(; data::String, lags::Int=4, horizons::Int=12,
 
     output_result(fc_df; format=Symbol(format), output=output,
                   title="Bayesian VAR($p) Forecast (h=$horizons, 68% credible interval)")
-
-    storage_save_auto!("forecast", Dict{String,Any}("type" => "bvar", "horizons" => horizons, "n_vars" => n),
-        Dict{String,Any}("command" => "forecast bvar", "data" => data))
 end
 
 # ── LP Forecast ──────────────────────────────────────────
@@ -370,15 +339,9 @@ function _forecast_lp(; data::String, shock::Int=1, horizons::Int=12,
                        shock_size::Float64=1.0, lags::Int=4,
                        vcov::String="newey_west",
                        ci_method::String="analytical", conf_level::Float64=0.95,
-                       n_boot::Int=500, from_tag::String="",
+                       n_boot::Int=500,
                        output::String="", format::String="table",
                        plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     Y, varnames = load_multivariate_data(data)
 
     println("Computing LP forecast: shock=$shock, horizons=$horizons, shock_size=$shock_size, ci=$ci_method")
@@ -411,9 +374,6 @@ function _forecast_lp(; data::String, shock::Int=1, horizons::Int=12,
 
     output_result(fc_df; format=Symbol(format), output=output,
                   title="LP Forecast (shock=$shock_name, h=$horizons, $(Int(round(conf_level*100)))% CI)")
-
-    storage_save_auto!("forecast", serialize_model(fc),
-        Dict{String,Any}("command" => "forecast lp", "data" => data, "shock" => shock, "horizons" => horizons))
 end
 
 # ── ARIMA Forecast ───────────────────────────────────────
@@ -422,15 +382,8 @@ function _forecast_arima(; data::String, column::Int=1, p=nothing, d::Int=0, q::
                            max_p::Int=5, max_d::Int=2, max_q::Int=5,
                            criterion::String="bic", horizons::Int=12,
                            confidence::Float64=0.95, method::String="css_mle",
-                           from_tag::String="",
                            format::String="table", output::String="",
                            plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     y, vname = load_univariate_series(data, column)
     method_sym = Symbol(method)
     safe_method = method_sym == :css_mle ? :mle : method_sym
@@ -471,24 +424,14 @@ function _forecast_arima(; data::String, column::Int=1, p=nothing, d::Int=0, q::
 
     output_result(fc_df; format=Symbol(format), output=output,
                   title="$label Forecast for $vname (h=$horizons, $(Int(round(confidence*100)))% CI)")
-
-    storage_save_auto!("forecast", serialize_model(fc),
-        Dict{String,Any}("command" => "forecast arima", "data" => data, "model" => label, "horizons" => horizons))
 end
 
 # ── Factor Model Forecasts ───────────────────────────────
 
 function _forecast_static(; data::String, nfactors=nothing, horizons::Int=12,
                             ci_method::String="none", conf_level::Float64=0.95,
-                            from_tag::String="",
                             output::String="", format::String="table",
                             plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     X, varnames = load_multivariate_data(data)
 
     r = if isnothing(nfactors)
@@ -533,22 +476,12 @@ function _forecast_static(; data::String, nfactors=nothing, horizons::Int=12,
             println("  $vname: $(avg_se[vi])")
         end
     end
-
-    storage_save_auto!("forecast", serialize_model(fc),
-        Dict{String,Any}("command" => "forecast static", "data" => data, "horizons" => horizons, "n_factors" => r))
 end
 
 function _forecast_dynamic(; data::String, nfactors=nothing, horizons::Int=12,
                              factor_lags::Int=1, method::String="twostep",
-                             from_tag::String="",
                              output::String="", format::String="table",
                              plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     X, varnames = load_multivariate_data(data)
 
     r = if isnothing(nfactors)
@@ -592,21 +525,12 @@ function _forecast_dynamic(; data::String, nfactors=nothing, horizons::Int=12,
 
     output_result(fc_df; format=Symbol(format), output=output,
                   title="Dynamic Factor Forecast (h=$horizons, $(length(varnames)) variables)")
-
-    storage_save_auto!("forecast", serialize_model(fc),
-        Dict{String,Any}("command" => "forecast dynamic", "data" => data, "horizons" => horizons, "n_factors" => r))
 end
 
 function _forecast_gdfm(; data::String, nfactors=nothing, dynamic_rank=nothing,
-                          horizons::Int=12, from_tag::String="",
+                          horizons::Int=12,
                           output::String="", format::String="table",
                           plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     X, varnames = load_multivariate_data(data)
 
     q = if isnothing(dynamic_rank)
@@ -668,24 +592,13 @@ function _forecast_gdfm(; data::String, nfactors=nothing, dynamic_rank=nothing,
     println()
     var_shares = common_variance_share(fm)
     println("Average common variance share: $(round(mean(var_shares); digits=4))")
-
-    storage_save_auto!("forecast", Dict{String,Any}("type" => "gdfm", "horizons" => horizons,
-        "static_rank" => r, "dynamic_rank" => q),
-        Dict{String,Any}("command" => "forecast gdfm", "data" => data))
 end
 
 # ── Volatility Model Forecasts (NEW) ────────────────────
 
 function _forecast_arch(; data::String, column::Int=1, q::Int=1, horizons::Int=12,
-                          from_tag::String="",
                           output::String="", format::String="table",
                           plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     y, vname = load_univariate_series(data, column)
     label = "ARCH($q)"
 
@@ -698,21 +611,12 @@ function _forecast_arch(; data::String, column::Int=1, q::Int=1, horizons::Int=1
     _maybe_plot(fc; plot=plot, plot_save=plot_save)
 
     _vol_forecast_output(fc, vname, label, horizons; format=format, output=output)
-
-    storage_save_auto!("forecast", serialize_model(fc),
-        Dict{String,Any}("command" => "forecast arch", "data" => data, "horizons" => horizons))
 end
 
 function _forecast_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
-                           horizons::Int=12, from_tag::String="",
+                           horizons::Int=12,
                            output::String="", format::String="table",
                            plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     y, vname = load_univariate_series(data, column)
     label = "GARCH($p,$q)"
 
@@ -729,21 +633,12 @@ function _forecast_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
     uc = unconditional_variance(model)
     println()
     println("Unconditional variance: $(round(uc; digits=4))")
-
-    storage_save_auto!("forecast", serialize_model(fc),
-        Dict{String,Any}("command" => "forecast garch", "data" => data, "horizons" => horizons))
 end
 
 function _forecast_egarch(; data::String, column::Int=1, p::Int=1, q::Int=1,
-                            horizons::Int=12, from_tag::String="",
+                            horizons::Int=12,
                             output::String="", format::String="table",
                             plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     y, vname = load_univariate_series(data, column)
     label = "EGARCH($p,$q)"
 
@@ -756,21 +651,12 @@ function _forecast_egarch(; data::String, column::Int=1, p::Int=1, q::Int=1,
     _maybe_plot(fc; plot=plot, plot_save=plot_save)
 
     _vol_forecast_output(fc, vname, label, horizons; format=format, output=output)
-
-    storage_save_auto!("forecast", serialize_model(fc),
-        Dict{String,Any}("command" => "forecast egarch", "data" => data, "horizons" => horizons))
 end
 
 function _forecast_gjr_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
-                               horizons::Int=12, from_tag::String="",
+                               horizons::Int=12,
                                output::String="", format::String="table",
                                plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     y, vname = load_univariate_series(data, column)
     label = "GJR-GARCH($p,$q)"
 
@@ -783,21 +669,12 @@ function _forecast_gjr_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
     _maybe_plot(fc; plot=plot, plot_save=plot_save)
 
     _vol_forecast_output(fc, vname, label, horizons; format=format, output=output)
-
-    storage_save_auto!("forecast", serialize_model(fc),
-        Dict{String,Any}("command" => "forecast gjr_garch", "data" => data, "horizons" => horizons))
 end
 
 function _forecast_sv(; data::String, column::Int=1, draws::Int=5000,
-                        horizons::Int=12, from_tag::String="",
+                        horizons::Int=12,
                         output::String="", format::String="table",
                         plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     y, vname = load_univariate_series(data, column)
 
     println("Stochastic Volatility Forecast: variable=$vname, horizons=$horizons, draws=$draws")
@@ -809,9 +686,6 @@ function _forecast_sv(; data::String, column::Int=1, draws::Int=5000,
     _maybe_plot(fc; plot=plot, plot_save=plot_save)
 
     _vol_forecast_output(fc, vname, "SV", horizons; format=format, output=output)
-
-    storage_save_auto!("forecast", serialize_model(fc),
-        Dict{String,Any}("command" => "forecast sv", "data" => data, "horizons" => horizons))
 end
 
 # ── VECM Forecast ───────────────────────────────────────
@@ -819,15 +693,9 @@ end
 function _forecast_vecm(; data::String, lags::Int=2, rank::String="auto",
                           deterministic::String="constant", horizons::Int=12,
                           ci_method::String="none", replications::Int=500,
-                          confidence::Float64=0.95, from_tag::String="",
+                          confidence::Float64=0.95,
                           output::String="", format::String="table",
                           plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
     n = size(Y, 2)
     r = cointegrating_rank(vecm)
@@ -855,7 +723,4 @@ function _forecast_vecm(; data::String, lags::Int=2, rank::String="auto",
     ci_label = ci_method == "none" ? "" : ", $(Int(round(confidence*100)))% CI"
     output_result(fc_df; format=Symbol(format), output=output,
                   title="VECM Forecast (rank=$r, h=$horizons$ci_label)")
-
-    storage_save_auto!("forecast", serialize_model(fc),
-        Dict{String,Any}("command" => "forecast vecm", "data" => data, "horizons" => horizons, "rank" => r, "n_vars" => n))
 end

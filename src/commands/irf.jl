@@ -18,7 +18,7 @@
 
 function register_irf_commands!()
     irf_var = LeafCommand("var", _irf_var;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=nothing, description="Lag order (default: auto)"),
             Option("shock"; type=Int, default=1, description="Shock variable index (1-based)"),
@@ -27,7 +27,6 @@ function register_irf_commands!()
             Option("ci"; type=String, default="bootstrap", description="none|bootstrap|theoretical"),
             Option("replications"; type=Int, default=1000, description="Bootstrap replications"),
             Option("config"; type=String, default="", description="TOML config for identification"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -36,7 +35,7 @@ function register_irf_commands!()
         description="Compute frequentist impulse response functions")
 
     irf_bvar = LeafCommand("bvar", _irf_bvar;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=4, description="Lag order"),
             Option("shock"; type=Int, default=1, description="Shock variable index (1-based)"),
@@ -45,7 +44,6 @@ function register_irf_commands!()
             Option("draws"; short="n", type=Int, default=2000, description="MCMC draws"),
             Option("sampler"; type=String, default="direct", description="direct|gibbs"),
             Option("config"; type=String, default="", description="TOML config for identification/prior"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -54,7 +52,7 @@ function register_irf_commands!()
         description="Compute Bayesian impulse response functions with credible intervals")
 
     irf_lp = LeafCommand("lp", _irf_lp;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("shock"; type=Int, default=1, description="Single shock index (1-based)"),
             Option("shocks"; type=String, default="", description="Comma-separated shock indices (e.g. 1,2,3)"),
@@ -67,7 +65,6 @@ function register_irf_commands!()
             Option("conf-level"; type=Float64, default=0.95, description="Confidence level"),
             Option("vcov"; type=String, default="newey_west", description="newey_west|white|driscoll_kraay"),
             Option("config"; type=String, default="", description="TOML config for sign/narrative restrictions"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -76,7 +73,7 @@ function register_irf_commands!()
         description="Compute structural LP impulse response functions")
 
     irf_vecm = LeafCommand("vecm", _irf_vecm;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=2, description="Lag order (in levels)"),
             Option("rank"; short="r", type=String, default="auto", description="Cointegration rank (auto|1|2|...)"),
@@ -87,7 +84,6 @@ function register_irf_commands!()
             Option("ci"; type=String, default="bootstrap", description="none|bootstrap|theoretical"),
             Option("replications"; type=Int, default=1000, description="Bootstrap replications"),
             Option("config"; type=String, default="", description="TOML config for identification"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -96,7 +92,7 @@ function register_irf_commands!()
         description="Compute impulse response functions via VECM → VAR representation")
 
     irf_pvar = LeafCommand("pvar", _irf_pvar;
-        args=[Argument("data"; required=false, default="", description="Path to CSV panel data file")],
+        args=[Argument("data"; description="Path to CSV panel data file")],
         options=[
             Option("id-col"; type=String, default="", description="Panel group identifier column"),
             Option("time-col"; type=String, default="", description="Time period column"),
@@ -105,7 +101,6 @@ function register_irf_commands!()
             Option("irf-type"; type=String, default="oirf", description="oirf|girf"),
             Option("boot-draws"; type=Int, default=500, description="Bootstrap draws for CIs"),
             Option("confidence"; type=Float64, default=0.95, description="Confidence level"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -127,15 +122,9 @@ end
 
 function _irf_var(; data::String, lags=nothing, shock::Int=1, horizons::Int=20,
                    id::String="cholesky", ci::String="bootstrap", replications::Int=1000,
-                   config::String="", from_tag::String="",
+                   config::String="",
                    output::String="", format::String="table",
                    plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     model, Y, varnames, p = _load_and_estimate_var(data, lags)
     n = size(Y, 2)
 
@@ -145,18 +134,12 @@ function _irf_var(; data::String, lags=nothing, shock::Int=1, horizons::Int=20,
     # Arias identification handled separately
     if id == "arias"
         _var_irf_arias(model, config, horizons, varnames, shock; format=format, output=output)
-        storage_save_auto!("irf", Dict{String,Any}("type" => "var", "id" => "arias",
-            "shock" => shock, "horizons" => horizons, "n_vars" => n),
-            Dict{String,Any}("command" => "irf var", "data" => data))
         return
     end
 
     # Uhlig identification handled separately
     if id == "uhlig"
         _var_irf_uhlig(model, config, horizons, varnames, shock; format=format, output=output)
-        storage_save_auto!("irf", Dict{String,Any}("type" => "var", "id" => "uhlig",
-            "shock" => shock, "horizons" => horizons, "n_vars" => n),
-            Dict{String,Any}("command" => "irf var", "data" => data))
         return
     end
 
@@ -189,11 +172,6 @@ function _irf_var(; data::String, lags=nothing, shock::Int=1, horizons::Int=20,
     shock_name = _shock_name(varnames, shock)
     output_result(irf_df; format=Symbol(format), output=output,
                   title="IRF to $shock_name shock ($id identification)")
-
-    # Auto-save
-    storage_save_auto!("irf", serialize_model(irf_result),
-        Dict{String,Any}("command" => "irf var", "data" => data,
-                          "id" => id, "shock" => shock, "horizons" => horizons, "n_vars" => n))
 end
 
 function _var_irf_arias(model, config::String, horizons::Int,
@@ -272,15 +250,9 @@ end
 
 function _irf_bvar(; data::String, lags::Int=4, shock::Int=1, horizons::Int=20,
                     id::String="cholesky", draws::Int=2000, sampler::String="direct",
-                    config::String="", from_tag::String="",
+                    config::String="",
                     output::String="", format::String="table",
                     plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
     method = get(ID_METHOD_MAP, id, :cholesky)
 
@@ -334,10 +306,6 @@ function _irf_bvar(; data::String, lags::Int=4, shock::Int=1, horizons::Int=20,
     shock_name = _shock_name(varnames, shock)
     output_result(irf_df; format=Symbol(format), output=output,
                   title="Bayesian IRF to $shock_name shock ($id, 68% credible interval)")
-
-    storage_save_auto!("irf", serialize_model(birf),
-        Dict{String,Any}("command" => "irf bvar", "data" => data,
-                          "id" => id, "shock" => shock, "horizons" => horizons, "n_vars" => n))
 end
 
 # ── LP IRF ───────────────────────────────────────────────
@@ -347,15 +315,8 @@ function _irf_lp(; data::String, shock::Int=1, shocks::String="",
                   id::String="cholesky", ci::String="none",
                   replications::Int=200, conf_level::Float64=0.95,
                   vcov::String="newey_west", config::String="",
-                  from_tag::String="",
                   output::String="", format::String="table",
                   plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     # Multi-shock mode
     if !isempty(shocks)
         shock_indices = parse.(Int, split(shocks, ","))
@@ -399,10 +360,6 @@ function _irf_lp(; data::String, shock::Int=1, shocks::String="",
                       title="LP IRF to $shock_name shock ($id identification)")
         println()
     end
-
-    storage_save_auto!("irf", serialize_model(irf_result),
-        Dict{String,Any}("command" => "irf lp", "data" => data,
-                          "id" => id, "shocks" => shock_indices, "horizons" => horizons, "n_vars" => n))
 end
 
 # ── VECM IRF ────────────────────────────────────────────
@@ -411,15 +368,9 @@ function _irf_vecm(; data::String, lags::Int=2, rank::String="auto",
                     deterministic::String="constant",
                     shock::Int=1, horizons::Int=20,
                     id::String="cholesky", ci::String="bootstrap", replications::Int=1000,
-                    config::String="", from_tag::String="",
+                    config::String="",
                     output::String="", format::String="table",
                     plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
     var_model = to_var(vecm)
     n = size(Y, 2)
@@ -457,10 +408,6 @@ function _irf_vecm(; data::String, lags::Int=2, rank::String="auto",
     shock_name = _shock_name(varnames, shock)
     output_result(irf_df; format=Symbol(format), output=output,
                   title="VECM IRF to $shock_name shock ($id identification)")
-
-    storage_save_auto!("irf", serialize_model(irf_result),
-        Dict{String,Any}("command" => "irf vecm", "data" => data,
-                          "id" => id, "shock" => shock, "horizons" => horizons, "n_vars" => n, "rank" => r))
 end
 
 # ── Panel VAR IRF ──────────────────────────────────────────
@@ -468,25 +415,9 @@ end
 function _irf_pvar(; data::String, id_col::String="", time_col::String="",
                     lags::Int=1, horizons::Int=10,
                     irf_type::String="oirf", boot_draws::Int=500,
-                    confidence::Float64=0.95, from_tag::String="",
+                    confidence::Float64=0.95,
                     output::String="", format::String="table",
                     plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data_path, params = _resolve_from_tag(from_tag)
-        data = data_path
-        if isempty(id_col)
-            id_col = get(params, "id_col", "")
-        end
-        if isempty(time_col)
-            time_col = get(params, "time_col", "")
-        end
-        if lags == 1
-            lags = get(params, "lags", lags)
-        end
-    end
     isempty(id_col) && error("Panel VAR IRF requires --id-col")
     isempty(time_col) && error("Panel VAR IRF requires --time-col")
     validate_method(irf_type, ["oirf", "girf"], "IRF type")
@@ -526,9 +457,4 @@ function _irf_pvar(; data::String, id_col::String="", time_col::String="",
                       title="Panel VAR $(uppercase(irf_type)) to $shock_name shock")
         println()
     end
-
-    storage_save_auto!("irf", serialize_model(irf_result),
-        Dict{String,Any}("command" => "irf pvar", "data" => data,
-                          "id_col" => id_col, "time_col" => time_col, "lags" => lags,
-                          "irf_type" => irf_type, "horizons" => horizons, "n_vars" => n))
 end
