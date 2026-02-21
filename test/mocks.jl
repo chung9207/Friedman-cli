@@ -221,6 +221,18 @@ end
 ARIMAForecast(f::Vector{T}, cl, cu, se, h::Int) where T =
     ARIMAForecast(f, cl, cu, se, h, T(0.95))
 
+# ─── VAR Forecast Type ──────────────────────────────────
+
+struct VARForecast{T<:AbstractFloat}
+    forecast::Matrix{T}
+    ci_lower::Matrix{T}
+    ci_upper::Matrix{T}
+    horizon::Int
+    ci_method::Symbol
+    conf_level::T
+    varnames::Vector{String}
+end
+
 # ─── Non-Gaussian Types ──────────────────────────────────
 
 struct ICASVARResult{T}
@@ -470,7 +482,8 @@ nvars(m::VARModel) = size(m.Y, 2)
 
 # IRF
 function irf(model::VARModel, horizon::Int; method=:cholesky, check_func=nothing,
-             narrative_check=nothing, ci_type=:none, reps=200, conf_level=0.95)
+             narrative_check=nothing, ci_type=:none, reps=200, conf_level=0.95,
+             stationary_only=false)
     n = size(model.Y, 2)
     vals = ones(horizon + 1, n, n) * 0.1
     ci_lo = ci_type == :none ? nothing : vals .- 0.5
@@ -491,6 +504,38 @@ function irf(post::BVARPosterior, horizon::Int;
     vals = ones(horizon + 1, n, n) * 0.1
     q_vals = ones(horizon + 1, n, n, length(quantiles)) * 0.1
     BayesianImpulseResponse(vals, q_vals, Float64.(quantiles))
+end
+
+# Cumulative IRF
+cumulative_irf(r::ImpulseResponse) = r
+cumulative_irf(r::BayesianImpulseResponse) = r
+
+# Sign-Identified Set
+struct SignIdentifiedSet{T<:AbstractFloat}
+    Q_draws::Vector{Matrix{T}}
+    irf_draws::Array{T,4}
+    n_accepted::Int
+    n_total::Int
+    acceptance_rate::T
+    variables::Vector{String}
+    shocks::Vector{String}
+end
+
+irf_bounds(s::SignIdentifiedSet; quantiles=[0.16, 0.84]) = (zeros(size(s.irf_draws)[2:4]...), ones(size(s.irf_draws)[2:4]...))
+irf_median(s::SignIdentifiedSet) = fill(0.5, size(s.irf_draws)[2:4]...)
+
+function identify_sign(model::VARModel, horizon::Int, check_func; max_draws=1000, store_all=false)
+    n = size(model.Y, 2)
+    if store_all
+        n_d = 10
+        irf_draws = ones(n_d, horizon + 1, n, n) * 0.1
+        Q_draws = [Matrix{Float64}(I(n)) for _ in 1:n_d]
+        return SignIdentifiedSet(Q_draws, irf_draws, n_d, max_draws, Float64(n_d/max_draws),
+            ["var$i" for i in 1:n], ["shock$i" for i in 1:n])
+    end
+    Q = Matrix{Float64}(I(n))
+    irf_vals = ones(horizon + 1, n, n) * 0.1
+    return (Q, irf_vals)
 end
 
 # FEVD
@@ -791,6 +836,14 @@ halflife(m::Union{GARCHModel,GJRGARCHModel}) = 4.3
 unconditional_variance(m::Union{ARCHModel,GARCHModel}) = 0.02
 function forecast(m::Union{ARCHModel,GARCHModel,EGARCHModel,GJRGARCHModel,SVModel}, h::Int)
     VolatilityForecast(ones(h) * 0.01, h)
+end
+
+# VAR forecast with bootstrap CI
+function forecast(model::VARModel, h::Int; ci_method=:none, reps=500, conf_level=0.95)
+    n = size(model.Y, 2)
+    fc = ones(h, n) * 0.1
+    VARForecast(fc, fc .- 0.5, fc .+ 0.5, h, ci_method, conf_level,
+                ["var$i" for i in 1:n])
 end
 
 # Volatility test functions
@@ -1095,7 +1148,7 @@ function hamilton_filter(y::AbstractVector; h=8, p=4)
     HamiltonFilterResult(t, c, beta, h, p, T, valid)
 end
 
-function beveridge_nelson(y::AbstractVector; p=:auto, q=:auto, max_terms=500)
+function beveridge_nelson(y::AbstractVector; p=:auto, q=:auto, max_terms=500, method=:arima)
     T = length(y)
     t = cumsum(ones(T)) .* mean(y) / T
     c = y .- t
@@ -1148,6 +1201,9 @@ export select_lag_order, estimate_var, estimate_bvar, posterior_mean_model, post
 export optimize_hyperparameters, coef, loglikelihood, stderror, predict, residuals, report
 export is_stationary, companion_matrix, companion_matrix_factors, nvars
 export irf, fevd, historical_decomposition, verify_decomposition, contribution
+export cumulative_irf
+export SignIdentifiedSet, identify_sign, irf_bounds, irf_median
+export VARForecast
 export zero_restriction, sign_restriction, identify_arias, irf_mean, identify_uhlig
 export estimate_lp, lp_irf, estimate_lp_iv, lp_iv_irf, weak_instrument_test
 export estimate_smooth_lp, smooth_lp_irf, cross_validate_lambda
@@ -1320,6 +1376,91 @@ save_plot(p::PlotOutput, path::String) = (write(path, p.html); path)
 display_plot(p::PlotOutput) = nothing  # no-op in tests
 
 export PlotOutput, plot_result, save_plot, display_plot
+
+# ─── Data Balance & Dates ────────────────────────────────────
+
+function balance_panel(ts::TimeSeriesData; method::Symbol=:dfm, r::Int=3, p::Int=2)
+    return ts  # mock returns unchanged
+end
+
+set_dates!(ts::TimeSeriesData, dt::AbstractVector{<:AbstractString}) = ts
+dates(ts::TimeSeriesData) = String[]
+
+export balance_panel, set_dates!, dates
+
+# ─── Nowcast Types & Functions ──────────────────────────────
+
+abstract type AbstractNowcastModel end
+
+struct NowcastDFM{T<:AbstractFloat} <: AbstractNowcastModel
+    X_sm::Matrix{T}; F::Matrix{T}; C::Matrix{T}; A::Matrix{T}; Q::Matrix{T}; R::Matrix{T}
+    Mx::Vector{T}; Wx::Vector{T}; Z_0::Vector{T}; V_0::Matrix{T}
+    r::Int; p::Int; blocks::Matrix{Int}; loglik::T; n_iter::Int
+    nM::Int; nQ::Int; idio::Symbol; data::Matrix{T}
+end
+
+struct NowcastBVAR{T<:AbstractFloat} <: AbstractNowcastModel
+    X_sm::Matrix{T}; beta::Matrix{T}; sigma::Matrix{T}
+    lambda::T; theta::T; miu::T; alpha::T; lags::Int; loglik::T
+    nM::Int; nQ::Int; data::Matrix{T}
+end
+
+struct NowcastBridge{T<:AbstractFloat} <: AbstractNowcastModel
+    X_sm::Matrix{T}; Y_nowcast::Vector{T}; Y_individual::Matrix{T}; n_equations::Int
+    coefficients::Vector{Vector{T}}; nM::Int; nQ::Int; lagM::Int; lagQ::Int; lagY::Int
+    data::Matrix{T}
+end
+
+struct NowcastResult{T<:AbstractFloat}
+    model::AbstractNowcastModel; X_sm::Matrix{T}; target_index::Int
+    nowcast::T; forecast::T; method::Symbol
+end
+
+struct NowcastNews{T<:AbstractFloat}
+    old_nowcast::T; new_nowcast::T; impact_news::Vector{T}; impact_revision::T
+    impact_reestimation::T; group_impacts::Vector{T}; variable_names::Vector{String}
+end
+
+function nowcast_dfm(Y::AbstractMatrix, nM::Int, nQ::Int; r=2, p=1, idio=:ar1, blocks=nothing, max_iter=100, thresh=1e-4)
+    T_obs, N = size(Y)
+    sd = r * p
+    NowcastDFM{Float64}(copy(Y), randn(T_obs, sd), randn(N, sd), randn(sd, sd),
+        Matrix{Float64}(I(sd)), Matrix{Float64}(I(N)), zeros(N), ones(N),
+        zeros(sd), Matrix{Float64}(I(sd)), r, p, ones(Int, N, 1), -100.0, 50, nM, nQ, idio, copy(Y))
+end
+
+function nowcast_bvar(Y::AbstractMatrix, nM::Int, nQ::Int; lags=5, kwargs...)
+    T_obs, N = size(Y)
+    NowcastBVAR{Float64}(copy(Y), randn(N*lags+1, N), Matrix{Float64}(I(N)),
+        0.2, 1.0, 1.0, 2.0, lags, -100.0, nM, nQ, copy(Y))
+end
+
+function nowcast_bridge(Y::AbstractMatrix, nM::Int, nQ::Int; lagM=1, lagQ=1, lagY=1)
+    T_obs, N = size(Y)
+    nQ_act = max(nQ, 1)
+    NowcastBridge{Float64}(copy(Y), randn(nQ_act), randn(nQ_act, max(nM, 1)),
+        max(nM, 1), [randn(3) for _ in 1:max(nM, 1)], nM, nQ, lagM, lagQ, lagY, copy(Y))
+end
+
+function nowcast(model::AbstractNowcastModel; target_var=nothing)
+    idx = isnothing(target_var) ? size(model.data, 2) : target_var
+    NowcastResult{Float64}(model, model.X_sm, idx, 1.5, 1.2, :dfm)
+end
+
+function nowcast_news(X_new, X_old, model::AbstractNowcastModel, target_period; target_var=size(X_new, 2), groups=nothing)
+    N = size(X_new, 2)
+    NowcastNews{Float64}(1.0, 1.5, randn(N), 0.1, 0.05,
+        isnothing(groups) ? randn(1) : randn(length(unique(groups))),
+        ["var$i" for i in 1:N])
+end
+
+function forecast(model::AbstractNowcastModel, h::Int; target_var=nothing)
+    N = size(model.data, 2)
+    randn(h, N)
+end
+
+export AbstractNowcastModel, NowcastDFM, NowcastBVAR, NowcastBridge, NowcastResult, NowcastNews
+export nowcast_dfm, nowcast_bvar, nowcast_bridge, nowcast, nowcast_news
 
 export TimeSeriesData, DataDiagnostic, DataSummary
 export load_example, to_matrix, varnames, frequency, desc, vardesc, nobs, nvars

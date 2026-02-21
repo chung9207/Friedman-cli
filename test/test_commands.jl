@@ -20,7 +20,7 @@
 
 using Test
 using CSV, DataFrames, JSON3, PrettyTables, TOML
-using BSON, Dates
+using Dates
 using LinearAlgebra: eigvals, diag, I, svd, diagm
 using Statistics: mean, median, var
 
@@ -55,9 +55,7 @@ end
 # Include CLI types (needed for LeafCommand, NodeCommand, etc.)
 include(joinpath(project_root, "src", "cli", "types.jl"))
 
-# Include new command files in dependency order
-include(joinpath(project_root, "src", "storage.jl"))
-include(joinpath(project_root, "src", "settings.jl"))
+# Include command files in dependency order
 include(joinpath(project_root, "src", "commands", "shared.jl"))
 include(joinpath(project_root, "src", "commands", "estimate.jl"))
 include(joinpath(project_root, "src", "commands", "test.jl"))
@@ -69,10 +67,7 @@ include(joinpath(project_root, "src", "commands", "predict.jl"))
 include(joinpath(project_root, "src", "commands", "residuals.jl"))
 include(joinpath(project_root, "src", "commands", "filter.jl"))
 include(joinpath(project_root, "src", "commands", "data.jl"))
-include(joinpath(project_root, "src", "commands", "list.jl"))
-include(joinpath(project_root, "src", "commands", "rename.jl"))
-include(joinpath(project_root, "src", "commands", "project.jl"))
-include(joinpath(project_root, "src", "commands", "plot.jl"))
+include(joinpath(project_root, "src", "commands", "nowcast.jl"))
 
 # ─── Test Helpers ───────────────────────────────────────────────
 
@@ -680,7 +675,7 @@ end  # Shared utilities
             @test occursin("Local Projections", out)
             @test occursin("LP Coefficients", out)
             @test occursin("Estimation Summary", out)
-            @test occursin("Saved as:", out)
+
         end
     end
 
@@ -698,7 +693,7 @@ end  # Shared utilities
             @test occursin("LP-IV", out)
             @test occursin("F-statistic", out)
             @test occursin("LP-IV Coefficients", out)
-            @test occursin("Saved as:", out)
+
         end
     end
 
@@ -727,7 +722,7 @@ end  # Shared utilities
             @test occursin("Smooth LP", out)
             @test occursin("Cross-validating", out)
             @test occursin("Smooth LP Coefficients", out)
-            @test occursin("Saved as:", out)
+
         end
     end
 
@@ -743,7 +738,7 @@ end  # Shared utilities
             @test occursin("Smooth LP", out)
             @test !occursin("Cross-validating", out)
             @test occursin("Smooth LP Coefficients", out)
-            @test occursin("Saved as:", out)
+
         end
     end
 
@@ -761,7 +756,7 @@ end  # Shared utilities
             @test occursin("Recession", out)
             @test occursin("State LP Coefficients", out)
             @test occursin("Regime Difference Test", out)
-            @test occursin("Saved as:", out)
+
         end
     end
 
@@ -789,7 +784,7 @@ end  # Shared utilities
             @test occursin("Propensity Score LP", out)
             @test occursin("Diagnostics", out)
             @test occursin("ATE Estimates", out)
-            @test occursin("Saved as:", out)
+
         end
     end
 
@@ -805,7 +800,7 @@ end  # Shared utilities
             @test occursin("Doubly Robust LP", out)
             @test occursin("Diagnostics", out)
             @test occursin("ATE Estimates", out)
-            @test occursin("Saved as:", out)
+
         end
     end
 
@@ -1832,6 +1827,93 @@ end  # Test handlers
         end
     end
 
+    @testset "_irf_var — cumulative flag" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _irf_var(; data=csv, lags=2, shock=1, horizons=10, id="cholesky",
+                              ci="none", format="table", cumulative=true)
+                end
+            end
+            @test occursin("Cumulative IRFs computed", out)
+            @test occursin("IRF to", out)
+        end
+    end
+
+    @testset "_irf_bvar — cumulative flag" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _irf_bvar(; data=csv, lags=2, shock=1, horizons=10, id="cholesky",
+                               draws=100, sampler="direct", config="", format="table",
+                               cumulative=true)
+                end
+            end
+            @test occursin("Cumulative IRFs computed", out)
+            @test occursin("Bayesian IRF", out)
+        end
+    end
+
+    @testset "_irf_lp — cumulative flag" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _irf_lp(; data=csv, shock=1, horizons=10, lags=4, id="cholesky",
+                             ci="none", vcov="newey_west", config="", format="table",
+                             cumulative=true)
+                end
+            end
+            @test occursin("Cumulative IRFs computed", out)
+            @test occursin("LP IRF", out)
+        end
+    end
+
+    @testset "_irf_var — identified-set flag" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            cfg = _make_sign_config(dir)
+            out = cd(dir) do
+                _capture() do
+                    _irf_var(; data=csv, lags=2, shock=1, horizons=10, id="sign",
+                              config=cfg, ci="none", format="table", identified_set=true)
+                end
+            end
+            @test occursin("Sign-Identified Set", out)
+            @test occursin("accepted", out)
+            @test occursin("IRF Identified Set", out)
+        end
+    end
+
+    @testset "_irf_var — identified-set without config errors" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            @test_throws ErrorException cd(dir) do
+                _capture() do
+                    _irf_var(; data=csv, lags=2, shock=1, horizons=10, id="sign",
+                              config="", ci="none", format="table", identified_set=true)
+                end
+            end
+        end
+    end
+
+    @testset "_irf_var — stationary-only flag with bootstrap" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _irf_var(; data=csv, lags=2, shock=1, horizons=10, id="cholesky",
+                              ci="bootstrap", replications=100, format="table",
+                              stationary_only=true)
+                end
+            end
+            @test occursin("Computing IRFs", out)
+            @test occursin("IRF to", out)
+        end
+    end
+
 end  # IRF handlers
 
 # ═══════════════════════════════════════════════════════════════
@@ -2087,6 +2169,21 @@ end  # HD handlers
                 end
             end
             @test occursin("Forecast", out)
+        end
+    end
+
+    @testset "_forecast_var — bootstrap CI" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _forecast_var(; data=csv, lags=2, horizons=5, confidence=0.95,
+                                   ci_method="bootstrap", format="table")
+                end
+            end
+            @test occursin("bootstrap", out)
+            @test occursin("Forecast", out)
+            @test occursin("95%", out)
         end
     end
 
@@ -2720,350 +2817,6 @@ end  # Forecast handlers
 
 end  # VECM handlers
 
-# ═══════════════════════════════════════════════════════════════
-# List, Rename, Project handlers
-# ═══════════════════════════════════════════════════════════════
-
-@testset "List, rename, project handlers" begin
-
-    @testset "register_list_commands!" begin
-        node = register_list_commands!()
-        @test node isa NodeCommand
-        @test node.name == "list"
-        @test length(node.subcmds) == 2
-        @test haskey(node.subcmds, "models")
-        @test haskey(node.subcmds, "results")
-    end
-
-    @testset "register_rename_commands!" begin
-        leaf = register_rename_commands!()
-        @test leaf isa LeafCommand
-        @test leaf.name == "rename"
-    end
-
-    @testset "register_project_commands!" begin
-        node = register_project_commands!()
-        @test node isa NodeCommand
-        @test node.name == "project"
-        @test haskey(node.subcmds, "list")
-        @test haskey(node.subcmds, "show")
-    end
-
-    @testset "_list_models — empty storage" begin
-        mktempdir() do dir
-            out = cd(dir) do
-                _capture() do
-                    _list_models()
-                end
-            end
-            @test occursin("No stored models", out)
-        end
-    end
-
-    @testset "_list_results — empty storage" begin
-        mktempdir() do dir
-            out = cd(dir) do
-                _capture() do
-                    _list_results()
-                end
-            end
-            @test occursin("No stored results", out)
-        end
-    end
-
-    @testset "_project_show" begin
-        mktempdir() do dir
-            out = cd(dir) do
-                _capture() do
-                    _project_show()
-                end
-            end
-            @test occursin("Current project", out)
-        end
-    end
-
-    @testset "_rename — tag not found" begin
-        mktempdir() do dir
-            out = cd(dir) do
-                _capture() do
-                    _rename(; old_tag="nonexistent001", new_tag="renamed001")
-                end
-            end
-            @test occursin("not found", out)
-        end
-    end
-
-    @testset "_rename — successful" begin
-        mktempdir() do dir
-            cd(dir) do
-                # Create a storage entry first
-                storage_save!("test001", "test", Dict{String,Any}("value" => 1),
-                              Dict{String,Any}("command" => "test"))
-
-                out = _capture() do
-                    _rename(; old_tag="test001", new_tag="my_model")
-                end
-                @test occursin("Renamed", out) || occursin("renamed", out)
-                @test occursin("my_model", out)
-
-                # Verify rename happened
-                @test isnothing(storage_load("test001"))
-                @test !isnothing(storage_load("my_model"))
-            end
-        end
-    end
-
-end  # List, rename, project
-
-# ═══════════════════════════════════════════════════════════════
-# Storage operations (storage.jl)
-# ═══════════════════════════════════════════════════════════════
-
-@testset "Storage operations" begin
-
-    @testset "auto_tag" begin
-        mktempdir() do dir
-            cd(dir) do
-                tag = auto_tag("var")
-                @test tag == "var001"
-            end
-        end
-    end
-
-    @testset "auto_tag increments" begin
-        mktempdir() do dir
-            cd(dir) do
-                # Save one entry to increment counter
-                storage_save!("var001", "var", Dict{String,Any}("v" => 1))
-                tag = auto_tag("var")
-                @test tag == "var002"
-            end
-        end
-    end
-
-    @testset "storage_save! and storage_load" begin
-        mktempdir() do dir
-            cd(dir) do
-                data = Dict{String,Any}("model" => "test", "value" => 42)
-                meta = Dict{String,Any}("command" => "test command")
-                tag = storage_save!("mymodel001", "mymodel", data, meta)
-                @test tag == "mymodel001"
-
-                entry = storage_load("mymodel001")
-                @test !isnothing(entry)
-                @test entry["tag"] == "mymodel001"
-                @test entry["type"] == "mymodel"
-                @test entry["data"]["value"] == 42
-                @test entry["meta"]["command"] == "test command"
-            end
-        end
-    end
-
-    @testset "storage_load — nonexistent" begin
-        mktempdir() do dir
-            cd(dir) do
-                @test isnothing(storage_load("nonexistent001"))
-            end
-        end
-    end
-
-    @testset "storage_list" begin
-        mktempdir() do dir
-            cd(dir) do
-                storage_save!("var001", "var", Dict{String,Any}("v" => 1))
-                storage_save!("irf001", "irf", Dict{String,Any}("v" => 2))
-
-                all_entries = storage_list()
-                @test length(all_entries) == 2
-
-                var_entries = storage_list(; type_filter="var")
-                @test length(var_entries) == 1
-
-                irf_entries = storage_list(; type_filter="irf")
-                @test length(irf_entries) == 1
-
-                empty_entries = storage_list(; type_filter="bvar")
-                @test length(empty_entries) == 0
-            end
-        end
-    end
-
-    @testset "storage_rename!" begin
-        mktempdir() do dir
-            cd(dir) do
-                storage_save!("var001", "var", Dict{String,Any}("v" => 1))
-
-                @test storage_rename!("var001", "my_var_model")
-                @test isnothing(storage_load("var001"))
-                @test !isnothing(storage_load("my_var_model"))
-
-                # Rename nonexistent returns false
-                @test !storage_rename!("nonexistent", "new_name")
-
-                # Rename to existing tag errors
-                storage_save!("another001", "another", Dict{String,Any}("v" => 2))
-                @test_throws ErrorException storage_rename!("another001", "my_var_model")
-            end
-        end
-    end
-
-    @testset "storage_save_auto!" begin
-        mktempdir() do dir
-            out = cd(dir) do
-                _capture() do
-                    tag = storage_save_auto!("var", Dict{String,Any}("v" => 1))
-                    @test tag == "var001"
-
-                    tag2 = storage_save_auto!("var", Dict{String,Any}("v" => 2))
-                    @test tag2 == "var002"
-                end
-            end
-            @test occursin("Saved as: var001", out)
-            @test occursin("Saved as: var002", out)
-        end
-    end
-
-    @testset "serialize_model" begin
-        Y = randn(50, 3)
-        model = estimate_var(Y, 2)
-        d = serialize_model(model)
-        @test d isa Dict{String,Any}
-        @test haskey(d, "_type")
-        @test haskey(d, "Y")
-        @test haskey(d, "B")
-        @test haskey(d, "aic")
-    end
-
-    @testset "resolve_stored_tags" begin
-        mktempdir() do dir
-            cd(dir) do
-                # Without stored entry, should pass through
-                result = resolve_stored_tags(["irf", "var001"])
-                # var001 not in storage, so should pass through unchanged
-                @test result == ["irf", "var001"]
-
-                # Save an entry
-                storage_save!("var001", "var", Dict{String,Any}("v" => 1))
-
-                # Now it should rewrite
-                result2 = resolve_stored_tags(["irf", "var001"])
-                @test result2[1] == "irf"
-                @test result2[2] == "var"
-                @test "--from-tag=var001" in result2
-
-                # Non-applicable commands should pass through
-                result3 = resolve_stored_tags(["estimate", "var", "data.csv"])
-                @test result3 == ["estimate", "var", "data.csv"]
-
-                # Too few args should pass through
-                result4 = resolve_stored_tags(["irf"])
-                @test result4 == ["irf"]
-            end
-        end
-    end
-
-end  # Storage operations
-
-# ═══════════════════════════════════════════════════════════════
-# Settings operations (settings.jl)
-# ═══════════════════════════════════════════════════════════════
-
-@testset "Settings operations" begin
-
-    @testset "friedman_home — default" begin
-        # Without FRIEDMAN_HOME set, returns ~/.friedman
-        prev = get(ENV, "FRIEDMAN_HOME", nothing)
-        try
-            delete!(ENV, "FRIEDMAN_HOME")
-            @test endswith(friedman_home(), ".friedman")
-        finally
-            if !isnothing(prev)
-                ENV["FRIEDMAN_HOME"] = prev
-            end
-        end
-    end
-
-    @testset "friedman_home — custom" begin
-        mktempdir() do dir
-            ENV["FRIEDMAN_HOME"] = dir
-            try
-                @test friedman_home() == dir
-            finally
-                delete!(ENV, "FRIEDMAN_HOME")
-            end
-        end
-    end
-
-    @testset "init_settings!" begin
-        mktempdir() do dir
-            ENV["FRIEDMAN_HOME"] = dir
-            try
-                settings = init_settings!()
-                @test haskey(settings, "username")
-                @test haskey(settings, "created")
-                @test isfile(joinpath(dir, "settings.json"))
-            finally
-                delete!(ENV, "FRIEDMAN_HOME")
-            end
-        end
-    end
-
-    @testset "load_settings" begin
-        mktempdir() do dir
-            ENV["FRIEDMAN_HOME"] = dir
-            try
-                # Empty before init
-                s = load_settings()
-                @test isempty(s)
-
-                # After init
-                init_settings!()
-                s = load_settings()
-                @test haskey(s, "username")
-            finally
-                delete!(ENV, "FRIEDMAN_HOME")
-            end
-        end
-    end
-
-    @testset "load_projects — empty" begin
-        mktempdir() do dir
-            ENV["FRIEDMAN_HOME"] = dir
-            try
-                projects = load_projects()
-                @test isempty(projects)
-            finally
-                delete!(ENV, "FRIEDMAN_HOME")
-            end
-        end
-    end
-
-    @testset "register_project!" begin
-        mktempdir() do dir
-            ENV["FRIEDMAN_HOME"] = dir
-            try
-                register_project!("myproject", "/some/path")
-                projects = load_projects()
-                @test length(projects) == 1
-                @test projects[1]["name"] == "myproject"
-                @test projects[1]["path"] == "/some/path"
-
-                # Duplicate registration by path is a no-op
-                register_project!("myproject2", "/some/path")
-                projects2 = load_projects()
-                @test length(projects2) == 1
-
-                # Different path adds another entry
-                register_project!("other", "/other/path")
-                projects3 = load_projects()
-                @test length(projects3) == 2
-            finally
-                delete!(ENV, "FRIEDMAN_HOME")
-            end
-        end
-    end
-
-end  # Settings operations
 
 # ═══════════════════════════════════════════════════════════════
 # Predict handlers (predict.jl)
@@ -3783,21 +3536,6 @@ end  # Output format tests
         end
     end
 
-    @testset "storage file isolation" begin
-        mktempdir() do dir1
-            mktempdir() do dir2
-                cd(dir1) do
-                    storage_save!("test001", "test", Dict{String,Any}("v" => 1))
-                end
-                cd(dir2) do
-                    # dir2 should have no entries
-                    entries = storage_list()
-                    @test isempty(entries)
-                end
-            end
-        end
-    end
-
     @testset "gmm output with file" begin
         mktempdir() do dir
             csv = _make_csv(dir; T=100, n=3, colnames=["output", "inflation", "rate"])
@@ -3946,6 +3684,19 @@ end  # Edge Cases
         end
     end
 
+    @testset "_filter_bn — statespace method" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _filter_bn(; data=csv, method="statespace", format="table")
+                end
+            end
+            @test occursin("Beveridge-Nelson", out)
+            @test occursin("method=statespace", out)
+        end
+    end
+
     @testset "_filter_bk" begin
         mktempdir() do dir
             csv = _make_csv(dir; T=100, n=3)
@@ -4090,7 +3841,6 @@ end  # Filter handlers
             end
             @test occursin("Panel VAR(1)", out)
             @test occursin("gmm", out)
-            @test occursin("Saved as: pvar001", out)
         end
     end
 
@@ -4103,7 +3853,6 @@ end  # Filter handlers
                 end
             end
             @test occursin("feols", out)
-            @test occursin("Saved as: pvar001", out)
         end
     end
 
@@ -4170,7 +3919,6 @@ end  # Filter handlers
                 end
             end
             @test occursin("Panel VAR OIRF", out)
-            @test occursin("Saved as: irf001", out)
         end
     end
 
@@ -4204,7 +3952,6 @@ end  # Filter handlers
                 end
             end
             @test occursin("Panel VAR FEVD", out)
-            @test occursin("Saved as: fevd001", out)
         end
     end
 
@@ -4280,44 +4027,27 @@ end  # Panel VAR handlers
     @testset "_test_lr" begin
         mktempdir() do dir
             csv = _make_csv(dir; T=100, n=3)
-            cd(dir) do
-                # Save two models first
-                storage_save!("var001", "var", Dict{String,Any}("v" => 1),
-                    Dict{String,Any}("data" => csv, "lags" => 2))
-                storage_save!("var002", "var", Dict{String,Any}("v" => 1),
-                    Dict{String,Any}("data" => csv, "lags" => 4))
-                out = _capture() do
-                    _test_lr(; tag1="var001", tag2="var002")
+            out = cd(dir) do
+                _capture() do
+                    _test_lr(; data1=csv, data2=csv, lags1=2, lags2=4)
                 end
-                @test occursin("Likelihood Ratio Test", out)
-                @test occursin("LR statistic", out)
-                @test occursin("p-value", out)
             end
-        end
-    end
-
-    @testset "_test_lr — missing tag error" begin
-        mktempdir() do dir
-            cd(dir) do
-                @test_throws ErrorException _test_lr(; tag1="nonexistent001", tag2="nonexistent002")
-            end
+            @test occursin("Likelihood Ratio Test", out)
+            @test occursin("LR statistic", out)
+            @test occursin("p-value", out)
         end
     end
 
     @testset "_test_lm" begin
         mktempdir() do dir
             csv = _make_csv(dir; T=100, n=3)
-            cd(dir) do
-                storage_save!("var001", "var", Dict{String,Any}("v" => 1),
-                    Dict{String,Any}("data" => csv, "lags" => 2))
-                storage_save!("var002", "var", Dict{String,Any}("v" => 1),
-                    Dict{String,Any}("data" => csv, "lags" => 4))
-                out = _capture() do
-                    _test_lm(; tag1="var001", tag2="var002")
+            out = cd(dir) do
+                _capture() do
+                    _test_lm(; data1=csv, data2=csv, lags1=2, lags2=4)
                 end
-                @test occursin("Lagrange Multiplier Test", out)
-                @test occursin("LM statistic", out)
             end
+            @test occursin("Lagrange Multiplier Test", out)
+            @test occursin("LM statistic", out)
         end
     end
 
@@ -4402,8 +4132,8 @@ end  # Enhanced Granger handlers
         node = register_data_commands!()
         @test node isa NodeCommand
         @test node.name == "data"
-        @test length(node.subcmds) == 8
-        for cmd in ["list", "load", "describe", "diagnose", "fix", "transform", "filter", "validate"]
+        @test length(node.subcmds) == 9
+        for cmd in ["list", "load", "describe", "diagnose", "fix", "transform", "filter", "validate", "balance"]
             @test haskey(node.subcmds, cmd)
             @test node.subcmds[cmd] isa LeafCommand
         end
@@ -4412,13 +4142,14 @@ end  # Enhanced Granger handlers
     @testset "option counts" begin
         node = register_data_commands!()
         @test length(node.subcmds["list"].options) == 2
-        @test length(node.subcmds["load"].options) == 4
+        @test length(node.subcmds["load"].options) == 6
         @test length(node.subcmds["describe"].options) == 2
         @test length(node.subcmds["diagnose"].options) == 2
         @test length(node.subcmds["fix"].options) == 3
         @test length(node.subcmds["transform"].options) == 3
         @test length(node.subcmds["filter"].options) == 8
         @test length(node.subcmds["validate"].options) == 3
+        @test length(node.subcmds["balance"].options) == 5
     end
 
     @testset "_data_list — table" begin
@@ -4888,7 +4619,295 @@ end  # Enhanced Granger handlers
         end
     end
 
+    # ── data balance ──────────────────────────────────────────
+
+    @testset "_data_balance — basic" begin
+        cd(mktempdir()) do
+            write("data.csv", "a,b\n1.0,2.0\n3.0,NaN\n5.0,6.0\n7.0,8.0\n")
+            out = _capture() do
+                _data_balance(; data="data.csv")
+            end
+            @test occursin("Balanc", out)
+        end
+    end
+
+    @testset "_data_balance — custom method and factors" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=50, n=4)
+            out = _capture() do
+                _data_balance(; data=csv, method="dfm", factors=2, lags=1)
+            end
+            @test occursin("Balanc", out)
+            @test occursin("dfm", out)
+        end
+    end
+
+    @testset "_data_balance — csv output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=50, n=3)
+            outfile = joinpath(dir, "balanced.csv")
+            out = _capture() do
+                _data_balance(; data=csv, format="csv", output=outfile)
+            end
+            @test isfile(outfile)
+        end
+    end
+
+    # ── data load --dates ────────────────────────────────────
+
+    @testset "_data_load — --dates option with --path" begin
+        cd(mktempdir()) do
+            write("data.csv", "date,a,b\n2020Q1,1.0,2.0\n2020Q2,3.0,4.0\n2020Q3,5.0,6.0\n")
+            out = _capture() do
+                _data_load(; name="", path="data.csv", dates="date")
+            end
+            @test occursin("Date", out) || occursin("date", out)
+        end
+    end
+
+    @testset "_data_load — --dates missing column warning" begin
+        cd(mktempdir()) do
+            write("data.csv", "a,b\n1.0,2.0\n3.0,4.0\n5.0,6.0\n")
+            out = _capture() do
+                _data_load(; name="", path="data.csv", dates="nonexistent")
+            end
+            @test occursin("Warning", out) || occursin("not found", out)
+        end
+    end
+
+    @testset "_data_load — --path without dates" begin
+        cd(mktempdir()) do
+            write("data.csv", "a,b\n1.0,2.0\n3.0,4.0\n5.0,6.0\n")
+            out = _capture() do
+                _data_load(; name="", path="data.csv")
+            end
+            @test occursin("Loaded", out)
+        end
+    end
+
+    @testset "_data_load — named dataset with --dates" begin
+        cd(mktempdir()) do
+            out = _capture() do
+                _data_load(; name="fred_md", dates="INDPRO")
+            end
+            @test occursin("Loaded", out)
+            @test occursin("Date labels", out) || occursin("fred_md", out)
+        end
+    end
+
 end  # Data handlers
+
+# ──────────────────────────────────────────────────────────────────
+# Nowcast Command Tests
+# ──────────────────────────────────────────────────────────────────
+
+@testset "Nowcast handlers" begin
+
+    @testset "register_nowcast_commands!" begin
+        node = register_nowcast_commands!()
+        @test node isa NodeCommand
+        @test node.name == "nowcast"
+        @test length(node.subcmds) == 5
+        for cmd in ["dfm", "bvar", "bridge", "news", "forecast"]
+            @test haskey(node.subcmds, cmd)
+            @test node.subcmds[cmd] isa LeafCommand
+        end
+    end
+
+    @testset "option counts" begin
+        node = register_nowcast_commands!()
+        @test length(node.subcmds["dfm"].options) == 10
+        @test length(node.subcmds["bvar"].options) == 6
+        @test length(node.subcmds["bridge"].options) == 8
+        @test length(node.subcmds["news"].options) == 12
+        @test length(node.subcmds["forecast"].options) == 10
+    end
+
+    @testset "_nowcast_dfm — basic" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_dfm(; data=csv, monthly_vars=4, quarterly_vars=1)
+            end
+            @test occursin("Nowcast DFM", out)
+            @test occursin("Nowcast:", out) || occursin("nowcast", out)
+        end
+    end
+
+    @testset "_nowcast_dfm — custom factors and lags" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_dfm(; data=csv, monthly_vars=4, quarterly_vars=1,
+                    factors=3, lags=2, idio="iid")
+            end
+            @test occursin("Factors: 3", out)
+            @test occursin("VAR lags: 2", out)
+        end
+    end
+
+    @testset "_nowcast_dfm — auto var split" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_dfm(; data=csv)
+            end
+            @test occursin("4 monthly", out)
+            @test occursin("1 quarterly", out)
+        end
+    end
+
+    @testset "_nowcast_dfm — invalid var split" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            @test_throws ErrorException _nowcast_dfm(; data=csv,
+                monthly_vars=3, quarterly_vars=1)
+        end
+    end
+
+    @testset "_nowcast_bvar — basic" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_bvar(; data=csv, monthly_vars=4, quarterly_vars=1)
+            end
+            @test occursin("Nowcast BVAR", out)
+            @test occursin("Nowcast:", out) || occursin("nowcast", out)
+        end
+    end
+
+    @testset "_nowcast_bvar — custom lags" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_bvar(; data=csv, monthly_vars=4, quarterly_vars=1, lags=3)
+            end
+            @test occursin("Lags: 3", out)
+        end
+    end
+
+    @testset "_nowcast_bridge — basic" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_bridge(; data=csv, monthly_vars=4, quarterly_vars=1)
+            end
+            @test occursin("Nowcast Bridge", out)
+            @test occursin("Nowcast:", out) || occursin("nowcast", out)
+        end
+    end
+
+    @testset "_nowcast_bridge — custom lags" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_bridge(; data=csv, monthly_vars=4, quarterly_vars=1,
+                    lag_m=2, lag_q=2, lag_y=2)
+            end
+            @test occursin("lagM=2", out)
+            @test occursin("lagQ=2", out)
+            @test occursin("lagY=2", out)
+        end
+    end
+
+    @testset "_nowcast_news — basic" begin
+        mktempdir() do dir
+            csv_old = _make_csv(dir; T=100, n=5, colnames=["m1","m2","m3","m4","q1"])
+            csv_new = joinpath(dir, "data_new.csv")
+            # Create new vintage with slightly more data
+            data = Dict{String,Vector{Float64}}()
+            for name in ["m1","m2","m3","m4","q1"]
+                data[name] = randn(105) .+ 1.0
+            end
+            CSV.write(csv_new, DataFrame(data))
+
+            out = _capture() do
+                _nowcast_news(; data_new=csv_new, data_old=csv_old,
+                    monthly_vars=4, quarterly_vars=1, method="dfm")
+            end
+            @test occursin("News", out) || occursin("news", out)
+            @test occursin("Old", out) || occursin("old", out)
+        end
+    end
+
+    @testset "_nowcast_news — missing data errors" begin
+        @test_throws ErrorException _nowcast_news(; data_new="", data_old="old.csv")
+        @test_throws ErrorException _nowcast_news(; data_new="new.csv", data_old="")
+    end
+
+    @testset "_nowcast_news — bvar method" begin
+        mktempdir() do dir
+            csv_old = _make_csv(dir; T=100, n=5, colnames=["m1","m2","m3","m4","q1"])
+            csv_new = joinpath(dir, "data_new.csv")
+            data = Dict{String,Vector{Float64}}()
+            for name in ["m1","m2","m3","m4","q1"]
+                data[name] = randn(105) .+ 1.0
+            end
+            CSV.write(csv_new, DataFrame(data))
+
+            out = _capture() do
+                _nowcast_news(; data_new=csv_new, data_old=csv_old,
+                    monthly_vars=4, quarterly_vars=1, method="bvar")
+            end
+            @test occursin("bvar", out)
+        end
+    end
+
+    @testset "_nowcast_forecast — dfm" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_forecast(; data=csv, monthly_vars=4, quarterly_vars=1,
+                    method="dfm", horizons=4)
+            end
+            @test occursin("Nowcast Forecast", out)
+            @test occursin("dfm", out)
+        end
+    end
+
+    @testset "_nowcast_forecast — bvar" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_forecast(; data=csv, monthly_vars=4, quarterly_vars=1,
+                    method="bvar", horizons=4)
+            end
+            @test occursin("bvar", out)
+        end
+    end
+
+    @testset "_nowcast_forecast — bridge" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_forecast(; data=csv, monthly_vars=4, quarterly_vars=1,
+                    method="bridge", horizons=4)
+            end
+            @test occursin("bridge", out)
+        end
+    end
+
+    @testset "_nowcast_forecast — invalid method" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            @test_throws ErrorException _nowcast_forecast(; data=csv,
+                monthly_vars=4, quarterly_vars=1, method="invalid")
+        end
+    end
+
+    @testset "_nowcast_forecast — csv output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            outfile = joinpath(dir, "nc_fc.csv")
+            out = _capture() do
+                _nowcast_forecast(; data=csv, monthly_vars=4, quarterly_vars=1,
+                    method="dfm", horizons=4, format="csv", output=outfile)
+            end
+            @test isfile(outfile)
+        end
+    end
+
+end  # Nowcast handlers
 
 # ──────────────────────────────────────────────────────────────────
 # Plot Support Tests
@@ -4949,393 +4968,6 @@ end  # Data handlers
                 @test occursin("Plot opened in browser", out)
             end
         end
-    end
-
-    @testset "register_plot_commands! returns LeafCommand" begin
-        cmd = register_plot_commands!()
-        @test cmd isa LeafCommand
-        @test cmd.name == "plot"
-        @test length(cmd.args) == 1
-        @test cmd.args[1].name == "tag"
-        @test any(o -> o.name == "save", cmd.options)
-        @test any(o -> o.name == "title", cmd.options)
-        @test any(f -> f.name == "no-open", cmd.flags)
-    end
-
-    @testset "_plot — loads stored tag and plots" begin
-        mktempdir() do dir
-            cd(dir) do
-                # Store a hand-crafted IRF Dict matching real MEMs field structure
-                irf_data = Dict{String,Any}(
-                    "_type" => "ImpulseResponse{Float64}",
-                    "values" => ones(20, 3, 3), "ci_lower" => zeros(0,0,0),
-                    "ci_upper" => zeros(0,0,0), "horizon" => 20,
-                    "variables" => ["y1","y2","y3"], "shocks" => ["s1","s2","s3"],
-                    "ci_type" => "cholesky")
-                tag = storage_save_auto!("irf", irf_data,
-                    Dict{String,Any}("command" => "irf var"))
-                html_path = joinpath(dir, "irf_plot.html")
-
-                out = _capture() do
-                    _plot(; tag=tag, save=html_path, no_open=true)
-                end
-                @test isfile(html_path)
-                @test occursin("Plot saved", out)
-            end
-        end
-    end
-
-    @testset "_plot — error on missing tag" begin
-        mktempdir() do dir
-            cd(dir) do
-                @test_throws ErrorException _plot(; tag="noexist999", save="", no_open=true)
-            end
-        end
-    end
-
-    @testset "_plot — error on non-plottable type" begin
-        mktempdir() do dir
-            cd(dir) do
-                # Save entry with no _type field
-                storage_save!("bad001", "bad",
-                    Dict{String,Any}("some_field" => 42),
-                    Dict{String,Any}())
-                @test_throws ErrorException _plot(; tag="bad001", save="", no_open=true)
-            end
-        end
-    end
-
-    @testset "_plot — warning on --no-open without --save" begin
-        mktempdir() do dir
-            cd(dir) do
-                irf_data = Dict{String,Any}(
-                    "_type" => "ImpulseResponse{Float64}",
-                    "values" => ones(20, 3, 3), "ci_lower" => zeros(0,0,0),
-                    "ci_upper" => zeros(0,0,0), "horizon" => 20,
-                    "variables" => ["y1","y2","y3"], "shocks" => ["s1","s2","s3"],
-                    "ci_type" => "cholesky")
-                tag = storage_save_auto!("irf", irf_data)
-
-                out = _capture() do
-                    _plot(; tag=tag, save="", no_open=true)
-                end
-                @test occursin("Warning", out)
-            end
-        end
-    end
-
-    @testset "_plot — with --title option" begin
-        mktempdir() do dir
-            cd(dir) do
-                irf_data = Dict{String,Any}(
-                    "_type" => "ImpulseResponse{Float64}",
-                    "values" => ones(20, 3, 3), "ci_lower" => zeros(0,0,0),
-                    "ci_upper" => zeros(0,0,0), "horizon" => 20,
-                    "variables" => ["y1","y2","y3"], "shocks" => ["s1","s2","s3"],
-                    "ci_type" => "cholesky")
-                tag = storage_save_auto!("irf", irf_data)
-                html_path = joinpath(dir, "titled.html")
-
-                out = _capture() do
-                    _plot(; tag=tag, title="Custom Title", save=html_path, no_open=true)
-                end
-                @test isfile(html_path)
-                @test occursin("Plot saved", out)
-            end
-        end
-    end
-
-    # ── Deserializer Tests ──────────────────────────────────────
-    # These use hand-crafted Dicts matching real MEMs field structures
-    # (mock types have simplified fields, so serialize_model(mock) won't work)
-
-    @testset "_deserialize_for_plot — ImpulseResponse" begin
-        d = Dict{String,Any}(
-            "_type" => "ImpulseResponse{Float64}",
-            "values" => randn(20, 3, 3), "ci_lower" => randn(20, 3, 3),
-            "ci_upper" => randn(20, 3, 3), "horizon" => 20,
-            "variables" => ["y1","y2","y3"], "shocks" => ["s1","s2","s3"],
-            "ci_type" => "cholesky")
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa ImpulseResponse
-        @test obj.horizon == 20
-        @test obj.variables == ["y1","y2","y3"]
-    end
-
-    @testset "_deserialize_for_plot — BayesianImpulseResponse" begin
-        d = Dict{String,Any}(
-            "_type" => "BayesianImpulseResponse{Float64}",
-            "quantiles" => randn(20, 3, 3, 3), "mean" => randn(20, 3, 3),
-            "horizon" => 20, "variables" => ["y1","y2","y3"],
-            "shocks" => ["s1","s2","s3"], "quantile_levels" => [0.16, 0.5, 0.84])
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa BayesianImpulseResponse
-        @test obj.horizon == 20
-    end
-
-    @testset "_deserialize_for_plot — FEVD" begin
-        d = Dict{String,Any}(
-            "_type" => "FEVD{Float64}",
-            "decomposition" => randn(20, 3, 3), "proportions" => rand(20, 3, 3))
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa FEVD
-    end
-
-    @testset "_deserialize_for_plot — BayesianFEVD" begin
-        d = Dict{String,Any}(
-            "_type" => "BayesianFEVD{Float64}",
-            "quantiles" => randn(20, 3, 3, 3), "mean" => rand(20, 3, 3),
-            "horizon" => 20, "variables" => ["y1","y2","y3"],
-            "shocks" => ["s1","s2","s3"], "quantile_levels" => [0.16, 0.5, 0.84])
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa BayesianFEVD
-        @test obj.horizon == 20
-    end
-
-    @testset "_deserialize_for_plot — LPFEVD" begin
-        d = Dict{String,Any}(
-            "_type" => "LPFEVD{Float64}",
-            "proportions" => rand(20, 3, 3), "bias_corrected" => rand(20, 3, 3),
-            "se" => rand(20, 3, 3), "ci_lower" => rand(20, 3, 3),
-            "ci_upper" => rand(20, 3, 3), "method" => "R2",
-            "horizon" => 20, "n_boot" => 200, "conf_level" => 0.95,
-            "bias_correction" => true)
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa LPFEVD
-    end
-
-    @testset "_deserialize_for_plot — HistoricalDecomposition" begin
-        d = Dict{String,Any}(
-            "_type" => "HistoricalDecomposition{Float64}",
-            "contributions" => randn(50, 3, 3), "initial_conditions" => randn(3, 3),
-            "actual" => randn(50, 3), "shocks" => randn(50, 3),
-            "T_eff" => 50, "variables" => ["y1","y2","y3"],
-            "shock_names" => ["s1","s2","s3"], "method" => "cholesky")
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa HistoricalDecomposition
-        @test obj.T_eff == 50
-    end
-
-    @testset "_deserialize_for_plot — BayesianHistoricalDecomposition" begin
-        d = Dict{String,Any}(
-            "_type" => "BayesianHistoricalDecomposition{Float64}",
-            "quantiles" => randn(50, 3, 3, 3), "mean" => randn(50, 3, 3),
-            "initial_quantiles" => randn(3, 3, 3), "initial_mean" => randn(3, 3),
-            "shocks_mean" => randn(50, 3), "actual" => randn(50, 3),
-            "T_eff" => 50, "variables" => ["y1","y2","y3"],
-            "shock_names" => ["s1","s2","s3"], "quantile_levels" => [0.16, 0.5, 0.84],
-            "method" => "cholesky")
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa BayesianHistoricalDecomposition
-        @test obj.T_eff == 50
-    end
-
-    @testset "_deserialize_for_plot — HPFilterResult" begin
-        original = HPFilterResult(randn(100), randn(100), 1600.0, 100)
-        d = serialize_model(original)
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa HPFilterResult
-        @test obj.lambda == 1600.0
-    end
-
-    @testset "_deserialize_for_plot — HamiltonFilterResult" begin
-        original = HamiltonFilterResult(randn(100), randn(100), randn(5), 8, 4, 100, 13:100)
-        d = serialize_model(original)
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa HamiltonFilterResult
-        @test obj.h == 8
-    end
-
-    @testset "_deserialize_for_plot — BeveridgeNelsonResult" begin
-        original = BeveridgeNelsonResult(randn(100), randn(100), 0.01, 1.5, (1, 1, 1), 100)
-        d = serialize_model(original)
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa BeveridgeNelsonResult
-        @test obj.T_obs == 100
-    end
-
-    @testset "_deserialize_for_plot — BaxterKingResult" begin
-        original = BaxterKingResult(randn(76), randn(76), randn(25), 6, 32, 12, 100, 13:88)
-        d = serialize_model(original)
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa BaxterKingResult
-        @test obj.K == 12
-    end
-
-    @testset "_deserialize_for_plot — BoostedHPResult" begin
-        original = BoostedHPResult(randn(100), randn(100), 1600.0, 5, :BIC,
-            randn(5), randn(5), 100)
-        d = serialize_model(original)
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa BoostedHPResult
-        @test obj.iterations == 5
-    end
-
-    @testset "_deserialize_for_plot — ARCHModel" begin
-        d = Dict{String,Any}(
-            "_type" => "ARCHModel{Float64}",
-            "y" => randn(100), "q" => 1, "mu" => 0.01, "omega" => 0.1,
-            "alpha" => [0.3], "conditional_variance" => abs.(randn(100)),
-            "standardized_residuals" => randn(100), "residuals" => randn(100),
-            "fitted" => randn(100), "loglik" => -150.0, "aic" => 310.0,
-            "bic" => 320.0, "method" => "mle", "converged" => true, "iterations" => 50)
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa ARCHModel
-        @test obj.q == 1
-    end
-
-    @testset "_deserialize_for_plot — GARCHModel" begin
-        d = Dict{String,Any}(
-            "_type" => "GARCHModel{Float64}",
-            "y" => randn(100), "p" => 1, "q" => 1, "mu" => 0.01, "omega" => 0.1,
-            "alpha" => [0.3], "beta" => [0.5],
-            "conditional_variance" => abs.(randn(100)),
-            "standardized_residuals" => randn(100), "residuals" => randn(100),
-            "fitted" => randn(100), "loglik" => -150.0, "aic" => 310.0,
-            "bic" => 320.0, "method" => "mle", "converged" => true, "iterations" => 50)
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa GARCHModel
-        @test obj.p == 1
-    end
-
-    @testset "_deserialize_for_plot — EGARCHModel" begin
-        d = Dict{String,Any}(
-            "_type" => "EGARCHModel{Float64}",
-            "y" => randn(100), "p" => 1, "q" => 1, "mu" => 0.01, "omega" => 0.1,
-            "alpha" => [0.3], "gamma" => [0.1], "beta" => [0.5],
-            "conditional_variance" => abs.(randn(100)),
-            "standardized_residuals" => randn(100), "residuals" => randn(100),
-            "fitted" => randn(100), "loglik" => -150.0, "aic" => 310.0,
-            "bic" => 320.0, "method" => "mle", "converged" => true, "iterations" => 50)
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa EGARCHModel
-    end
-
-    @testset "_deserialize_for_plot — GJRGARCHModel" begin
-        d = Dict{String,Any}(
-            "_type" => "GJRGARCHModel{Float64}",
-            "y" => randn(100), "p" => 1, "q" => 1, "mu" => 0.01, "omega" => 0.1,
-            "alpha" => [0.3], "gamma" => [0.1], "beta" => [0.5],
-            "conditional_variance" => abs.(randn(100)),
-            "standardized_residuals" => randn(100), "residuals" => randn(100),
-            "fitted" => randn(100), "loglik" => -150.0, "aic" => 310.0,
-            "bic" => 320.0, "method" => "mle", "converged" => true, "iterations" => 50)
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa GJRGARCHModel
-    end
-
-    @testset "_deserialize_for_plot — SVModel" begin
-        d = Dict{String,Any}(
-            "_type" => "SVModel{Float64}",
-            "y" => randn(100), "h_draws" => randn(500, 100),
-            "mu_post" => randn(500), "phi_post" => randn(500),
-            "sigma_eta_post" => randn(500), "volatility_mean" => randn(100),
-            "volatility_quantiles" => randn(100, 3),
-            "quantile_levels" => [0.16, 0.5, 0.84],
-            "dist" => "normal", "leverage" => false, "n_samples" => 500)
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa SVModel
-        @test obj.n_samples == 500
-    end
-
-    @testset "_deserialize_for_plot — FactorModel" begin
-        d = Dict{String,Any}(
-            "_type" => "FactorModel{Float64}",
-            "X" => randn(100, 5), "factors" => randn(100, 2),
-            "loadings" => randn(5, 2), "eigenvalues" => [3.0, 1.5],
-            "explained_variance" => [0.6, 0.3],
-            "cumulative_variance" => [0.6, 0.9], "r" => 2, "standardized" => true)
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa FactorModel
-        @test obj.r == 2
-    end
-
-    @testset "_deserialize_for_plot — DynamicFactorModel" begin
-        d = Dict{String,Any}(
-            "_type" => "DynamicFactorModel{Float64}",
-            "X" => randn(100, 5), "factors" => randn(100, 2),
-            "loadings" => randn(5, 2), "A" => [randn(2, 2)],
-            "factor_residuals" => randn(99, 2),
-            "Sigma_eta" => randn(2, 2), "Sigma_e" => randn(5, 5),
-            "eigenvalues" => [3.0, 1.5], "explained_variance" => [0.6, 0.3],
-            "cumulative_variance" => [0.6, 0.9],
-            "r" => 2, "p" => 1, "method" => "twostep",
-            "standardized" => true, "converged" => true,
-            "iterations" => 100, "loglik" => -250.0)
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa DynamicFactorModel
-        @test obj.r == 2
-        @test obj.p == 1
-    end
-
-    @testset "_deserialize_for_plot — ARIMAForecast" begin
-        d = Dict{String,Any}(
-            "_type" => "ARIMAForecast{Float64}",
-            "forecast" => randn(12), "ci_lower" => randn(12),
-            "ci_upper" => randn(12), "se" => abs.(randn(12)),
-            "horizon" => 12, "conf_level" => 0.95)
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa ARIMAForecast
-        @test obj.horizon == 12
-    end
-
-    @testset "_deserialize_for_plot — VolatilityForecast" begin
-        d = Dict{String,Any}(
-            "_type" => "VolatilityForecast{Float64}",
-            "forecast" => abs.(randn(12)), "ci_lower" => abs.(randn(12)),
-            "ci_upper" => abs.(randn(12)), "se" => abs.(randn(12)),
-            "horizon" => 12, "conf_level" => 0.95, "model_type" => "garch")
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa VolatilityForecast
-        @test obj.horizon == 12
-    end
-
-    @testset "_deserialize_for_plot — VECMForecast" begin
-        original = VECMForecast(randn(12, 3), randn(12, 3), randn(12, 3), randn(12, 3),
-            12, :bootstrap)
-        d = serialize_model(original)
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa VECMForecast
-        @test obj.horizon == 12
-    end
-
-    @testset "_deserialize_for_plot — LPForecast" begin
-        d = Dict{String,Any}(
-            "_type" => "LPForecast{Float64}",
-            "forecasts" => randn(12, 3), "ci_lower" => randn(12, 3),
-            "ci_upper" => randn(12, 3), "se" => abs.(randn(12, 3)),
-            "horizon" => 12, "response_vars" => [1, 2, 3],
-            "shock_var" => 1, "shock_path" => [1.0],
-            "conf_level" => 0.95, "ci_method" => "analytical")
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa LPForecast
-        @test obj.horizon == 12
-    end
-
-    @testset "_deserialize_for_plot — FactorForecast" begin
-        d = Dict{String,Any}(
-            "_type" => "FactorForecast{Float64}",
-            "factors" => randn(12, 2), "observables" => randn(12, 5),
-            "factors_lower" => randn(12, 2), "factors_upper" => randn(12, 2),
-            "observables_lower" => randn(12, 5), "observables_upper" => randn(12, 5),
-            "factors_se" => abs.(randn(12, 2)), "observables_se" => abs.(randn(12, 5)),
-            "horizon" => 12, "conf_level" => 0.95, "ci_method" => "analytical")
-        obj = _deserialize_for_plot(d, d["_type"])
-        @test obj isa FactorForecast
-        @test obj.horizon == 12
-    end
-
-    @testset "_deserialize_for_plot — error on unknown type" begin
-        d = Dict{String,Any}("_type" => "UnknownType")
-        @test_throws ErrorException _deserialize_for_plot(d, "UnknownType")
-    end
-
-    @testset "_deserialize_for_plot — strips module prefix" begin
-        original = HPFilterResult(randn(100), randn(100), 1600.0, 100)
-        d = serialize_model(original)
-        # Simulate what would happen with real MEMs types (module prefix + type param)
-        obj = _deserialize_for_plot(d, "MacroEconometricModels.HPFilterResult{Float64}")
-        @test obj isa HPFilterResult
     end
 
     # ── --plot-save integration on handlers ──────────────────────
@@ -5479,77 +5111,6 @@ end  # Data handlers
                 @test isfile(html_path)
                 content = read(html_path, String)
                 @test occursin("mock plot", content)
-            end
-        end
-    end
-
-    # ── Round-trip storage → plot ─────────────────────────────────
-
-    @testset "IRF round-trip: estimate → irf → plot tag" begin
-        mktempdir() do dir
-            cd(dir) do
-                csv = _make_csv(dir)
-                # Run irf which saves to storage with serialize_model
-                out1 = _capture() do
-                    _irf_var(; data=csv, horizons=20, id="cholesky",
-                        ci="none", replications=100,
-                        format="table", output="",
-                        plot=false, plot_save="")
-                end
-                @test occursin("Saved as: irf001", out1)
-
-                # Now plot from tag
-                html_path = joinpath(dir, "roundtrip.html")
-                out2 = _capture() do
-                    _plot(; tag="irf001", save=html_path, no_open=true)
-                end
-                @test isfile(html_path)
-                @test occursin("Plot saved", out2)
-            end
-        end
-    end
-
-    @testset "Filter round-trip: filter → plot tag" begin
-        mktempdir() do dir
-            cd(dir) do
-                csv = _make_csv(dir; n=1)
-                out1 = _capture() do
-                    _filter_hp(; data=csv, lambda=1600.0,
-                        format="table", output="",
-                        plot=false, plot_save="")
-                end
-                @test occursin("Saved as:", out1)
-
-                # Extract the tag from output
-                m = match(r"Saved as: (\w+)", out1)
-                @test !isnothing(m)
-                tag = String(m[1])
-
-                html_path = joinpath(dir, "filter_rt.html")
-                out2 = _capture() do
-                    _plot(; tag=tag, save=html_path, no_open=true)
-                end
-                @test isfile(html_path)
-            end
-        end
-    end
-
-    @testset "FEVD round-trip: fevd var → plot tag" begin
-        mktempdir() do dir
-            cd(dir) do
-                csv = _make_csv(dir; T=100, n=3)
-                out1 = _capture() do
-                    _fevd_var(; data=csv, horizons=20, id="cholesky",
-                        format="table", output="",
-                        plot=false, plot_save="")
-                end
-                @test occursin("Saved as: fevd001", out1)
-
-                html_path = joinpath(dir, "fevd_rt.html")
-                out2 = _capture() do
-                    _plot(; tag="fevd001", save=html_path, no_open=true)
-                end
-                @test isfile(html_path)
             end
         end
     end

@@ -45,6 +45,7 @@ function register_filter_commands!()
     filt_bn = LeafCommand("bn", _filter_bn;
         args=[Argument("data"; description="Path to CSV data file")],
         options=[
+            Option("method"; type=String, default="arima", description="arima|statespace"),
             Option("p"; type=Int, default=nothing, description="AR order (default: auto)"),
             Option("q"; type=Int, default=nothing, description="MA order (default: auto)"),
             Option("columns"; short="c", type=String, default="", description="Column indices, comma-separated (default: all numeric)"),
@@ -164,9 +165,6 @@ function _filter_hp(; data::String, lambda::Float64=1600.0, columns::String="",
     output_result(result_df; format=Symbol(format), output=output,
                   title="HP Filter (λ=$(lambda))")
     _print_variance_ratios(sel_names, cycles, originals)
-
-    storage_save_auto!("hp", isnothing(last_result) ? Dict{String,Any}("type"=>"hp") : serialize_model(last_result),
-        Dict{String,Any}("command" => "filter hp", "data" => data, "lambda" => lambda, "T" => T_obs))
 end
 
 # ── Hamilton Filter ──────────────────────────────────────
@@ -223,14 +221,12 @@ function _filter_hamilton(; data::String, horizon::Int=8, lags::Int=4, columns::
     output_result(result_df; format=Symbol(format), output=output,
                   title="Hamilton Filter (h=$horizon, p=$lags)")
     _print_variance_ratios(sel_names, cycles, originals)
-
-    storage_save_auto!("hamilton", isnothing(last_result) ? Dict{String,Any}("type"=>"hamilton") : serialize_model(last_result),
-        Dict{String,Any}("command" => "filter hamilton", "data" => data, "horizon" => horizon, "lags" => lags, "T" => T_obs))
 end
 
 # ── Beveridge-Nelson Decomposition ───────────────────────
 
-function _filter_bn(; data::String, p=nothing, q=nothing, columns::String="",
+function _filter_bn(; data::String, method::String="arima", p=nothing, q=nothing,
+                     columns::String="",
                      output::String="", format::String="table",
                      plot::Bool=false, plot_save::String="")
     df = load_data(data)
@@ -241,7 +237,7 @@ function _filter_bn(; data::String, p=nothing, q=nothing, columns::String="",
 
     p_label = isnothing(p) ? "auto" : string(p)
     q_label = isnothing(q) ? "auto" : string(q)
-    println("Beveridge-Nelson Decomposition (p=$p_label, q=$q_label): $(length(col_idx)) variable(s), T=$T_obs")
+    println("Beveridge-Nelson Decomposition (method=$method, p=$p_label, q=$q_label): $(length(col_idx)) variable(s), T=$T_obs")
     println()
 
     result_df = DataFrame()
@@ -250,14 +246,17 @@ function _filter_bn(; data::String, p=nothing, q=nothing, columns::String="",
     originals = Vector{Float64}[]
     last_result = nothing
 
-    kwargs = Dict{Symbol,Any}()
-    isnothing(p) || (kwargs[:p] = p)
-    isnothing(q) || (kwargs[:q] = q)
-
     for ci in col_idx
         vname = varnames[ci]
         y = Y[:, ci]
-        res = beveridge_nelson(y; kwargs...)
+        res = if method == "statespace"
+            beveridge_nelson(y; method=:statespace)
+        else
+            kwargs = Dict{Symbol,Any}(:method => :arima)
+            isnothing(p) || (kwargs[:p] = p)
+            isnothing(q) || (kwargs[:q] = q)
+            beveridge_nelson(y; kwargs...)
+        end
         last_result = res
         _maybe_plot(res; plot=plot, plot_save=isempty(plot_save) ? "" : _per_var_output_path(plot_save, vname))
         t = trend(res)
@@ -272,9 +271,6 @@ function _filter_bn(; data::String, p=nothing, q=nothing, columns::String="",
     output_result(result_df; format=Symbol(format), output=output,
                   title="Beveridge-Nelson Decomposition")
     _print_variance_ratios(sel_names, cycles, originals)
-
-    storage_save_auto!("bn", isnothing(last_result) ? Dict{String,Any}("type"=>"bn") : serialize_model(last_result),
-        Dict{String,Any}("command" => "filter bn", "data" => data, "p" => p_label, "q" => q_label, "T" => T_obs))
 end
 
 # ── Baxter-King Band-Pass Filter ─────────────────────────
@@ -332,9 +328,6 @@ function _filter_bk(; data::String, pl::Int=6, pu::Int=32, K::Int=12, columns::S
     output_result(result_df; format=Symbol(format), output=output,
                   title="Baxter-King Filter (pl=$pl, pu=$pu, K=$K)")
     _print_variance_ratios(sel_names, cycles, originals)
-
-    storage_save_auto!("bk", isnothing(last_result) ? Dict{String,Any}("type"=>"bk") : serialize_model(last_result),
-        Dict{String,Any}("command" => "filter bk", "data" => data, "pl" => pl, "pu" => pu, "K" => K, "T" => T_obs))
 end
 
 # ── Boosted HP Filter ────────────────────────────────────
@@ -379,7 +372,4 @@ function _filter_bhp(; data::String, lambda::Float64=1600.0, stopping::String="B
     output_result(result_df; format=Symbol(format), output=output,
                   title="Boosted HP Filter (λ=$(lambda), stopping=$stopping)")
     _print_variance_ratios(sel_names, cycles, originals)
-
-    storage_save_auto!("bhp", isnothing(last_result) ? Dict{String,Any}("type"=>"bhp") : serialize_model(last_result),
-        Dict{String,Any}("command" => "filter bhp", "data" => data, "lambda" => lambda, "stopping" => stopping, "T" => T_obs))
 end

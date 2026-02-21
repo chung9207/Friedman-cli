@@ -18,12 +18,11 @@
 
 function register_hd_commands!()
     hd_var = LeafCommand("var", _hd_var;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=nothing, description="Lag order (default: auto)"),
             Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun|arias|uhlig"),
             Option("config"; type=String, default="", description="TOML config for identification"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -32,14 +31,13 @@ function register_hd_commands!()
         description="Compute historical decomposition of shocks")
 
     hd_bvar = LeafCommand("bvar", _hd_bvar;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=4, description="Lag order"),
             Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun"),
             Option("draws"; short="n", type=Int, default=2000, description="MCMC draws"),
             Option("sampler"; type=String, default="direct", description="direct|gibbs"),
             Option("config"; type=String, default="", description="TOML config for identification/prior"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -48,14 +46,13 @@ function register_hd_commands!()
         description="Compute Bayesian historical decomposition")
 
     hd_lp = LeafCommand("lp", _hd_lp;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=4, description="LP control lags"),
             Option("var-lags"; type=Int, default=nothing, description="VAR lag order for identification"),
             Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun"),
             Option("vcov"; type=String, default="newey_west", description="newey_west|white|driscoll_kraay"),
             Option("config"; type=String, default="", description="TOML config for identification"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -64,14 +61,13 @@ function register_hd_commands!()
         description="Compute historical decomposition via structural LP")
 
     hd_vecm = LeafCommand("vecm", _hd_vecm;
-        args=[Argument("data"; required=false, default="", description="Path to CSV data file")],
+        args=[Argument("data"; description="Path to CSV data file")],
         options=[
             Option("lags"; short="p", type=Int, default=2, description="Lag order (in levels)"),
             Option("rank"; short="r", type=String, default="auto", description="Cointegration rank (auto|1|2|...)"),
             Option("deterministic"; type=String, default="constant", description="none|constant|trend"),
             Option("id"; type=String, default="cholesky", description="cholesky|sign|narrative|longrun"),
             Option("config"; type=String, default="", description="TOML config for identification"),
-            Option("from-tag"; type=String, default="", description="Load model from stored tag"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -91,15 +87,9 @@ end
 # ── VAR HD ───────────────────────────────────────────────
 
 function _hd_var(; data::String, lags=nothing, id::String="cholesky",
-                  config::String="", from_tag::String="",
+                  config::String="",
                   output::String="", format::String="table",
                   plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     model, Y, varnames, p = _load_and_estimate_var(data, lags)
     n = size(Y, 2)
 
@@ -131,8 +121,6 @@ function _hd_var(; data::String, lags=nothing, id::String="cholesky",
                           id="arias", title_prefix="Historical Decomposition",
                           format=format, output=output,
                           actual=hd_result.actual, initial=hd_result.initial_conditions)
-        storage_save_auto!("hd", Dict{String,Any}("type" => "var", "id" => "arias", "n_vars" => n),
-            Dict{String,Any}("command" => "hd var", "data" => data))
         return
     end
 
@@ -165,8 +153,6 @@ function _hd_var(; data::String, lags=nothing, id::String="cholesky",
                           id="uhlig", title_prefix="Historical Decomposition",
                           format=format, output=output,
                           actual=hd_result.actual, initial=hd_result.initial_conditions)
-        storage_save_auto!("hd", Dict{String,Any}("type" => "var", "id" => "uhlig", "n_vars" => n),
-            Dict{String,Any}("command" => "hd var", "data" => data))
         return
     end
 
@@ -188,24 +174,15 @@ function _hd_var(; data::String, lags=nothing, id::String="cholesky",
                       id=id, title_prefix="Historical Decomposition",
                       format=format, output=output,
                       actual=hd_result.actual, initial=hd_result.initial_conditions)
-
-    storage_save_auto!("hd", serialize_model(hd_result),
-        Dict{String,Any}("command" => "hd var", "data" => data, "id" => id, "n_vars" => n))
 end
 
 # ── BVAR HD ──────────────────────────────────────────────
 
 function _hd_bvar(; data::String, lags::Int=4, id::String="cholesky",
                    draws::Int=2000, sampler::String="direct",
-                   config::String="", from_tag::String="",
+                   config::String="",
                    output::String="", format::String="table",
                    plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
     method = get(ID_METHOD_MAP, id, :cholesky)
 
@@ -228,24 +205,14 @@ function _hd_bvar(; data::String, lags::Int=4, id::String="cholesky",
                       id=id, title_prefix="Bayesian HD",
                       format=format, output=output,
                       initial=bhd.initial_mean)
-
-    storage_save_auto!("hd", serialize_model(bhd),
-        Dict{String,Any}("command" => "hd bvar", "data" => data, "id" => id, "n_vars" => n))
 end
 
 # ── LP HD ────────────────────────────────────────────────
 
 function _hd_lp(; data::String, lags::Int=4, var_lags=nothing,
                  id::String="cholesky", vcov::String="newey_west", config::String="",
-                 from_tag::String="",
                  output::String="", format::String="table",
                  plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     Y, varnames = load_multivariate_data(data)
     T_obs, n = size(Y)
     vp = isnothing(var_lags) ? lags : var_lags
@@ -283,9 +250,6 @@ function _hd_lp(; data::String, lags::Int=4, var_lags=nothing,
                       id=id, title_prefix="LP Historical Decomposition",
                       format=format, output=output,
                       actual=hd_result.actual, initial=hd_result.initial_conditions)
-
-    storage_save_auto!("hd", serialize_model(hd_result),
-        Dict{String,Any}("command" => "hd lp", "data" => data, "id" => id, "n_vars" => n))
 end
 
 # ── VECM HD ─────────────────────────────────────────────
@@ -293,15 +257,8 @@ end
 function _hd_vecm(; data::String, lags::Int=2, rank::String="auto",
                    deterministic::String="constant",
                    id::String="cholesky", config::String="",
-                   from_tag::String="",
                    output::String="", format::String="table",
                    plot::Bool=false, plot_save::String="")
-    if isempty(data) && isempty(from_tag)
-        error("Either <data> argument or --from-tag option is required")
-    end
-    if !isempty(from_tag) && isempty(data)
-        data, _ = _resolve_from_tag(from_tag)
-    end
     vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
     var_model = to_var(vecm)
     n = size(Y, 2)
@@ -329,7 +286,4 @@ function _hd_vecm(; data::String, lags::Int=2, rank::String="auto",
                       id=id, title_prefix="VECM Historical Decomposition",
                       format=format, output=output,
                       actual=hd_result.actual, initial=hd_result.initial_conditions)
-
-    storage_save_auto!("hd", serialize_model(hd_result),
-        Dict{String,Any}("command" => "hd vecm", "data" => data, "id" => id, "n_vars" => n, "rank" => r))
 end

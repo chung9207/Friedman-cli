@@ -4,9 +4,9 @@
 [![codecov](https://codecov.io/gh/chung9207/Friedman-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/chung9207/Friedman-cli)
 [![Documentation](https://github.com/chung9207/Friedman-cli/actions/workflows/Documentation.yml/badge.svg)](https://chung9207.github.io/Friedman-cli/dev/)
 
-Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl) (v0.2.2).
+Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl) (v0.2.4).
 
-13 top-level commands, ~97 subcommands. Action-first CLI: commands are organized by action (`estimate`, `irf`, `forecast`, ...) rather than by model type.
+11 top-level commands, ~107 subcommands. Action-first CLI: commands are organized by action (`estimate`, `irf`, `forecast`, ...) rather than by model type.
 
 ## Installation
 
@@ -33,7 +33,7 @@ julia --project bin/friedman [command] [subcommand] [args...] [options...]
 | Command | Subcommands | Description |
 |---------|-------------|-------------|
 | `estimate` | `var` `bvar` `lp` `arima` `gmm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `fastica` `ml` `vecm` `pvar` | Estimate models (17 model types) |
-| `test` | `adf` `kpss` `pp` `za` `np` `johansen` `normality` `identifiability` `heteroskedasticity` `arch_lm` `ljung_box` `granger` `lr` `lm` + `var` (`lagselect` `stability`) + `pvar` (`hansen_j` `mmsc` `lagselect` `stability`) | Statistical tests (16 + nested) |
+| `test` | `adf` `kpss` `pp` `za` `np` `johansen` `normality` `identifiability` `heteroskedasticity` `arch_lm` `ljung_box` `granger` `lr` `lm` + `var` (`lagselect` `stability`) + `pvar` (`hansen_j` `mmsc` `lagselect` `stability`) | Statistical tests (14 + nested) |
 | `irf` | `var` `bvar` `lp` `vecm` `pvar` | Impulse response functions |
 | `fevd` | `var` `bvar` `lp` `vecm` `pvar` | Forecast error variance decomposition |
 | `hd` | `var` `bvar` `lp` `vecm` | Historical decomposition |
@@ -41,10 +41,8 @@ julia --project bin/friedman [command] [subcommand] [args...] [options...]
 | `predict` | `var` `bvar` `arima` `vecm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` | In-sample fitted values (12 model types) |
 | `residuals` | `var` `bvar` `arima` `vecm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` | Model residuals (12 model types) |
 | `filter` | `hp` `hamilton` `bn` `bk` `bhp` | Time series filters |
-| `data` | `list` `load` `describe` `diagnose` `fix` `transform` `filter` `validate` | Data management |
-| `list` | `models` `results` | List stored models and results |
-| `rename` | — | Rename stored tags |
-| `project` | `list` `show` | Manage project registry |
+| `data` | `list` `load` `describe` `diagnose` `fix` `transform` `filter` `validate` `balance` | Data management |
+| `nowcast` | `dfm` `bvar` `bridge` `news` `forecast` | Nowcasting (DFM, BVAR, bridge equations) |
 
 All commands support `--format` (`table`|`csv`|`json`) and `--output` (file path) options.
 
@@ -164,9 +162,9 @@ friedman test ljung_box data.csv --lags=10
 friedman test granger data.csv --cause=1 --effect=2 --lags=4
 friedman test granger data.csv --all --lags=4
 
-# Model comparison (LR and LM tests by stored tags)
-friedman test lr --restricted=var001 --unrestricted=var002
-friedman test lm --restricted=var001 --unrestricted=var002
+# Model comparison (LR and LM tests)
+friedman test lr data.csv data.csv --lags1=2 --lags2=4
+friedman test lm data.csv data.csv --lags1=2 --lags2=4
 
 # Panel VAR diagnostics
 friedman test pvar hansen_j data.csv --id-col=country --time-col=year --lags=2
@@ -183,6 +181,12 @@ friedman irf var data.csv --shock=1 --horizons=20 --id=cholesky
 
 # Sign restrictions (requires config)
 friedman irf var data.csv --id=sign --config=sign_restrictions.toml
+
+# Sign identified set (full set of accepted rotations)
+friedman irf var data.csv --id=sign --config=sign_restrictions.toml --identified-set
+
+# Cumulative IRFs (for differenced data)
+friedman irf var data.csv --shock=1 --horizons=20 --cumulative
 
 # Narrative sign restrictions
 friedman irf var data.csv --id=narrative --config=narrative.toml
@@ -201,7 +205,7 @@ friedman irf var data.csv --shock=1 --ci=bootstrap --replications=1000
 
 # Bayesian IRFs (posterior credible intervals)
 friedman irf bvar data.csv --shock=1 --horizons=20
-friedman irf bvar data.csv --draws=5000 --sampler=hmc --config=prior.toml
+friedman irf bvar data.csv --draws=5000 --sampler=gibbs --config=prior.toml
 
 # Structural LP IRFs
 friedman irf lp data.csv --id=cholesky --shock=1 --horizons=20
@@ -213,9 +217,6 @@ friedman irf vecm data.csv --shock=1 --horizons=20 --rank=2
 # Panel VAR IRFs (OIRF or GIRF)
 friedman irf pvar data.csv --id-col=country --time-col=year --horizons=20
 friedman irf pvar data.csv --irf-type=girf --horizons=12
-
-# From stored model tag
-friedman irf var001
 ```
 
 ### FEVD
@@ -236,9 +237,6 @@ friedman fevd vecm data.csv --horizons=20 --rank=2
 
 # Panel VAR FEVD
 friedman fevd pvar data.csv --id-col=country --time-col=year --horizons=20
-
-# From stored model tag
-friedman fevd var001
 ```
 
 ### Historical Decomposition
@@ -251,9 +249,6 @@ friedman hd lp data.csv --id=cholesky
 
 # VECM historical decomposition
 friedman hd vecm data.csv --id=cholesky --rank=2
-
-# From stored model tag
-friedman hd bvar001
 ```
 
 ### Forecasting
@@ -261,6 +256,9 @@ friedman hd bvar001
 ```bash
 # VAR forecast with confidence intervals
 friedman forecast var data.csv --horizons=12 --confidence=0.95
+
+# VAR forecast with bootstrap confidence intervals
+friedman forecast var data.csv --horizons=12 --ci=bootstrap --replications=500
 
 # Bayesian forecast (posterior credible intervals)
 friedman forecast bvar data.csv --horizons=12 --draws=2000
@@ -285,9 +283,6 @@ friedman forecast sv data.csv --column=1 --horizons=12
 
 # VECM forecast (bootstrap CIs)
 friedman forecast vecm data.csv --horizons=12 --rank=2
-
-# From stored model tag
-friedman forecast var001
 ```
 
 ### Predict & Residuals
@@ -308,10 +303,6 @@ friedman residuals arima data.csv --p=1 --d=1 --q=1
 friedman residuals vecm data.csv --rank=1
 friedman residuals static data.csv --nfactors=3
 friedman residuals garch data.csv --column=1 --p=1 --q=1
-
-# From stored model tag
-friedman predict var001
-friedman residuals var001
 ```
 
 ### Filters
@@ -323,8 +314,9 @@ friedman filter hp data.csv --column=1 --lambda=1600
 # Hamilton (2018) filter
 friedman filter hamilton data.csv --column=1 --h=8 --p=4
 
-# Beveridge-Nelson decomposition
+# Beveridge-Nelson decomposition (ARIMA or state-space method)
 friedman filter bn data.csv --column=1
+friedman filter bn data.csv --column=1 --method=statespace
 
 # Baxter-King band-pass filter
 friedman filter bk data.csv --column=1 --pl=6 --pu=32
@@ -360,29 +352,28 @@ friedman data filter data.csv --method=hp --lambda=1600
 
 # Validate data for a specific model type
 friedman data validate data.csv --model=var
+
+# Balance panel with missing data via DFM imputation
+friedman data balance data.csv --method=dfm --factors=3
 ```
 
-### Storage & Projects
+### Nowcasting
 
 ```bash
-# Models are auto-saved with tags (var001, bvar001, etc.)
-friedman estimate var data.csv --lags=2
-#   Saved as: var001
+# Dynamic Factor Model nowcast (EM algorithm)
+friedman nowcast dfm data.csv --monthly-vars=4 --quarterly-vars=1 --factors=2
 
-# List stored models and results
-friedman list models
-friedman list results
+# Bayesian VAR nowcast
+friedman nowcast bvar data.csv --monthly-vars=4 --quarterly-vars=1 --lags=5
 
-# Rename a tag
-friedman rename var001 gdp_model
+# Bridge equation nowcast
+friedman nowcast bridge data.csv --monthly-vars=4 --quarterly-vars=1
 
-# Use stored tag for post-estimation
-friedman irf var001
-friedman forecast gdp_model
+# News decomposition (Banbura & Modugno 2014)
+friedman nowcast news --data-new=new.csv --data-old=old.csv --monthly-vars=4 --quarterly-vars=1
 
-# Project management (auto-registered on first save)
-friedman project list
-friedman project show
+# Forecast from a nowcasting model
+friedman nowcast forecast data.csv --method=dfm --horizons=4
 ```
 
 ## Output Formats

@@ -16,7 +16,7 @@
 
 module Friedman
 
-using CSV, DataFrames, PrettyTables, JSON3, TOML, BSON, Dates
+using CSV, DataFrames, PrettyTables, JSON3, TOML
 using MacroEconometricModels
 using LinearAlgebra: eigvals, diag, I, svd
 using Statistics: mean, median, var
@@ -30,10 +30,6 @@ include("cli/dispatch.jl")
 # IO and config
 include("io.jl")
 include("config.jl")
-
-# Storage and settings
-include("storage.jl")
-include("settings.jl")
 
 # Shared utilities (must come before command files)
 include("commands/shared.jl")
@@ -49,12 +45,9 @@ include("commands/predict.jl")
 include("commands/residuals.jl")
 include("commands/filter.jl")
 include("commands/data.jl")
-include("commands/list.jl")
-include("commands/rename.jl")
-include("commands/project.jl")
-include("commands/plot.jl")
+include("commands/nowcast.jl")
 
-const FRIEDMAN_VERSION = v"0.2.1"
+const FRIEDMAN_VERSION = v"0.2.2"
 
 """
     build_app() -> Entry
@@ -73,10 +66,7 @@ function build_app()
         "residuals" => register_residuals_commands!(),
         "filter"    => register_filter_commands!(),
         "data"      => register_data_commands!(),
-        "list"      => register_list_commands!(),
-        "rename"   => register_rename_commands!(),
-        "project"  => register_project_commands!(),
-        "plot"     => register_plot_commands!(),
+        "nowcast"   => register_nowcast_commands!(),
     )
 
     root = NodeCommand("friedman", root_cmds,
@@ -89,20 +79,8 @@ end
     main(args=ARGS)
 
 Entry point: build the CLI app and dispatch on the given arguments.
-Handles stored tag resolution before dispatch.
 """
 function main(args::Vector{String}=ARGS)
-    # Initialize global settings on first run
-    init_settings!()
-
-    # Pre-dispatch: resolve stored tags for irf/fevd/hd/forecast/predict/residuals
-    args = resolve_stored_tags(args)
-
-    # Handle bare "project" with no subcommand → default to "show"
-    if length(args) == 1 && args[1] == "project"
-        push!(args, "show")
-    end
-
     app = build_app()
     try
         dispatch(app, args)

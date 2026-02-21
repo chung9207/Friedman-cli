@@ -26,12 +26,14 @@ function register_data_commands!()
         description="List available example datasets")
 
     data_load = LeafCommand("load", _data_load;
-        args=[Argument("name"; description="Dataset name (fred_md|fred_qd|pwt)")],
+        args=[Argument("name"; description="Dataset name (fred_md|fred_qd|pwt) or empty for --path")],
         options=[
             Option("output"; short="o", type=String, default="", description="Output CSV file path"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("vars"; type=String, default="", description="Comma-separated variable subset"),
             Option("country"; type=String, default="", description="Country filter (for PWT panel data)"),
+            Option("dates"; type=String, default="", description="Column name for date labels"),
+            Option("path"; type=String, default="", description="Path to CSV file (alternative to named dataset)"),
         ],
         flags=[Flag("transform"; short="t", description="Apply FRED transformation codes")],
         description="Load example dataset and export as CSV")
@@ -93,6 +95,17 @@ function register_data_commands!()
         ],
         description="Validate data suitability for a model type")
 
+    data_balance = LeafCommand("balance", _data_balance;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("method"; type=String, default="dfm", description="dfm"),
+            Option("factors"; short="r", type=Int, default=3, description="Number of factors"),
+            Option("lags"; short="p", type=Int, default=2, description="Factor VAR lags"),
+            Option("output"; short="o", type=String, default="", description="Export file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        description="Balance panel with missing data via DFM imputation")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "list"      => data_list,
         "load"      => data_load,
@@ -102,6 +115,7 @@ function register_data_commands!()
         "transform" => data_transform,
         "filter"    => data_filter,
         "validate"  => data_validate,
+        "balance"   => data_balance,
     )
     return NodeCommand("data", subcmds, "Data management: load example datasets, inspect, clean, transform")
 end
@@ -126,7 +140,35 @@ function _data_list(; format::String="table", output::String="")
 end
 
 function _data_load(; name::String, output::String="", format::String="table",
-                     vars::String="", country::String="", transform::Bool=false)
+                     vars::String="", country::String="", transform::Bool=false,
+                     dates::String="", path::String="")
+    # If --path is given, load from CSV instead of example datasets
+    if !isempty(path)
+        df = load_data(path)
+        Y = df_to_matrix(df)
+        vn = variable_names(df)
+        n_obs, n_vars = size(Y)
+
+        ts = TimeSeriesData(Y; varnames=vn, tcode=fill(1, n_vars), time_index=collect(1:n_obs))
+
+        if !isempty(dates)
+            if dates in names(df)
+                date_values = string.(df[!, dates])
+                set_dates!(ts, date_values)
+                printstyled("  Date labels set from column: $dates\n"; color=:cyan)
+            else
+                printstyled("  Warning: dates column '$dates' not found in data\n"; color=:yellow)
+            end
+        end
+
+        out_path = isempty(output) ? replace(basename(path), r"\.[^.]+$" => "_loaded.csv") : output
+        out_df = DataFrame(Y, vn)
+        CSV.write(out_path, out_df)
+        println("Loaded $(basename(path)): $n_obs × $n_vars")
+        println("Written to $out_path")
+        return
+    end
+
     name_sym = Symbol(name)
     dataset = load_example(name_sym)
 
@@ -178,6 +220,17 @@ function _data_load(; name::String, output::String="", format::String="table",
             end
             data_mat = data_mat[:, col_idx]
             vn = vn[col_idx]
+        end
+
+        if !isempty(dates)
+            # For named datasets, dates column would need to be in the variable names
+            if dates in vn
+                date_values = string.(data_mat[:, findfirst(==(dates), vn)])
+                set_dates!(dataset, date_values)
+                printstyled("  Date labels set from column: $dates\n"; color=:cyan)
+            else
+                printstyled("  Warning: dates column '$dates' not found in data\n"; color=:yellow)
+            end
         end
 
         out_path = isempty(output) ? "$name.csv" : output
@@ -396,4 +449,22 @@ function _data_validate(; data::String, model::String="", format::String="table"
         printstyled("Data validation failed for $model:\n"; color=:red)
         println("  ", e.msg)
     end
+end
+
+function _data_balance(; data::String, method::String="dfm", factors::Int=3,
+                        lags::Int=2, output::String="", format::String="table")
+    df = load_data(data)
+    Y = df_to_matrix(df)
+    vn = variable_names(df)
+
+    println("Balancing panel via $(method): $(length(vn)) variables, T=$(size(Y, 1))")
+    println()
+
+    ts = TimeSeriesData(Y; varnames=vn)
+    balanced = balance_panel(ts; method=Symbol(method), r=factors, p=lags)
+
+    bal_Y = hasproperty(balanced, :data) ? balanced.data : Y
+    result_df = DataFrame(bal_Y, vn)
+    output_result(result_df; format=Symbol(format), output=output,
+                  title="Balanced Panel (method=$method, r=$factors, p=$lags)")
 end
