@@ -67,6 +67,7 @@ include(joinpath(project_root, "src", "commands", "predict.jl"))
 include(joinpath(project_root, "src", "commands", "residuals.jl"))
 include(joinpath(project_root, "src", "commands", "filter.jl"))
 include(joinpath(project_root, "src", "commands", "data.jl"))
+include(joinpath(project_root, "src", "commands", "nowcast.jl"))
 
 # ─── Test Helpers ───────────────────────────────────────────────
 
@@ -1826,6 +1827,93 @@ end  # Test handlers
         end
     end
 
+    @testset "_irf_var — cumulative flag" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _irf_var(; data=csv, lags=2, shock=1, horizons=10, id="cholesky",
+                              ci="none", format="table", cumulative=true)
+                end
+            end
+            @test occursin("Cumulative IRFs computed", out)
+            @test occursin("IRF to", out)
+        end
+    end
+
+    @testset "_irf_bvar — cumulative flag" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _irf_bvar(; data=csv, lags=2, shock=1, horizons=10, id="cholesky",
+                               draws=100, sampler="direct", config="", format="table",
+                               cumulative=true)
+                end
+            end
+            @test occursin("Cumulative IRFs computed", out)
+            @test occursin("Bayesian IRF", out)
+        end
+    end
+
+    @testset "_irf_lp — cumulative flag" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _irf_lp(; data=csv, shock=1, horizons=10, lags=4, id="cholesky",
+                             ci="none", vcov="newey_west", config="", format="table",
+                             cumulative=true)
+                end
+            end
+            @test occursin("Cumulative IRFs computed", out)
+            @test occursin("LP IRF", out)
+        end
+    end
+
+    @testset "_irf_var — identified-set flag" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            cfg = _make_sign_config(dir)
+            out = cd(dir) do
+                _capture() do
+                    _irf_var(; data=csv, lags=2, shock=1, horizons=10, id="sign",
+                              config=cfg, ci="none", format="table", identified_set=true)
+                end
+            end
+            @test occursin("Sign-Identified Set", out)
+            @test occursin("accepted", out)
+            @test occursin("IRF Identified Set", out)
+        end
+    end
+
+    @testset "_irf_var — identified-set without config errors" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            @test_throws ErrorException cd(dir) do
+                _capture() do
+                    _irf_var(; data=csv, lags=2, shock=1, horizons=10, id="sign",
+                              config="", ci="none", format="table", identified_set=true)
+                end
+            end
+        end
+    end
+
+    @testset "_irf_var — stationary-only flag with bootstrap" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _irf_var(; data=csv, lags=2, shock=1, horizons=10, id="cholesky",
+                              ci="bootstrap", replications=100, format="table",
+                              stationary_only=true)
+                end
+            end
+            @test occursin("Computing IRFs", out)
+            @test occursin("IRF to", out)
+        end
+    end
+
 end  # IRF handlers
 
 # ═══════════════════════════════════════════════════════════════
@@ -2081,6 +2169,21 @@ end  # HD handlers
                 end
             end
             @test occursin("Forecast", out)
+        end
+    end
+
+    @testset "_forecast_var — bootstrap CI" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _forecast_var(; data=csv, lags=2, horizons=5, confidence=0.95,
+                                   ci_method="bootstrap", format="table")
+                end
+            end
+            @test occursin("bootstrap", out)
+            @test occursin("Forecast", out)
+            @test occursin("95%", out)
         end
     end
 
@@ -3581,6 +3684,19 @@ end  # Edge Cases
         end
     end
 
+    @testset "_filter_bn — statespace method" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _filter_bn(; data=csv, method="statespace", format="table")
+                end
+            end
+            @test occursin("Beveridge-Nelson", out)
+            @test occursin("method=statespace", out)
+        end
+    end
+
     @testset "_filter_bk" begin
         mktempdir() do dir
             csv = _make_csv(dir; T=100, n=3)
@@ -4016,8 +4132,8 @@ end  # Enhanced Granger handlers
         node = register_data_commands!()
         @test node isa NodeCommand
         @test node.name == "data"
-        @test length(node.subcmds) == 8
-        for cmd in ["list", "load", "describe", "diagnose", "fix", "transform", "filter", "validate"]
+        @test length(node.subcmds) == 9
+        for cmd in ["list", "load", "describe", "diagnose", "fix", "transform", "filter", "validate", "balance"]
             @test haskey(node.subcmds, cmd)
             @test node.subcmds[cmd] isa LeafCommand
         end
@@ -4026,13 +4142,14 @@ end  # Enhanced Granger handlers
     @testset "option counts" begin
         node = register_data_commands!()
         @test length(node.subcmds["list"].options) == 2
-        @test length(node.subcmds["load"].options) == 4
+        @test length(node.subcmds["load"].options) == 6
         @test length(node.subcmds["describe"].options) == 2
         @test length(node.subcmds["diagnose"].options) == 2
         @test length(node.subcmds["fix"].options) == 3
         @test length(node.subcmds["transform"].options) == 3
         @test length(node.subcmds["filter"].options) == 8
         @test length(node.subcmds["validate"].options) == 3
+        @test length(node.subcmds["balance"].options) == 5
     end
 
     @testset "_data_list — table" begin
@@ -4502,7 +4619,295 @@ end  # Enhanced Granger handlers
         end
     end
 
+    # ── data balance ──────────────────────────────────────────
+
+    @testset "_data_balance — basic" begin
+        cd(mktempdir()) do
+            write("data.csv", "a,b\n1.0,2.0\n3.0,NaN\n5.0,6.0\n7.0,8.0\n")
+            out = _capture() do
+                _data_balance(; data="data.csv")
+            end
+            @test occursin("Balanc", out)
+        end
+    end
+
+    @testset "_data_balance — custom method and factors" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=50, n=4)
+            out = _capture() do
+                _data_balance(; data=csv, method="dfm", factors=2, lags=1)
+            end
+            @test occursin("Balanc", out)
+            @test occursin("dfm", out)
+        end
+    end
+
+    @testset "_data_balance — csv output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=50, n=3)
+            outfile = joinpath(dir, "balanced.csv")
+            out = _capture() do
+                _data_balance(; data=csv, format="csv", output=outfile)
+            end
+            @test isfile(outfile)
+        end
+    end
+
+    # ── data load --dates ────────────────────────────────────
+
+    @testset "_data_load — --dates option with --path" begin
+        cd(mktempdir()) do
+            write("data.csv", "date,a,b\n2020Q1,1.0,2.0\n2020Q2,3.0,4.0\n2020Q3,5.0,6.0\n")
+            out = _capture() do
+                _data_load(; name="", path="data.csv", dates="date")
+            end
+            @test occursin("Date", out) || occursin("date", out)
+        end
+    end
+
+    @testset "_data_load — --dates missing column warning" begin
+        cd(mktempdir()) do
+            write("data.csv", "a,b\n1.0,2.0\n3.0,4.0\n5.0,6.0\n")
+            out = _capture() do
+                _data_load(; name="", path="data.csv", dates="nonexistent")
+            end
+            @test occursin("Warning", out) || occursin("not found", out)
+        end
+    end
+
+    @testset "_data_load — --path without dates" begin
+        cd(mktempdir()) do
+            write("data.csv", "a,b\n1.0,2.0\n3.0,4.0\n5.0,6.0\n")
+            out = _capture() do
+                _data_load(; name="", path="data.csv")
+            end
+            @test occursin("Loaded", out)
+        end
+    end
+
+    @testset "_data_load — named dataset with --dates" begin
+        cd(mktempdir()) do
+            out = _capture() do
+                _data_load(; name="fred_md", dates="INDPRO")
+            end
+            @test occursin("Loaded", out)
+            @test occursin("Date labels", out) || occursin("fred_md", out)
+        end
+    end
+
 end  # Data handlers
+
+# ──────────────────────────────────────────────────────────────────
+# Nowcast Command Tests
+# ──────────────────────────────────────────────────────────────────
+
+@testset "Nowcast handlers" begin
+
+    @testset "register_nowcast_commands!" begin
+        node = register_nowcast_commands!()
+        @test node isa NodeCommand
+        @test node.name == "nowcast"
+        @test length(node.subcmds) == 5
+        for cmd in ["dfm", "bvar", "bridge", "news", "forecast"]
+            @test haskey(node.subcmds, cmd)
+            @test node.subcmds[cmd] isa LeafCommand
+        end
+    end
+
+    @testset "option counts" begin
+        node = register_nowcast_commands!()
+        @test length(node.subcmds["dfm"].options) == 10
+        @test length(node.subcmds["bvar"].options) == 6
+        @test length(node.subcmds["bridge"].options) == 8
+        @test length(node.subcmds["news"].options) == 12
+        @test length(node.subcmds["forecast"].options) == 10
+    end
+
+    @testset "_nowcast_dfm — basic" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_dfm(; data=csv, monthly_vars=4, quarterly_vars=1)
+            end
+            @test occursin("Nowcast DFM", out)
+            @test occursin("Nowcast:", out) || occursin("nowcast", out)
+        end
+    end
+
+    @testset "_nowcast_dfm — custom factors and lags" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_dfm(; data=csv, monthly_vars=4, quarterly_vars=1,
+                    factors=3, lags=2, idio="iid")
+            end
+            @test occursin("Factors: 3", out)
+            @test occursin("VAR lags: 2", out)
+        end
+    end
+
+    @testset "_nowcast_dfm — auto var split" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_dfm(; data=csv)
+            end
+            @test occursin("4 monthly", out)
+            @test occursin("1 quarterly", out)
+        end
+    end
+
+    @testset "_nowcast_dfm — invalid var split" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            @test_throws ErrorException _nowcast_dfm(; data=csv,
+                monthly_vars=3, quarterly_vars=1)
+        end
+    end
+
+    @testset "_nowcast_bvar — basic" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_bvar(; data=csv, monthly_vars=4, quarterly_vars=1)
+            end
+            @test occursin("Nowcast BVAR", out)
+            @test occursin("Nowcast:", out) || occursin("nowcast", out)
+        end
+    end
+
+    @testset "_nowcast_bvar — custom lags" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_bvar(; data=csv, monthly_vars=4, quarterly_vars=1, lags=3)
+            end
+            @test occursin("Lags: 3", out)
+        end
+    end
+
+    @testset "_nowcast_bridge — basic" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_bridge(; data=csv, monthly_vars=4, quarterly_vars=1)
+            end
+            @test occursin("Nowcast Bridge", out)
+            @test occursin("Nowcast:", out) || occursin("nowcast", out)
+        end
+    end
+
+    @testset "_nowcast_bridge — custom lags" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_bridge(; data=csv, monthly_vars=4, quarterly_vars=1,
+                    lag_m=2, lag_q=2, lag_y=2)
+            end
+            @test occursin("lagM=2", out)
+            @test occursin("lagQ=2", out)
+            @test occursin("lagY=2", out)
+        end
+    end
+
+    @testset "_nowcast_news — basic" begin
+        mktempdir() do dir
+            csv_old = _make_csv(dir; T=100, n=5, colnames=["m1","m2","m3","m4","q1"])
+            csv_new = joinpath(dir, "data_new.csv")
+            # Create new vintage with slightly more data
+            data = Dict{String,Vector{Float64}}()
+            for name in ["m1","m2","m3","m4","q1"]
+                data[name] = randn(105) .+ 1.0
+            end
+            CSV.write(csv_new, DataFrame(data))
+
+            out = _capture() do
+                _nowcast_news(; data_new=csv_new, data_old=csv_old,
+                    monthly_vars=4, quarterly_vars=1, method="dfm")
+            end
+            @test occursin("News", out) || occursin("news", out)
+            @test occursin("Old", out) || occursin("old", out)
+        end
+    end
+
+    @testset "_nowcast_news — missing data errors" begin
+        @test_throws ErrorException _nowcast_news(; data_new="", data_old="old.csv")
+        @test_throws ErrorException _nowcast_news(; data_new="new.csv", data_old="")
+    end
+
+    @testset "_nowcast_news — bvar method" begin
+        mktempdir() do dir
+            csv_old = _make_csv(dir; T=100, n=5, colnames=["m1","m2","m3","m4","q1"])
+            csv_new = joinpath(dir, "data_new.csv")
+            data = Dict{String,Vector{Float64}}()
+            for name in ["m1","m2","m3","m4","q1"]
+                data[name] = randn(105) .+ 1.0
+            end
+            CSV.write(csv_new, DataFrame(data))
+
+            out = _capture() do
+                _nowcast_news(; data_new=csv_new, data_old=csv_old,
+                    monthly_vars=4, quarterly_vars=1, method="bvar")
+            end
+            @test occursin("bvar", out)
+        end
+    end
+
+    @testset "_nowcast_forecast — dfm" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_forecast(; data=csv, monthly_vars=4, quarterly_vars=1,
+                    method="dfm", horizons=4)
+            end
+            @test occursin("Nowcast Forecast", out)
+            @test occursin("dfm", out)
+        end
+    end
+
+    @testset "_nowcast_forecast — bvar" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_forecast(; data=csv, monthly_vars=4, quarterly_vars=1,
+                    method="bvar", horizons=4)
+            end
+            @test occursin("bvar", out)
+        end
+    end
+
+    @testset "_nowcast_forecast — bridge" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _nowcast_forecast(; data=csv, monthly_vars=4, quarterly_vars=1,
+                    method="bridge", horizons=4)
+            end
+            @test occursin("bridge", out)
+        end
+    end
+
+    @testset "_nowcast_forecast — invalid method" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            @test_throws ErrorException _nowcast_forecast(; data=csv,
+                monthly_vars=4, quarterly_vars=1, method="invalid")
+        end
+    end
+
+    @testset "_nowcast_forecast — csv output" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            outfile = joinpath(dir, "nc_fc.csv")
+            out = _capture() do
+                _nowcast_forecast(; data=csv, monthly_vars=4, quarterly_vars=1,
+                    method="dfm", horizons=4, format="csv", output=outfile)
+            end
+            @test isfile(outfile)
+        end
+    end
+
+end  # Nowcast handlers
 
 # ──────────────────────────────────────────────────────────────────
 # Plot Support Tests

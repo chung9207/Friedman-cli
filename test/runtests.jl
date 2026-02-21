@@ -2458,16 +2458,27 @@ using Test
             ],
             description="Validate data")
 
+        data_balance = LeafCommand("balance", handler;
+            args=[Argument("data"; description="Data file")],
+            options=[
+                Option("method"; type=String, default="dfm", description="Method"),
+                Option("factors"; short="r", type=Int, default=3, description="Factors"),
+                Option("lags"; short="p", type=Int, default=2, description="Lags"),
+                Option("output"; short="o", type=String, default="", description="Output"),
+                Option("format"; short="f", type=String, default="table", description="Format"),
+            ],
+            description="Balance panel")
+
         data_node = NodeCommand("data",
             Dict{String,Union{NodeCommand,LeafCommand}}(
                 "list" => data_list, "load" => data_load, "describe" => data_describe,
                 "diagnose" => data_diagnose, "fix" => data_fix, "transform" => data_transform,
-                "filter" => data_filter, "validate" => data_validate),
+                "filter" => data_filter, "validate" => data_validate, "balance" => data_balance),
             "Data management")
 
         @test data_node.name == "data"
-        @test length(data_node.subcmds) == 8
-        for cmd in ["list", "load", "describe", "diagnose", "fix", "transform", "filter", "validate"]
+        @test length(data_node.subcmds) == 9
+        for cmd in ["list", "load", "describe", "diagnose", "fix", "transform", "filter", "validate", "balance"]
             @test haskey(data_node.subcmds, cmd)
             @test data_node.subcmds[cmd] isa LeafCommand
         end
@@ -2481,12 +2492,13 @@ using Test
         @test length(data_node.subcmds["transform"].options) == 3
         @test length(data_node.subcmds["filter"].options) == 8
         @test length(data_node.subcmds["validate"].options) == 3
+        @test length(data_node.subcmds["balance"].options) == 5
 
         # Help text
         buf = IOBuffer()
         print_help(buf, data_node; prog="friedman data")
         help_text = String(take!(buf))
-        for cmd in ["list", "load", "describe", "diagnose", "fix", "transform", "filter", "validate"]
+        for cmd in ["list", "load", "describe", "diagnose", "fix", "transform", "filter", "validate", "balance"]
             @test contains(help_text, cmd)
         end
 

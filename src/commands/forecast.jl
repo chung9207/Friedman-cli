@@ -24,9 +24,12 @@ function register_forecast_commands!()
             Option("lags"; short="p", type=Int, default=nothing, description="Lag order (default: auto)"),
             Option("horizons"; short="h", type=Int, default=12, description="Forecast horizon"),
             Option("confidence"; type=Float64, default=0.95, description="Confidence level for intervals"),
+            Option("ci-method"; type=String, default="analytical", description="analytical|bootstrap"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Compute h-step ahead VAR forecasts")
 
     fc_bvar = LeafCommand("bvar", _forecast_bvar;
@@ -228,13 +231,30 @@ end
 # ── VAR Forecast ─────────────────────────────────────────
 
 function _forecast_var(; data::String, lags=nothing, horizons::Int=12,
-                        confidence::Float64=0.95,
-                        output::String="", format::String="table")
+                        confidence::Float64=0.95, ci_method::String="analytical",
+                        output::String="", format::String="table",
+                        plot::Bool=false, plot_save::String="")
     model, Y, varnames, p = _load_and_estimate_var(data, lags)
     n = size(Y, 2)
 
-    println("Computing VAR($p) forecast: horizons=$horizons, confidence=$confidence")
+    println("Computing VAR($p) forecast: horizons=$horizons, confidence=$confidence, ci=$ci_method")
     println()
+
+    # Bootstrap CI branch
+    if ci_method == "bootstrap"
+        fc_result = forecast(model, horizons; ci_method=:bootstrap, reps=500, conf_level=confidence)
+        fc_df = DataFrame()
+        fc_df.horizon = 1:horizons
+        for (vi, vname) in enumerate(varnames)
+            fc_df[!, vname] = fc_result.forecast[:, vi]
+            fc_df[!, "$(vname)_lower"] = fc_result.ci_lower[:, vi]
+            fc_df[!, "$(vname)_upper"] = fc_result.ci_upper[:, vi]
+        end
+        output_result(fc_df; format=Symbol(format), output=output,
+                      title="VAR($p) Forecast (h=$horizons, bootstrap $(Int(round(confidence*100)))% CI)")
+        _maybe_plot(fc_result; plot=plot, plot_save=plot_save)
+        return
+    end
 
     B = coef(model)
     forecasts = _var_forecast_point(B, Y, p, horizons)

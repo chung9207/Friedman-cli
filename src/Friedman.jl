@@ -45,6 +45,7 @@ include("commands/predict.jl")
 include("commands/residuals.jl")
 include("commands/filter.jl")
 include("commands/data.jl")
+include("commands/nowcast.jl")
 
 const FRIEDMAN_VERSION = v"0.2.2"
 
@@ -65,6 +66,7 @@ function build_app()
         "residuals" => register_residuals_commands!(),
         "filter"    => register_filter_commands!(),
         "data"      => register_data_commands!(),
+        "nowcast"   => register_nowcast_commands!(),
     )
 
     root = NodeCommand("friedman", root_cmds,

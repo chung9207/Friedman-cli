@@ -31,7 +31,12 @@ function register_irf_commands!()
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
-        flags=[Flag("plot"; description="Open interactive plot in browser")],
+        flags=[
+            Flag("plot"; description="Open interactive plot in browser"),
+            Flag("cumulative"; description="Compute cumulative IRFs (for differenced data)"),
+            Flag("identified-set"; description="Return full identified set for sign restrictions"),
+            Flag("stationary-only"; description="Filter non-stationary bootstrap draws"),
+        ],
         description="Compute frequentist impulse response functions")
 
     irf_bvar = LeafCommand("bvar", _irf_bvar;
@@ -48,7 +53,10 @@ function register_irf_commands!()
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
-        flags=[Flag("plot"; description="Open interactive plot in browser")],
+        flags=[
+            Flag("plot"; description="Open interactive plot in browser"),
+            Flag("cumulative"; description="Compute cumulative IRFs (for differenced data)"),
+        ],
         description="Compute Bayesian impulse response functions with credible intervals")
 
     irf_lp = LeafCommand("lp", _irf_lp;
@@ -69,7 +77,10 @@ function register_irf_commands!()
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
-        flags=[Flag("plot"; description="Open interactive plot in browser")],
+        flags=[
+            Flag("plot"; description="Open interactive plot in browser"),
+            Flag("cumulative"; description="Compute cumulative IRFs (for differenced data)"),
+        ],
         description="Compute structural LP impulse response functions")
 
     irf_vecm = LeafCommand("vecm", _irf_vecm;
@@ -124,7 +135,9 @@ function _irf_var(; data::String, lags=nothing, shock::Int=1, horizons::Int=20,
                    id::String="cholesky", ci::String="bootstrap", replications::Int=1000,
                    config::String="",
                    output::String="", format::String="table",
-                   plot::Bool=false, plot_save::String="")
+                   plot::Bool=false, plot_save::String="",
+                   cumulative::Bool=false, identified_set::Bool=false,
+                   stationary_only::Bool=false)
     model, Y, varnames, p = _load_and_estimate_var(data, lags)
     n = size(Y, 2)
 
@@ -143,11 +156,40 @@ function _irf_var(; data::String, lags=nothing, shock::Int=1, horizons::Int=20,
         return
     end
 
+    # Sign-identified set: return full draw set instead of point estimates
+    if identified_set && id == "sign"
+        check_func, _ = _build_check_func(config)
+        isnothing(check_func) && error("--identified-set requires a --config file with sign restrictions")
+        set = identify_sign(model, horizons, check_func; max_draws=replications, store_all=true)
+        lower, upper = irf_bounds(set)
+        med = irf_median(set)
+        println("Sign-Identified Set: $(set.n_accepted)/$(set.n_total) accepted ($(round(set.acceptance_rate*100; digits=1))%)")
+        irf_df = DataFrame()
+        irf_df.horizon = 0:horizons
+        for (vi, vname) in enumerate(varnames)
+            irf_df[!, vname] = med[:, vi, shock]
+            irf_df[!, "$(vname)_lower"] = lower[:, vi, shock]
+            irf_df[!, "$(vname)_upper"] = upper[:, vi, shock]
+        end
+        shock_name = _shock_name(varnames, shock)
+        output_result(irf_df; format=Symbol(format), output=output,
+                      title="IRF Identified Set (sign, $shock_name shock)")
+        return
+    end
+
     kwargs = _build_identification_kwargs(id, config)
     kwargs[:ci_type] = Symbol(ci)
     kwargs[:reps] = replications
+    if stationary_only
+        kwargs[:stationary_only] = true
+    end
 
     irf_result = irf(model, horizons; kwargs...)
+
+    if cumulative
+        irf_result = cumulative_irf(irf_result)
+        printstyled("  Cumulative IRFs computed\n"; color=:cyan)
+    end
 
     _maybe_plot(irf_result; plot=plot, plot_save=plot_save)
 
@@ -252,7 +294,8 @@ function _irf_bvar(; data::String, lags::Int=4, shock::Int=1, horizons::Int=20,
                     id::String="cholesky", draws::Int=2000, sampler::String="direct",
                     config::String="",
                     output::String="", format::String="table",
-                    plot::Bool=false, plot_save::String="")
+                    plot::Bool=false, plot_save::String="",
+                    cumulative::Bool=false)
     post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
     method = get(ID_METHOD_MAP, id, :cholesky)
 
@@ -274,6 +317,11 @@ function _irf_bvar(; data::String, lags::Int=4, shock::Int=1, horizons::Int=20,
     end
 
     birf = irf(post, horizons; kwargs...)
+
+    if cumulative
+        birf = cumulative_irf(birf)
+        printstyled("  Cumulative IRFs computed\n"; color=:cyan)
+    end
 
     _maybe_plot(birf; plot=plot, plot_save=plot_save)
 
@@ -316,7 +364,8 @@ function _irf_lp(; data::String, shock::Int=1, shocks::String="",
                   replications::Int=200, conf_level::Float64=0.95,
                   vcov::String="newey_west", config::String="",
                   output::String="", format::String="table",
-                  plot::Bool=false, plot_save::String="")
+                  plot::Bool=false, plot_save::String="",
+                  cumulative::Bool=false)
     # Multi-shock mode
     if !isempty(shocks)
         shock_indices = parse.(Int, split(shocks, ","))
@@ -329,6 +378,11 @@ function _irf_lp(; data::String, shock::Int=1, shocks::String="",
 
     n = size(Y, 2)
     irf_result = slp.irf
+
+    if cumulative
+        irf_result = cumulative_irf(irf_result)
+        printstyled("  Cumulative IRFs computed\n"; color=:cyan)
+    end
 
     _maybe_plot(irf_result; plot=plot, plot_save=plot_save)
 

@@ -45,6 +45,7 @@ function register_filter_commands!()
     filt_bn = LeafCommand("bn", _filter_bn;
         args=[Argument("data"; description="Path to CSV data file")],
         options=[
+            Option("method"; type=String, default="arima", description="arima|statespace"),
             Option("p"; type=Int, default=nothing, description="AR order (default: auto)"),
             Option("q"; type=Int, default=nothing, description="MA order (default: auto)"),
             Option("columns"; short="c", type=String, default="", description="Column indices, comma-separated (default: all numeric)"),
@@ -224,7 +225,8 @@ end
 
 # ── Beveridge-Nelson Decomposition ───────────────────────
 
-function _filter_bn(; data::String, p=nothing, q=nothing, columns::String="",
+function _filter_bn(; data::String, method::String="arima", p=nothing, q=nothing,
+                     columns::String="",
                      output::String="", format::String="table",
                      plot::Bool=false, plot_save::String="")
     df = load_data(data)
@@ -235,7 +237,7 @@ function _filter_bn(; data::String, p=nothing, q=nothing, columns::String="",
 
     p_label = isnothing(p) ? "auto" : string(p)
     q_label = isnothing(q) ? "auto" : string(q)
-    println("Beveridge-Nelson Decomposition (p=$p_label, q=$q_label): $(length(col_idx)) variable(s), T=$T_obs")
+    println("Beveridge-Nelson Decomposition (method=$method, p=$p_label, q=$q_label): $(length(col_idx)) variable(s), T=$T_obs")
     println()
 
     result_df = DataFrame()
@@ -244,14 +246,17 @@ function _filter_bn(; data::String, p=nothing, q=nothing, columns::String="",
     originals = Vector{Float64}[]
     last_result = nothing
 
-    kwargs = Dict{Symbol,Any}()
-    isnothing(p) || (kwargs[:p] = p)
-    isnothing(q) || (kwargs[:q] = q)
-
     for ci in col_idx
         vname = varnames[ci]
         y = Y[:, ci]
-        res = beveridge_nelson(y; kwargs...)
+        res = if method == "statespace"
+            beveridge_nelson(y; method=:statespace)
+        else
+            kwargs = Dict{Symbol,Any}(:method => :arima)
+            isnothing(p) || (kwargs[:p] = p)
+            isnothing(q) || (kwargs[:q] = q)
+            beveridge_nelson(y; kwargs...)
+        end
         last_result = res
         _maybe_plot(res; plot=plot, plot_save=isempty(plot_save) ? "" : _per_var_output_path(plot_save, vname))
         t = trend(res)

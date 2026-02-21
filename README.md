@@ -4,7 +4,7 @@
 [![codecov](https://codecov.io/gh/chung9207/Friedman-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/chung9207/Friedman-cli)
 [![Documentation](https://github.com/chung9207/Friedman-cli/actions/workflows/Documentation.yml/badge.svg)](https://chung9207.github.io/Friedman-cli/dev/)
 
-Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl) (v0.2.2).
+Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl) (v0.2.4).
 
 13 top-level commands, ~97 subcommands. Action-first CLI: commands are organized by action (`estimate`, `irf`, `forecast`, ...) rather than by model type.
 
