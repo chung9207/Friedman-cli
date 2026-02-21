@@ -381,11 +381,11 @@ using Test
         @test contains(help_text, "friedman var")
 
         # Entry help includes version number
-        entry = Entry("friedman", node; version=v"0.2.1")
+        entry = Entry("friedman", node; version=v"0.2.2")
         buf = IOBuffer()
         print_help(buf, entry)
         help_text = String(take!(buf))
-        @test contains(help_text, "0.2.1")
+        @test contains(help_text, "0.2.2")
 
         # Leaf with optional argument shows [arg] not <arg>
         leaf_opt_arg = LeafCommand("test", handler;
@@ -500,9 +500,9 @@ using Test
         @test called_with[][:data] == "test.csv"
 
         # dispatch() with ["--version"] prints version
-        entry = Entry("friedman", outer_node; version=v"0.2.1")
+        entry = Entry("friedman", outer_node; version=v"0.2.2")
         version_output = strip(capture_stdout(() -> dispatch(entry, ["--version"])))
-        @test contains(version_output, "0.2.1")
+        @test contains(version_output, "0.2.2")
 
         # dispatch() with [] shows help (no error)
         help_output = capture_stdout(() -> dispatch(entry, String[]))
@@ -550,7 +550,7 @@ using Test
 
         # -V short flag triggers version
         v_output = strip(capture_stdout(() -> dispatch(entry, ["-V"])))
-        @test contains(v_output, "0.2.1")
+        @test contains(v_output, "0.2.2")
     end
 
     @testset "DispatchError on unknown command" begin
@@ -1122,18 +1122,22 @@ using Test
             "Panel VAR diagnostic tests")
 
         test_lr = LeafCommand("lr", handler;
-            args=[Argument("tag1"; description="Restricted model tag"),
-                  Argument("tag2"; description="Unrestricted model tag")],
+            args=[Argument("data1"; description="Path to CSV data file for restricted model"),
+                  Argument("data2"; description="Path to CSV data file for unrestricted model")],
             options=[
+                Option("lags1"; type=Int, default=nothing, description="Lag order for restricted model"),
+                Option("lags2"; type=Int, default=nothing, description="Lag order for unrestricted model"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
                 Option("output"; short="o", type=String, default="", description="Output"),
             ],
             description="Likelihood Ratio test")
 
         test_lm = LeafCommand("lm", handler;
-            args=[Argument("tag1"; description="Restricted model tag"),
-                  Argument("tag2"; description="Unrestricted model tag")],
+            args=[Argument("data1"; description="Path to CSV data file for restricted model"),
+                  Argument("data2"; description="Path to CSV data file for unrestricted model")],
             options=[
+                Option("lags1"; type=Int, default=nothing, description="Lag order for restricted model"),
+                Option("lags2"; type=Int, default=nothing, description="Lag order for unrestricted model"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
                 Option("output"; short="o", type=String, default="", description="Output"),
             ],
@@ -1191,8 +1195,8 @@ using Test
         @test length(test_node.subcmds["heteroskedasticity"].options) == 6
         @test length(test_node.subcmds["granger"].options) == 8
         @test length(test_node.subcmds["granger"].flags) == 1
-        @test length(test_node.subcmds["lr"].options) == 2
-        @test length(test_node.subcmds["lm"].options) == 2
+        @test length(test_node.subcmds["lr"].options) == 4
+        @test length(test_node.subcmds["lm"].options) == 4
 
         # Help text
         buf = IOBuffer()
@@ -1257,7 +1261,7 @@ using Test
                 Option("ci"; type=String, default="bootstrap", description="CI type"),
                 Option("replications"; type=Int, default=1000, description="Replications"),
                 Option("config"; type=String, default="", description="Config"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1273,7 +1277,7 @@ using Test
                 Option("draws"; short="n", type=Int, default=2000, description="Draws"),
                 Option("sampler"; type=String, default="nuts", description="Sampler"),
                 Option("config"; type=String, default="", description="Config"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1293,7 +1297,7 @@ using Test
                 Option("conf-level"; type=Float64, default=0.95, description="Conf level"),
                 Option("vcov"; type=String, default="newey_west", description="HAC"),
                 Option("config"; type=String, default="", description="Config"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1311,7 +1315,7 @@ using Test
                 Option("ci"; type=String, default="bootstrap", description="CI type"),
                 Option("replications"; type=Int, default=1000, description="Replications"),
                 Option("config"; type=String, default="", description="Config"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1327,7 +1331,7 @@ using Test
                 Option("irf-type"; type=String, default="oirf", description="oirf|girf"),
                 Option("boot-draws"; type=Int, default=500, description="Bootstrap draws"),
                 Option("confidence"; type=Float64, default=0.95, description="Confidence level"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1347,7 +1351,7 @@ using Test
                 Option("horizons"; short="h", type=Int, default=20, description="Horizon"),
                 Option("id"; type=String, default="cholesky", description="Identification"),
                 Option("config"; type=String, default="", description="Config"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1362,7 +1366,7 @@ using Test
                 Option("draws"; short="n", type=Int, default=2000, description="Draws"),
                 Option("sampler"; type=String, default="nuts", description="Sampler"),
                 Option("config"; type=String, default="", description="Config"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1377,7 +1381,7 @@ using Test
                 Option("id"; type=String, default="cholesky", description="Identification"),
                 Option("vcov"; type=String, default="newey_west", description="HAC"),
                 Option("config"; type=String, default="", description="Config"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1392,7 +1396,7 @@ using Test
                 Option("horizons"; short="h", type=Int, default=20, description="Horizon"),
                 Option("id"; type=String, default="cholesky", description="Identification"),
                 Option("config"; type=String, default="", description="Config"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1405,7 +1409,7 @@ using Test
                 Option("time-col"; type=String, default="", description="Time column"),
                 Option("lags"; short="p", type=Int, default=1, description="Lags"),
                 Option("horizons"; short="h", type=Int, default=10, description="Horizon"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1424,7 +1428,7 @@ using Test
                 Option("lags"; short="p", type=Int, default=nothing, description="Lags"),
                 Option("id"; type=String, default="cholesky", description="Identification"),
                 Option("config"; type=String, default="", description="Config"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1438,7 +1442,7 @@ using Test
                 Option("draws"; short="n", type=Int, default=2000, description="Draws"),
                 Option("sampler"; type=String, default="nuts", description="Sampler"),
                 Option("config"; type=String, default="", description="Config"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1452,7 +1456,7 @@ using Test
                 Option("id"; type=String, default="cholesky", description="Identification"),
                 Option("vcov"; type=String, default="newey_west", description="HAC"),
                 Option("config"; type=String, default="", description="Config"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1469,12 +1473,9 @@ using Test
                 "estimate" => NodeCommand("estimate", Dict{String,Union{NodeCommand,LeafCommand}}(), "Est"),
                 "test" => NodeCommand("test", Dict{String,Union{NodeCommand,LeafCommand}}(), "Test"),
                 "irf" => irf_node, "fevd" => fevd_node, "hd" => hd_node,
-                "forecast" => NodeCommand("forecast", Dict{String,Union{NodeCommand,LeafCommand}}(), "Forecast"),
-                "list" => NodeCommand("list", Dict{String,Union{NodeCommand,LeafCommand}}(), "List"),
-                "rename" => LeafCommand("rename", handler; description="Rename"),
-                "project" => NodeCommand("project", Dict{String,Union{NodeCommand,LeafCommand}}(), "Project")),
+                "forecast" => NodeCommand("forecast", Dict{String,Union{NodeCommand,LeafCommand}}(), "Forecast")),
             "Friedman CLI")
-        entry = Entry("friedman", root; version=v"0.2.1")
+        entry = Entry("friedman", root; version=v"0.2.2")
 
         # Top level HAS irf, fevd, hd (action-first)
         @test haskey(root.subcmds, "irf")
@@ -1496,10 +1497,10 @@ using Test
         @test irf_node.subcmds["lp"] isa LeafCommand
         @test irf_node.subcmds["pvar"] isa LeafCommand
 
-        # IRF var option count (10 options)
-        @test length(irf_node.subcmds["var"].options) == 10
-        # IRF pvar option count (10 options)
-        @test length(irf_node.subcmds["pvar"].options) == 10
+        # IRF var option count (9 options)
+        @test length(irf_node.subcmds["var"].options) == 9
+        # IRF pvar option count (9 options)
+        @test length(irf_node.subcmds["pvar"].options) == 9
 
         # FEVD node structure (5 leaves: var, bvar, lp, vecm, pvar)
         @test length(fevd_node.subcmds) == 5
@@ -1507,21 +1508,19 @@ using Test
         @test haskey(fevd_node.subcmds, "pvar")
         @test fevd_node.subcmds["vecm"] isa LeafCommand
         @test fevd_node.subcmds["pvar"] isa LeafCommand
-        @test length(fevd_node.subcmds["pvar"].options) == 7
+        @test length(fevd_node.subcmds["pvar"].options) == 6
 
-        # FEVD bvar has draws, sampler, from-tag
-        @test length(fevd_node.subcmds["bvar"].options) == 9
+        # FEVD bvar has draws, sampler
+        @test length(fevd_node.subcmds["bvar"].options) == 8
         fevd_bvar_opt_names = [o.name for o in fevd_node.subcmds["bvar"].options]
         @test "draws" in fevd_bvar_opt_names
         @test "sampler" in fevd_bvar_opt_names
-        @test "from-tag" in fevd_bvar_opt_names
 
-        # HD lp has var-lags, vcov, from-tag
-        @test length(hd_node.subcmds["lp"].options) == 8
+        # HD lp has var-lags, vcov
+        @test length(hd_node.subcmds["lp"].options) == 7
         hd_lp_opt_names = [o.name for o in hd_node.subcmds["lp"].options]
         @test "var-lags" in hd_lp_opt_names
         @test "vcov" in hd_lp_opt_names
-        @test "from-tag" in hd_lp_opt_names
 
         # Help text for IRF
         buf = IOBuffer()
@@ -1591,7 +1590,7 @@ using Test
                 Option("lags"; short="p", type=Int, default=nothing, description="Lags"),
                 Option("horizons"; short="h", type=Int, default=12, description="Horizon"),
                 Option("confidence"; type=Float64, default=0.95, description="Confidence"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1605,7 +1604,7 @@ using Test
                 Option("draws"; short="n", type=Int, default=2000, description="Draws"),
                 Option("sampler"; type=String, default="nuts", description="Sampler"),
                 Option("config"; type=String, default="", description="Config"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1622,7 +1621,7 @@ using Test
                 Option("ci-method"; type=String, default="analytical", description="CI method"),
                 Option("conf-level"; type=Float64, default=0.95, description="Conf level"),
                 Option("n-boot"; type=Int, default=500, description="Bootstrap reps"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1642,7 +1641,7 @@ using Test
                 Option("horizons"; short="h", type=Int, default=12, description="Horizon"),
                 Option("confidence"; type=Float64, default=0.95, description="Confidence"),
                 Option("method"; short="m", type=String, default="css_mle", description="Method"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1655,7 +1654,7 @@ using Test
                 Option("horizons"; short="h", type=Int, default=12, description="Horizon"),
                 Option("ci-method"; type=String, default="none", description="CI method"),
                 Option("conf-level"; type=Float64, default=0.95, description="Conf level"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1668,7 +1667,7 @@ using Test
                 Option("horizons"; short="h", type=Int, default=12, description="Horizon"),
                 Option("factor-lags"; short="p", type=Int, default=1, description="Factor lags"),
                 Option("method"; type=String, default="twostep", description="Method"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1680,7 +1679,7 @@ using Test
                 Option("nfactors"; short="r", type=Int, default=nothing, description="Factors"),
                 Option("dynamic-rank"; short="q", type=Int, default=nothing, description="Dynamic rank"),
                 Option("horizons"; short="h", type=Int, default=12, description="Horizon"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1692,7 +1691,7 @@ using Test
                 Option("column"; short="c", type=Int, default=1, description="Column"),
                 Option("q"; type=Int, default=1, description="ARCH order"),
                 Option("horizons"; short="h", type=Int, default=12, description="Horizon"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1705,7 +1704,7 @@ using Test
                 Option("p"; type=Int, default=1, description="GARCH order"),
                 Option("q"; type=Int, default=1, description="ARCH order"),
                 Option("horizons"; short="h", type=Int, default=12, description="Horizon"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1718,7 +1717,7 @@ using Test
                 Option("p"; type=Int, default=1, description="EGARCH order"),
                 Option("q"; type=Int, default=1, description="ARCH order"),
                 Option("horizons"; short="h", type=Int, default=12, description="Horizon"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1731,7 +1730,7 @@ using Test
                 Option("p"; type=Int, default=1, description="GARCH order"),
                 Option("q"; type=Int, default=1, description="ARCH order"),
                 Option("horizons"; short="h", type=Int, default=12, description="Horizon"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1743,7 +1742,7 @@ using Test
                 Option("column"; short="c", type=Int, default=1, description="Column"),
                 Option("draws"; short="n", type=Int, default=5000, description="Draws"),
                 Option("horizons"; short="h", type=Int, default=12, description="Horizon"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1759,7 +1758,7 @@ using Test
                 Option("ci-method"; type=String, default="none", description="CI method"),
                 Option("replications"; type=Int, default=500, description="Replications"),
                 Option("confidence"; type=Float64, default=0.95, description="Confidence"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1786,13 +1785,13 @@ using Test
         end
 
         # Option counts
-        @test length(forecast_node.subcmds["var"].options) == 6
-        @test length(forecast_node.subcmds["bvar"].options) == 8
-        @test length(forecast_node.subcmds["lp"].options) == 11
-        @test length(forecast_node.subcmds["arima"].options) == 14
-        @test length(forecast_node.subcmds["static"].options) == 7
-        @test length(forecast_node.subcmds["arch"].options) == 6
-        @test length(forecast_node.subcmds["sv"].options) == 6
+        @test length(forecast_node.subcmds["var"].options) == 5
+        @test length(forecast_node.subcmds["bvar"].options) == 7
+        @test length(forecast_node.subcmds["lp"].options) == 10
+        @test length(forecast_node.subcmds["arima"].options) == 13
+        @test length(forecast_node.subcmds["static"].options) == 6
+        @test length(forecast_node.subcmds["arch"].options) == 5
+        @test length(forecast_node.subcmds["sv"].options) == 5
 
         # Help text
         buf = IOBuffer()
@@ -1812,7 +1811,6 @@ using Test
         @test bound.data == "data.csv"
         @test bound.horizons == 24
         @test bound.confidence == 0.90
-        @test bound.from_tag == ""  # default
 
         # Arg binding: forecast arima
         parsed = tokenize(["data.csv", "--column=2", "--p=3", "--d=1", "--q=1", "--horizons=24"])
@@ -1860,7 +1858,7 @@ using Test
             args=[Argument("data"; description="Data file")],
             options=[
                 Option("lags"; short="p", type=Int, default=nothing, description="Lags"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1873,7 +1871,7 @@ using Test
                 Option("draws"; short="n", type=Int, default=2000, description="Draws"),
                 Option("sampler"; type=String, default="nuts", description="Sampler"),
                 Option("config"; type=String, default="", description="Config"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1887,7 +1885,7 @@ using Test
                 Option("d"; type=Int, default=0, description="Differencing"),
                 Option("q"; type=Int, default=0, description="MA order"),
                 Option("method"; short="m", type=String, default="css_mle", description="Method"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1900,7 +1898,7 @@ using Test
                 Option("lags"; short="p", type=Int, default=2, description="Lags"),
                 Option("rank"; short="r", type=String, default="auto", description="Rank"),
                 Option("deterministic"; type=String, default="constant", description="Deterministic"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1910,7 +1908,7 @@ using Test
             args=[Argument("data"; description="Data file")],
             options=[
                 Option("nfactors"; short="r", type=Int, default=nothing, description="Factors"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1922,7 +1920,7 @@ using Test
                 Option("nfactors"; short="r", type=Int, default=nothing, description="Factors"),
                 Option("factor-lags"; short="p", type=Int, default=1, description="Factor lags"),
                 Option("method"; type=String, default="twostep", description="Method"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1933,7 +1931,7 @@ using Test
             options=[
                 Option("nfactors"; short="r", type=Int, default=nothing, description="Factors"),
                 Option("dynamic-rank"; short="q", type=Int, default=nothing, description="Dynamic rank"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1944,7 +1942,7 @@ using Test
             options=[
                 Option("column"; short="c", type=Int, default=1, description="Column"),
                 Option("q"; type=Int, default=1, description="ARCH order"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1956,7 +1954,7 @@ using Test
                 Option("column"; short="c", type=Int, default=1, description="Column"),
                 Option("p"; type=Int, default=1, description="GARCH order"),
                 Option("q"; type=Int, default=1, description="ARCH order"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1968,7 +1966,7 @@ using Test
                 Option("column"; short="c", type=Int, default=1, description="Column"),
                 Option("p"; type=Int, default=1, description="EGARCH order"),
                 Option("q"; type=Int, default=1, description="ARCH order"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1980,7 +1978,7 @@ using Test
                 Option("column"; short="c", type=Int, default=1, description="Column"),
                 Option("p"; type=Int, default=1, description="GJR-GARCH order"),
                 Option("q"; type=Int, default=1, description="ARCH order"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -1991,7 +1989,7 @@ using Test
             options=[
                 Option("column"; short="c", type=Int, default=1, description="Column"),
                 Option("draws"; short="n", type=Int, default=5000, description="Draws"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -2015,18 +2013,18 @@ using Test
         end
 
         # Option counts
-        @test length(predict_node.subcmds["var"].options) == 4
-        @test length(predict_node.subcmds["bvar"].options) == 7
-        @test length(predict_node.subcmds["arima"].options) == 8
-        @test length(predict_node.subcmds["vecm"].options) == 6
-        @test length(predict_node.subcmds["static"].options) == 4
-        @test length(predict_node.subcmds["dynamic"].options) == 6
-        @test length(predict_node.subcmds["gdfm"].options) == 5
-        @test length(predict_node.subcmds["arch"].options) == 5
-        @test length(predict_node.subcmds["garch"].options) == 6
-        @test length(predict_node.subcmds["egarch"].options) == 6
-        @test length(predict_node.subcmds["gjr_garch"].options) == 6
-        @test length(predict_node.subcmds["sv"].options) == 5
+        @test length(predict_node.subcmds["var"].options) == 3
+        @test length(predict_node.subcmds["bvar"].options) == 6
+        @test length(predict_node.subcmds["arima"].options) == 7
+        @test length(predict_node.subcmds["vecm"].options) == 5
+        @test length(predict_node.subcmds["static"].options) == 3
+        @test length(predict_node.subcmds["dynamic"].options) == 5
+        @test length(predict_node.subcmds["gdfm"].options) == 4
+        @test length(predict_node.subcmds["arch"].options) == 4
+        @test length(predict_node.subcmds["garch"].options) == 5
+        @test length(predict_node.subcmds["egarch"].options) == 5
+        @test length(predict_node.subcmds["gjr_garch"].options) == 5
+        @test length(predict_node.subcmds["sv"].options) == 4
 
         # Help text
         buf = IOBuffer()
@@ -2042,7 +2040,6 @@ using Test
         bound = bind_args(parsed, pred_var)
         @test bound.data == "data.csv"
         @test bound.lags == 3
-        @test bound.from_tag == ""
 
         # Dispatch: friedman predict var test.csv --lags=2
         called_with = Ref{Any}(nothing)
@@ -2067,7 +2064,7 @@ using Test
             args=[Argument("data"; description="Data file")],
             options=[
                 Option("lags"; short="p", type=Int, default=nothing, description="Lags"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -2080,7 +2077,7 @@ using Test
                 Option("draws"; short="n", type=Int, default=2000, description="Draws"),
                 Option("sampler"; type=String, default="nuts", description="Sampler"),
                 Option("config"; type=String, default="", description="Config"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -2094,7 +2091,7 @@ using Test
                 Option("d"; type=Int, default=0, description="Differencing"),
                 Option("q"; type=Int, default=0, description="MA order"),
                 Option("method"; short="m", type=String, default="css_mle", description="Method"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -2107,7 +2104,7 @@ using Test
                 Option("lags"; short="p", type=Int, default=2, description="Lags"),
                 Option("rank"; short="r", type=String, default="auto", description="Rank"),
                 Option("deterministic"; type=String, default="constant", description="Deterministic"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -2117,7 +2114,7 @@ using Test
             args=[Argument("data"; description="Data file")],
             options=[
                 Option("nfactors"; short="r", type=Int, default=nothing, description="Factors"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -2129,7 +2126,7 @@ using Test
                 Option("nfactors"; short="r", type=Int, default=nothing, description="Factors"),
                 Option("factor-lags"; short="p", type=Int, default=1, description="Factor lags"),
                 Option("method"; type=String, default="twostep", description="Method"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -2140,7 +2137,7 @@ using Test
             options=[
                 Option("nfactors"; short="r", type=Int, default=nothing, description="Factors"),
                 Option("dynamic-rank"; short="q", type=Int, default=nothing, description="Dynamic rank"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -2151,7 +2148,7 @@ using Test
             options=[
                 Option("column"; short="c", type=Int, default=1, description="Column"),
                 Option("q"; type=Int, default=1, description="ARCH order"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -2163,7 +2160,7 @@ using Test
                 Option("column"; short="c", type=Int, default=1, description="Column"),
                 Option("p"; type=Int, default=1, description="GARCH order"),
                 Option("q"; type=Int, default=1, description="ARCH order"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -2175,7 +2172,7 @@ using Test
                 Option("column"; short="c", type=Int, default=1, description="Column"),
                 Option("p"; type=Int, default=1, description="EGARCH order"),
                 Option("q"; type=Int, default=1, description="ARCH order"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -2187,7 +2184,7 @@ using Test
                 Option("column"; short="c", type=Int, default=1, description="Column"),
                 Option("p"; type=Int, default=1, description="GJR-GARCH order"),
                 Option("q"; type=Int, default=1, description="ARCH order"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -2198,7 +2195,7 @@ using Test
             options=[
                 Option("column"; short="c", type=Int, default=1, description="Column"),
                 Option("draws"; short="n", type=Int, default=5000, description="Draws"),
-                Option("from-tag"; type=String, default="", description="From tag"),
+
                 Option("output"; short="o", type=String, default="", description="Output"),
                 Option("format"; short="f", type=String, default="table", description="Format"),
             ],
@@ -2222,18 +2219,18 @@ using Test
         end
 
         # Option counts
-        @test length(residuals_node.subcmds["var"].options) == 4
-        @test length(residuals_node.subcmds["bvar"].options) == 7
-        @test length(residuals_node.subcmds["arima"].options) == 8
-        @test length(residuals_node.subcmds["vecm"].options) == 6
-        @test length(residuals_node.subcmds["static"].options) == 4
-        @test length(residuals_node.subcmds["dynamic"].options) == 6
-        @test length(residuals_node.subcmds["gdfm"].options) == 5
-        @test length(residuals_node.subcmds["arch"].options) == 5
-        @test length(residuals_node.subcmds["garch"].options) == 6
-        @test length(residuals_node.subcmds["egarch"].options) == 6
-        @test length(residuals_node.subcmds["gjr_garch"].options) == 6
-        @test length(residuals_node.subcmds["sv"].options) == 5
+        @test length(residuals_node.subcmds["var"].options) == 3
+        @test length(residuals_node.subcmds["bvar"].options) == 6
+        @test length(residuals_node.subcmds["arima"].options) == 7
+        @test length(residuals_node.subcmds["vecm"].options) == 5
+        @test length(residuals_node.subcmds["static"].options) == 3
+        @test length(residuals_node.subcmds["dynamic"].options) == 5
+        @test length(residuals_node.subcmds["gdfm"].options) == 4
+        @test length(residuals_node.subcmds["arch"].options) == 4
+        @test length(residuals_node.subcmds["garch"].options) == 5
+        @test length(residuals_node.subcmds["egarch"].options) == 5
+        @test length(residuals_node.subcmds["gjr_garch"].options) == 5
+        @test length(residuals_node.subcmds["sv"].options) == 4
 
         # Help text
         buf = IOBuffer()
@@ -2532,200 +2529,6 @@ using Test
         @test called_with[][:name] == "fred_md"
     end
 
-    @testset "List, rename, project structure (action-first)" begin
-        handler = (; kwargs...) -> kwargs
-
-        # -- List node --
-        list_models = LeafCommand("models", handler;
-            args=Argument[],
-            options=[
-                Option("type"; short="t", type=String, default="", description="Type filter"),
-                Option("format"; short="f", type=String, default="table", description="Format"),
-                Option("output"; short="o", type=String, default="", description="Output"),
-            ],
-            description="List stored models")
-
-        list_results = LeafCommand("results", handler;
-            args=Argument[],
-            options=[
-                Option("type"; short="t", type=String, default="", description="Type filter"),
-                Option("format"; short="f", type=String, default="table", description="Format"),
-                Option("output"; short="o", type=String, default="", description="Output"),
-            ],
-            description="List stored results")
-
-        list_node = NodeCommand("list",
-            Dict{String,Union{NodeCommand,LeafCommand}}(
-                "models" => list_models, "results" => list_results),
-            "List stored models and results")
-
-        @test list_node.name == "list"
-        @test length(list_node.subcmds) == 2
-        @test haskey(list_node.subcmds, "models")
-        @test haskey(list_node.subcmds, "results")
-        @test list_node.subcmds["models"] isa LeafCommand
-        @test list_node.subcmds["results"] isa LeafCommand
-        @test length(list_node.subcmds["models"].options) == 3
-        @test length(list_node.subcmds["results"].options) == 3
-
-        # Help text
-        buf = IOBuffer()
-        print_help(buf, list_node; prog="friedman list")
-        help_text = String(take!(buf))
-        @test contains(help_text, "models")
-        @test contains(help_text, "results")
-
-        # Arg binding: list models --type=var
-        parsed = tokenize(["--type=var", "--format=json"])
-        bound = bind_args(parsed, list_models)
-        @test bound.type == "var"
-        @test bound.format == "json"
-
-        # -- Rename leaf --
-        rename_leaf = LeafCommand("rename", handler;
-            args=[
-                Argument("old_tag"; description="Current tag name"),
-                Argument("new_tag"; description="New tag name"),
-            ],
-            options=Option[],
-            description="Rename a stored tag")
-
-        @test rename_leaf.name == "rename"
-        @test length(rename_leaf.args) == 2
-        @test rename_leaf.args[1].name == "old_tag"
-        @test rename_leaf.args[2].name == "new_tag"
-        @test isempty(rename_leaf.options)
-
-        # Help text
-        buf = IOBuffer()
-        print_help(buf, rename_leaf; prog="friedman rename")
-        help_text = String(take!(buf))
-        @test contains(help_text, "old_tag")
-        @test contains(help_text, "new_tag")
-
-        # Arg binding: rename var001 my_baseline
-        parsed = tokenize(["var001", "my_baseline"])
-        bound = bind_args(parsed, rename_leaf)
-        @test bound.old_tag == "var001"
-        @test bound.new_tag == "my_baseline"
-
-        # -- Project node --
-        project_list = LeafCommand("list", handler;
-            args=Argument[],
-            options=[
-                Option("format"; short="f", type=String, default="table", description="Format"),
-                Option("output"; short="o", type=String, default="", description="Output"),
-            ],
-            description="List projects")
-
-        project_show = LeafCommand("show", handler;
-            args=Argument[],
-            options=Option[],
-            description="Show current project")
-
-        project_node = NodeCommand("project",
-            Dict{String,Union{NodeCommand,LeafCommand}}(
-                "list" => project_list, "show" => project_show),
-            "Project management")
-
-        @test project_node.name == "project"
-        @test length(project_node.subcmds) == 2
-        @test haskey(project_node.subcmds, "list")
-        @test haskey(project_node.subcmds, "show")
-        @test project_node.subcmds["list"] isa LeafCommand
-        @test project_node.subcmds["show"] isa LeafCommand
-        @test length(project_node.subcmds["list"].options) == 2
-        @test isempty(project_node.subcmds["show"].options)
-
-        # Help text
-        buf = IOBuffer()
-        print_help(buf, project_node; prog="friedman project")
-        help_text = String(take!(buf))
-        @test contains(help_text, "list")
-        @test contains(help_text, "show")
-
-        # Dispatch: friedman list models --type=var
-        called_with = Ref{Any}(nothing)
-        dispatch_handler = (; kwargs...) -> begin called_with[] = Dict(kwargs) end
-
-        list_models_d = LeafCommand("models", dispatch_handler;
-            args=Argument[],
-            options=[Option("type"; short="t", type=String, default="", description="Filter")],
-            description="Models")
-        list_d = NodeCommand("list",
-            Dict{String,Union{NodeCommand,LeafCommand}}("models" => list_models_d),
-            "List")
-        dispatch_node(list_d, ["models", "--type=var"]; prog="friedman list")
-        @test called_with[][:type] == "var"
-
-        # Dispatch: friedman rename var001 baseline
-        rename_d = LeafCommand("rename", dispatch_handler;
-            args=[
-                Argument("old_tag"; description="Old tag"),
-                Argument("new_tag"; description="New tag"),
-            ],
-            description="Rename")
-        dispatch_leaf(rename_d, ["var001", "baseline"]; prog="friedman rename")
-        @test called_with[][:old_tag] == "var001"
-        @test called_with[][:new_tag] == "baseline"
-    end
-
-    @testset "Tag resolution" begin
-        # Test the regex pattern used by resolve_stored_tags
-        tag_pattern = r"^([a-z]+)(\d{3,})$"
-
-        # Valid tag patterns
-        @test !isnothing(match(tag_pattern, "var001"))
-        @test !isnothing(match(tag_pattern, "bvar002"))
-        @test !isnothing(match(tag_pattern, "irf123"))
-        @test !isnothing(match(tag_pattern, "forecast0001"))
-        @test !isnothing(match(tag_pattern, "sv999"))
-        @test !isnothing(match(tag_pattern, "pvar001"))
-
-        # Extract components
-        m = match(tag_pattern, "pvar001")
-        @test m.captures[1] == "pvar"
-        @test m.captures[2] == "001"
-
-        m = match(tag_pattern, "var001")
-        @test m.captures[1] == "var"
-        @test m.captures[2] == "001"
-
-        m = match(tag_pattern, "bvar042")
-        @test m.captures[1] == "bvar"
-        @test m.captures[2] == "042"
-
-        # Invalid tag patterns (should NOT match)
-        @test isnothing(match(tag_pattern, "data.csv"))
-        @test isnothing(match(tag_pattern, "var"))
-        @test isnothing(match(tag_pattern, "abc"))
-        @test isnothing(match(tag_pattern, "123"))
-        @test isnothing(match(tag_pattern, "var01"))  # only 2 digits, needs 3+
-        @test isnothing(match(tag_pattern, "VAR001"))  # uppercase
-        @test isnothing(match(tag_pattern, "var_001"))  # underscore
-        @test isnothing(match(tag_pattern, "my-model"))  # hyphen
-
-        # Test resolve logic conceptually (without storage)
-        # resolve_stored_tags only applies to irf/fevd/hd/forecast/predict/residuals commands
-        function _test_should_resolve(args::Vector{String})
-            length(args) < 2 && return false
-            cmd = args[1]
-            cmd in ("irf", "fevd", "hd", "forecast", "predict", "residuals") || return false
-            m = match(tag_pattern, args[2])
-            return !isnothing(m)
-        end
-
-        @test _test_should_resolve(["irf", "var001", "--shock=2"])
-        @test _test_should_resolve(["forecast", "bvar003"])
-        @test _test_should_resolve(["fevd", "lp012"])
-        @test _test_should_resolve(["hd", "var100"])
-        @test _test_should_resolve(["predict", "var001"])
-        @test _test_should_resolve(["residuals", "bvar002"])
-        @test !_test_should_resolve(["irf", "var", "data.csv"])
-        @test !_test_should_resolve(["estimate", "var001"])  # estimate not in resolve set
-        @test !_test_should_resolve(["irf"])  # too few args
-        @test !_test_should_resolve(["irf", "data.csv"])  # not a tag pattern
-    end
 end
 
 # ──────────────────────────────────────────────────────────────
