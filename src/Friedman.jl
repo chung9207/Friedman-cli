@@ -16,7 +16,7 @@
 
 module Friedman
 
-using CSV, DataFrames, PrettyTables, JSON3, TOML, Dates
+using CSV, DataFrames, PrettyTables, JSON3, TOML
 using MacroEconometricModels
 using LinearAlgebra: eigvals, diag, I, svd
 using Statistics: mean, median, var

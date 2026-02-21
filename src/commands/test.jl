@@ -956,6 +956,11 @@ function _test_lr(; data1::String, data2::String, lags1=nothing, lags2=nothing,
     m1, _, _, p1 = _load_and_estimate_var(data1, lags1)
     m2, _, _, p2 = _load_and_estimate_var(data2, lags2)
 
+    if p1 == p2 && data1 == data2
+        printstyled("  Warning: Both models have the same specification (p=$p1) on the same data.\n"; color=:yellow)
+        printstyled("  Use --lags1 and --lags2 to specify different restricted/unrestricted models.\n"; color=:yellow)
+    end
+
     println("Likelihood Ratio Test: restricted (p=$p1) vs unrestricted (p=$p2)")
     println()
 
@@ -981,6 +986,11 @@ function _test_lm(; data1::String, data2::String, lags1=nothing, lags2=nothing,
                     format::String="table", output::String="")
     m1, _, _, p1 = _load_and_estimate_var(data1, lags1)
     m2, _, _, p2 = _load_and_estimate_var(data2, lags2)
+
+    if p1 == p2 && data1 == data2
+        printstyled("  Warning: Both models have the same specification (p=$p1) on the same data.\n"; color=:yellow)
+        printstyled("  Use --lags1 and --lags2 to specify different restricted/unrestricted models.\n"; color=:yellow)
+    end
 
     println("Lagrange Multiplier Test: restricted (p=$p1) vs unrestricted (p=$p2)")
     println()
