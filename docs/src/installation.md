@@ -17,7 +17,7 @@ Pkg.add(url="https://github.com/chung9207/MacroEconometricModels.jl.git")
 '
 ```
 
-This installs `MacroEconometricModels.jl` directly from GitHub along with all other dependencies (`CSV`, `DataFrames`, `PrettyTables`, `JSON3`, `BSON`).
+This installs `MacroEconometricModels.jl` directly from GitHub along with all other dependencies (`CSV`, `DataFrames`, `PrettyTables`, `JSON3`).
 
 ## Running
 

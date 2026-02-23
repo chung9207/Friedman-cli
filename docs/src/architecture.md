@@ -1,6 +1,6 @@
 # Architecture
 
-Friedman-cli is a ~9,400 line Julia CLI application with a custom command-line framework adapted from Comonicon.jl.
+Friedman-cli is a Julia CLI application with a custom command-line framework adapted from Comonicon.jl.
 
 ## Execution Flow
 
@@ -8,11 +8,8 @@ Friedman-cli is a ~9,400 line Julia CLI application with a custom command-line f
 bin/friedman ARGS
   → Pkg.activate(project_dir)
   → Friedman.main(ARGS)
-    → init_settings!()                     # ensure ~/.friedman/ exists
-    → resolve_stored_tags(args)            # tag resolution: ["irf", "var001"]
-                                           #   → ["irf", "var", "--from-tag=var001"]
     → build_app()                          # constructs Entry with full command tree
-      → register_estimate_commands!()      # 13 register functions
+      → register_estimate_commands!()      # 11 register functions, one per top-level command
       → register_test_commands!()
       → register_irf_commands!()
       → register_fevd_commands!()
@@ -22,9 +19,7 @@ bin/friedman ARGS
       → register_residuals_commands!()
       → register_filter_commands!()
       → register_data_commands!()
-      → register_list_commands!()
-      → register_rename_commands!()
-      → register_project_commands!()
+      → register_nowcast_commands!()
     → dispatch(entry, args)
       → dispatch_node()                    # walks NodeCommand tree by matching tokens
       → dispatch_leaf()                    # tokenize → bind_args → leaf.handler(; bound...)
@@ -39,8 +34,7 @@ CSV file → load_data(path)                 # → DataFrame, validates exists &
                 ↓
     MacroEconometricModels.jl functions     # estimate_var, irf, forecast, etc.
                 ↓
-    Results → storage_save_auto!(prefix, data)   # BSON auto-tagging
-           → DataFrame                     # command builds result DataFrame
+    Results → DataFrame                     # command builds result DataFrame
            → output_result(df; format, output, title)
                 ↓
               :table → PrettyTables (center-aligned)
@@ -87,34 +81,6 @@ Then `bind_args()` maps parsed tokens to the `LeafCommand`'s declared arguments,
 
 Unknown subcommands print an error and show help. `--help` at any level prints context-appropriate help.
 
-## Storage System
-
-BSON-based model persistence in `.friedmanlog.bson`:
-
-- **`storage_save_auto!(prefix, data, meta)`**: Auto-generate tag (`var001`, `var002`, ...) and save
-- **`storage_save!(tag, prefix, data, meta)`**: Save under explicit tag
-- **`storage_load(tag)`**: Load stored entry by tag
-- **`storage_list(; type_filter)`**: List entries, optionally filtered
-- **`storage_rename!(old, new)`**: Rename a tag
-- **`serialize_model(model)`**: Convert model struct to Dict of primitives for BSON
-
-### Tag Resolution
-
-`resolve_stored_tags()` runs before dispatch as a pre-processing step:
-
-1. Checks if `args[2]` looks like a stored tag (e.g., `var001`, `bvar003`)
-2. Loads the tag's metadata to determine the model type
-3. Rewrites args: `["irf", "var001"]` → `["irf", "var", "--from-tag=var001"]`
-
-This enables the shorthand `friedman irf var001` syntax.
-
-## Settings
-
-Global settings in `~/.friedman/` (overridable via `FRIEDMAN_HOME`):
-
-- **`settings.json`**: User preferences
-- **`projects.json`**: Project registry (auto-populated on first `storage_save!`)
-
 ## Module Structure
 
 ```
@@ -127,43 +93,37 @@ src/
     help.jl               # print_help() with colored, column-aligned output
   io.jl                   # load_data, df_to_matrix, variable_names, output_result
   config.jl               # TOML loader for priors, identification, GMM, non-Gaussian
-  storage.jl              # BSON storage with auto-tagging
-  settings.jl             # Global ~/.friedman/ management
   commands/
-    shared.jl             # ID_METHOD_MAP, shared estimation helpers
+    shared.jl             # ID_METHOD_MAP, shared estimation/output helpers
     estimate.jl           # 17 estimation subcommands
     test.jl               # 16+ test subcommands (+ nested var 2, pvar 4)
     irf.jl                # 5 IRF subcommands
     fevd.jl               # 5 FEVD subcommands
     hd.jl                 # 4 HD subcommands
     forecast.jl           # 13 forecast subcommands
-    predict.jl            # 4 predict subcommands
-    residuals.jl          # 4 residuals subcommands
+    predict.jl            # 12 predict subcommands
+    residuals.jl          # 12 residuals subcommands
     filter.jl             # 5 filter subcommands
-    data.jl               # 8 data subcommands
-    list.jl               # 2 list subcommands
-    rename.jl             # 1 rename command
-    project.jl            # 2 project subcommands
+    data.jl               # 9 data subcommands
+    nowcast.jl            # 5 nowcast subcommands
 ```
 
 ## Handler Conventions
 
-- **Naming**: `_action_model(; kwargs...)` (e.g., `_estimate_var`, `_irf_bvar`, `_forecast_arch`)
+- **Naming**: `_action_model(; kwargs...)` (e.g., `_estimate_var`, `_irf_bvar`, `_forecast_arch`, `_nowcast_dfm`)
 - **Signature**: keyword arguments match declared `Option` names (with hyphen-to-underscore)
-- **Pattern**: load data → call library → build DataFrame → `output_result()` → `storage_save_auto!()`
+- **Pattern**: load data → call library → build DataFrame → `output_result()`
 - **Registration**: each command file defines `register_X_commands!()` returning a `NodeCommand`
 
 ## Dependencies
 
 | Package | Purpose |
 |---------|---------|
-| `MacroEconometricModels` | Core econometric library (229 exports) |
+| `MacroEconometricModels` | Core econometric library |
 | `CSV` | Data loading |
 | `DataFrames` | Tabular data manipulation |
 | `PrettyTables` | Terminal table formatting |
 | `JSON3` | JSON output format |
-| `BSON` | Model storage serialization |
-| `Dates` | Timestamps for storage entries |
 | `TOML` (stdlib) | Configuration file parsing |
 | `LinearAlgebra` (stdlib) | Matrix operations |
 | `Statistics` (stdlib) | Mean, median calculations |

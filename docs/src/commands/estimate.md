@@ -2,8 +2,6 @@
 
 Estimate econometric models. 17 subcommands covering VAR, BVAR, VECM, Panel VAR, local projections, ARIMA, GMM, factor models, volatility models, and non-Gaussian SVAR identification.
 
-All estimation commands auto-save results with tags (e.g., `var001`, `bvar001`).
-
 ## estimate var
 
 Estimate a VAR(p) model via OLS. Lag order is auto-selected via AIC when `--lags` is omitted.
