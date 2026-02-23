@@ -1,15 +1,15 @@
 # forecast
 
-Compute forecasts. 13 subcommands covering VAR, BVAR, LP, ARIMA, factor models, volatility models, and VECM. All support `--from-tag` for stored model reuse.
+Compute forecasts. 13 subcommands covering VAR, BVAR, LP, ARIMA, factor models, volatility models, and VECM.
 
 ## forecast var
 
-H-step ahead VAR point forecasts with analytical confidence intervals.
+H-step ahead VAR point forecasts with analytical or bootstrap confidence intervals.
 
 ```bash
 friedman forecast var data.csv --horizons=12 --confidence=0.95
 friedman forecast var data.csv --lags=4 --horizons=24
-friedman forecast var001    # from stored tag
+friedman forecast var data.csv --ci-method=bootstrap
 ```
 
 | Option | Short | Type | Default | Description |
@@ -17,9 +17,11 @@ friedman forecast var001    # from stored tag
 | `--lags` | `-p` | Int | auto | Lag order |
 | `--horizons` | `-h` | Int | 12 | Forecast horizon |
 | `--confidence` | | Float64 | 0.95 | Confidence level for intervals |
-| `--from-tag` | | String | | Load model from stored tag |
+| `--ci-method` | | String | `analytical` | `analytical`, `bootstrap` |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
 
 **Output:** Per-variable forecasts with lower/upper bounds and standard errors.
 
@@ -39,7 +41,6 @@ friedman forecast bvar data.csv --sampler=gibbs --config=prior.toml
 | `--draws` | `-n` | Int | 2000 | MCMC draws |
 | `--sampler` | | String | `direct` | `direct`, `gibbs` |
 | `--config` | | String | | TOML config for prior |
-| `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
 
@@ -62,9 +63,10 @@ friedman forecast lp data.csv --ci-method=bootstrap --n-boot=500
 | `--ci-method` | | String | `analytical` | `analytical`, `bootstrap`, `none` |
 | `--conf-level` | | Float64 | 0.95 | Confidence level |
 | `--n-boot` | | Int | 500 | Bootstrap replications |
-| `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
 
 ## forecast arima
 
@@ -89,9 +91,10 @@ friedman forecast arima data.csv --column=2 --criterion=aic
 | `--horizons` | `-h` | Int | 12 | Forecast horizon |
 | `--confidence` | | Float64 | 0.95 | Confidence level |
 | `--method` | `-m` | String | `css_mle` | `ols`, `css`, `mle`, `css_mle` |
-| `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
 
 ## forecast static
 
@@ -108,9 +111,10 @@ friedman forecast static data.csv --nfactors=3 --ci-method=bootstrap
 | `--horizons` | `-h` | Int | 12 | Forecast horizon |
 | `--ci-method` | | String | `none` | `none`, `bootstrap`, `parametric` |
 | `--conf-level` | | Float64 | 0.95 | Confidence level |
-| `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
 
 ## forecast dynamic
 
@@ -126,9 +130,10 @@ friedman forecast dynamic data.csv --nfactors=2 --factor-lags=1 --horizons=12
 | `--horizons` | `-h` | Int | 12 | Forecast horizon |
 | `--factor-lags` | `-p` | Int | 1 | Factor VAR lag order |
 | `--method` | | String | `twostep` | `twostep`, `em` |
-| `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
 
 ## forecast gdfm
 
@@ -143,9 +148,10 @@ friedman forecast gdfm data.csv --dynamic-rank=2 --horizons=12
 | `--nfactors` | `-r` | Int | auto | Number of static factors |
 | `--dynamic-rank` | `-q` | Int | auto | Dynamic rank |
 | `--horizons` | `-h` | Int | 12 | Forecast horizon |
-| `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
 
 ## Volatility Model Forecasts
 
@@ -162,9 +168,10 @@ friedman forecast arch data.csv --column=1 --q=1 --horizons=12
 | `--column` | `-c` | Int | 1 | Column index |
 | `--q` | | Int | 1 | ARCH order |
 | `--horizons` | `-h` | Int | 12 | Forecast horizon |
-| `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
 
 ### forecast garch
 
@@ -178,9 +185,10 @@ friedman forecast garch data.csv --column=1 --p=1 --q=1 --horizons=12
 | `--p` | | Int | 1 | GARCH order |
 | `--q` | | Int | 1 | ARCH order |
 | `--horizons` | `-h` | Int | 12 | Forecast horizon |
-| `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
 
 ### forecast egarch
 
@@ -194,9 +202,10 @@ friedman forecast egarch data.csv --column=1 --p=1 --q=1 --horizons=12
 | `--p` | | Int | 1 | EGARCH order |
 | `--q` | | Int | 1 | ARCH order |
 | `--horizons` | `-h` | Int | 12 | Forecast horizon |
-| `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
 
 ### forecast gjr\_garch
 
@@ -210,9 +219,10 @@ friedman forecast gjr_garch data.csv --column=1 --p=1 --q=1 --horizons=12
 | `--p` | | Int | 1 | GARCH order |
 | `--q` | | Int | 1 | ARCH order |
 | `--horizons` | `-h` | Int | 12 | Forecast horizon |
-| `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
 
 ### forecast sv
 
@@ -225,9 +235,10 @@ friedman forecast sv data.csv --column=1 --draws=5000 --horizons=12
 | `--column` | `-c` | Int | 1 | Column index |
 | `--draws` | `-n` | Int | 5000 | MCMC draws |
 | `--horizons` | `-h` | Int | 12 | Forecast horizon |
-| `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
 
 ## forecast vecm
 
@@ -237,7 +248,6 @@ VECM forecasts with bootstrap confidence intervals.
 friedman forecast vecm data.csv --horizons=12
 friedman forecast vecm data.csv --rank=2 --deterministic=constant --lags=4
 friedman forecast vecm data.csv --confidence=0.90 --replications=1000
-friedman forecast vecm001    # from stored tag
 ```
 
 | Option | Short | Type | Default | Description |
@@ -248,8 +258,9 @@ friedman forecast vecm001    # from stored tag
 | `--deterministic` | | String | `constant` | `none`, `constant`, `trend` |
 | `--confidence` | | Float64 | 0.95 | Confidence level |
 | `--replications` | | Int | 500 | Bootstrap replications |
-| `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
 
 **Output:** Per-variable forecasts with bootstrap confidence bands.

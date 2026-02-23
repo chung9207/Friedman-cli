@@ -22,13 +22,12 @@ friedman
 ├── residuals    var | bvar | arima | vecm | static | dynamic | gdfm |
 │                arch | garch | egarch | gjr_garch | sv
 ├── filter       hp | hamilton | bn | bk | bhp
-├── data         list | load | describe | diagnose | fix | transform | filter | validate
-├── list         models | results
-├── rename       (renames stored tags)
-└── project      list | show
+├── data         list | load | describe | diagnose | fix | transform | filter |
+│                validate | balance
+└── nowcast      dfm | bvar | bridge | news | forecast
 ```
 
-**Total: 13 top-level commands, ~97 subcommands.**
+**Total: 11 top-level commands, ~103 subcommands.**
 
 ## Common Options
 
@@ -63,21 +62,6 @@ friedman estimate var --help     # detailed var estimation help
 friedman irf var --help          # IRF options
 ```
 
-## Tag Resolution
-
-Friedman automatically stores models with auto-generated tags (`var001`, `bvar001`, ...). You can use these tags directly as subcommand arguments for post-estimation commands:
-
-```bash
-# These are equivalent:
-friedman irf var001
-friedman irf var data.csv --from-tag=var001
-```
-
-The tag resolution system (`resolve_stored_tags`) runs before dispatch and rewrites the arguments:
-- `["irf", "var001"]` becomes `["irf", "var", "--from-tag=var001"]`
-
-This works for `irf`, `fevd`, `hd`, `forecast`, `predict`, and `residuals` commands.
-
 ## Option Syntax
 
 The parser supports several formats for passing options:
@@ -110,4 +94,4 @@ friedman estimate var -- --data-that-starts-with-dash.csv
 
 ## Hyphen-to-Underscore Mapping
 
-CLI option names use hyphens (`--from-tag`, `--control-lags`) which are automatically converted to underscores (`from_tag`, `control_lags`) when passed to handler functions.
+CLI option names use hyphens (`--control-lags`, `--monthly-vars`) which are automatically converted to underscores (`control_lags`, `monthly_vars`) when passed to handler functions.

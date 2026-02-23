@@ -21,13 +21,14 @@ Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconomet
 | **Forecasting** | VAR, BVAR, LP, ARIMA, factor models, volatility models, VECM | `forecast var`, `forecast arima`, ... |
 | **Predict / Residuals** | In-sample fitted values and model residuals | `predict var`, `residuals var`, ... |
 | **Filters** | HP, Hamilton, Beveridge-Nelson, Baxter-King, Boosted HP | `filter hp`, `filter hamilton`, ... |
-| **Data Management** | Example datasets, diagnostics, transformations, validation | `data list`, `data load`, `data describe`, ... |
+| **Nowcasting** | DFM, BVAR, bridge equations, news decomposition | `nowcast dfm`, `nowcast bvar`, ... |
+| **Data Management** | Example datasets, diagnostics, transformations, validation, balancing | `data list`, `data load`, `data describe`, ... |
 | **Unit Root Tests** | ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron | `test adf`, `test kpss`, ... |
 | **Cointegration** | Johansen trace and max eigenvalue | `test johansen` |
 | **Diagnostics** | Normality, identifiability, ARCH-LM, Ljung-Box, heteroskedasticity | `test normality`, ... |
 | **Model Comparison** | Granger causality, LR test, LM test | `test granger`, `test lr`, `test lm` |
 
-**13 top-level commands, ~97 subcommands.** Action-first CLI: commands organized by action (`estimate`, `irf`, `forecast`, ...) rather than by model type.
+**11 top-level commands, ~103 subcommands.** Action-first CLI: commands organized by action (`estimate`, `irf`, `forecast`, ...) rather than by model type.
 
 ## Quick Start
 
@@ -52,18 +53,12 @@ julia --project bin/friedman forecast var data.csv --horizons=12
 
 # Run unit root test
 julia --project bin/friedman test adf data.csv --column=1
+
+# Nowcast GDP
+julia --project bin/friedman nowcast dfm mixed_freq.csv --factors=3
 ```
 
 All commands support `--format=table|csv|json` and `--output=file.csv` for flexible output.
-
-Models are automatically saved with tags (`var001`, `bvar001`, ...) and can be reused in post-estimation:
-
-```bash
-julia --project bin/friedman estimate var data.csv --lags=2
-#   Saved as: var001
-
-julia --project bin/friedman irf var001    # uses stored model
-```
 
 ## Contents
 
@@ -77,7 +72,10 @@ Pages = [
     "commands/fevd.md",
     "commands/hd.md",
     "commands/forecast.md",
-    "commands/storage.md",
+    "commands/predict_residuals.md",
+    "commands/filter.md",
+    "commands/data.md",
+    "commands/nowcast.md",
     "configuration.md",
     "api.md",
     "architecture.md",

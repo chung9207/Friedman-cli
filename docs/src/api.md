@@ -66,40 +66,12 @@ Friedman.get_nongaussian
 Friedman.get_uhlig_params
 ```
 
-## Storage
-
-```@docs
-Friedman._storage_path
-Friedman._load_storage
-Friedman._save_storage!
-Friedman.auto_tag
-Friedman.serialize_model
-Friedman.storage_save!
-Friedman.storage_save_auto!
-Friedman.storage_load
-Friedman.storage_list
-Friedman.storage_rename!
-Friedman.resolve_stored_tags
-```
-
-## Settings
-
-```@docs
-Friedman.friedman_home
-Friedman.ensure_friedman_home!
-Friedman.get_username
-Friedman.init_settings!
-Friedman.load_settings
-Friedman.save_settings!
-Friedman.load_projects
-Friedman.save_projects!
-Friedman.register_project!
-```
-
 ## Shared Utilities
 
 ```@docs
 Friedman.ID_METHOD_MAP
+Friedman.load_multivariate_data
+Friedman.load_univariate_series
 Friedman._load_and_estimate_var
 Friedman._load_and_estimate_bvar
 Friedman._load_and_estimate_vecm
@@ -109,4 +81,6 @@ Friedman._build_check_func
 Friedman._build_identification_kwargs
 Friedman._load_and_structural_lp
 Friedman._var_forecast_point
+Friedman._maybe_plot
+Friedman.load_panel_data
 ```

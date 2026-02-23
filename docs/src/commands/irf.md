@@ -1,6 +1,6 @@
 # irf
 
-Compute impulse response functions. 5 subcommands: `var`, `bvar`, `lp`, `vecm`, `pvar`. All support `--from-tag` to reuse stored models.
+Compute impulse response functions. 5 subcommands: `var`, `bvar`, `lp`, `vecm`, `pvar`.
 
 ## irf var
 
@@ -29,8 +29,14 @@ friedman irf var data.csv --id=jade
 # With bootstrap confidence intervals
 friedman irf var data.csv --shock=1 --ci=bootstrap --replications=1000
 
-# From stored model tag
-friedman irf var001
+# Cumulative IRFs (for differenced data)
+friedman irf var data.csv --shock=1 --cumulative
+
+# Full identified set for sign restrictions
+friedman irf var data.csv --id=sign --config=sign.toml --identified-set
+
+# Filter non-stationary draws
+friedman irf var data.csv --shock=1 --ci=bootstrap --stationary-only
 ```
 
 | Option | Short | Type | Default | Description |
@@ -42,9 +48,13 @@ friedman irf var001
 | `--ci` | | String | `bootstrap` | `none`, `bootstrap`, `theoretical` |
 | `--replications` | | Int | 1000 | Bootstrap replications |
 | `--config` | | String | | TOML config for identification restrictions |
-| `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
+| `--cumulative` | | Flag | | Compute cumulative IRFs (for differenced data) |
+| `--identified-set` | | Flag | | Return full identified set (sign restrictions only) |
+| `--stationary-only` | | Flag | | Filter non-stationary bootstrap draws |
 
 ### Identification Methods
 
@@ -78,6 +88,7 @@ Bayesian IRFs with 68% credible intervals (16th/50th/84th percentiles).
 friedman irf bvar data.csv --shock=1 --horizons=20
 friedman irf bvar data.csv --draws=5000 --sampler=gibbs --config=prior.toml
 friedman irf bvar data.csv --id=sign --config=sign_restrictions.toml
+friedman irf bvar data.csv --shock=1 --cumulative
 ```
 
 | Option | Short | Type | Default | Description |
@@ -89,9 +100,11 @@ friedman irf bvar data.csv --id=sign --config=sign_restrictions.toml
 | `--draws` | `-n` | Int | 2000 | MCMC draws |
 | `--sampler` | | String | `direct` | `direct`, `gibbs` |
 | `--config` | | String | | TOML config for identification/prior |
-| `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
+| `--cumulative` | | Flag | | Compute cumulative IRFs (for differenced data) |
 
 **Output:** Median IRFs with 16th/84th percentile bands per variable.
 
@@ -108,6 +121,9 @@ friedman irf lp data.csv --shocks=1,2,3 --id=cholesky --horizons=30
 
 # With bootstrap CI
 friedman irf lp data.csv --id=cholesky --ci=bootstrap --replications=500
+
+# Cumulative IRFs
+friedman irf lp data.csv --id=cholesky --shock=1 --cumulative
 ```
 
 | Option | Short | Type | Default | Description |
@@ -123,9 +139,11 @@ friedman irf lp data.csv --id=cholesky --ci=bootstrap --replications=500
 | `--conf-level` | | Float64 | 0.95 | Confidence level |
 | `--vcov` | | String | `newey_west` | `newey_west`, `white`, `driscoll_kraay` |
 | `--config` | | String | | TOML config for sign/narrative restrictions |
-| `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
+| `--cumulative` | | Flag | | Compute cumulative IRFs (for differenced data) |
 
 ## irf vecm
 
@@ -135,23 +153,23 @@ IRFs for Vector Error Correction Models. The VECM is converted to its VAR repres
 friedman irf vecm data.csv --shock=1 --horizons=20
 friedman irf vecm data.csv --rank=2 --deterministic=constant --lags=4
 friedman irf vecm data.csv --id=cholesky --ci=bootstrap --replications=500
-friedman irf vecm001    # from stored tag
 ```
 
 | Option | Short | Type | Default | Description |
 |--------|-------|------|---------|-------------|
-| `--lags` | `-p` | Int | auto | Lag order |
+| `--lags` | `-p` | Int | 2 | Lag order (in levels) |
 | `--shock` | | Int | 1 | Shock variable index (1-based) |
 | `--horizons` | `-h` | Int | 20 | IRF horizon |
-| `--rank` | `-r` | Int | auto | Cointegration rank (auto via Johansen) |
+| `--rank` | `-r` | String | `auto` | Cointegration rank (auto via Johansen, or explicit) |
 | `--deterministic` | | String | `constant` | `none`, `constant`, `trend` |
 | `--id` | | String | `cholesky` | Identification method |
-| `--ci` | | String | `bootstrap` | `none`, `bootstrap` |
+| `--ci` | | String | `bootstrap` | `none`, `bootstrap`, `theoretical` |
 | `--replications` | | Int | 1000 | Bootstrap replications |
 | `--config` | | String | | TOML config for identification restrictions |
-| `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
 
 **Output:** IRFs per variable with confidence bands.
 
@@ -163,7 +181,6 @@ Panel VAR impulse response functions. Supports orthogonalized (OIRF) and general
 friedman irf pvar data.csv --id-col=country --time-col=year --horizons=20
 friedman irf pvar data.csv --irf-type=girf --horizons=12
 friedman irf pvar data.csv --ci=bootstrap --replications=500
-friedman irf pvar001    # from stored tag
 ```
 
 | Option | Short | Type | Default | Description |
@@ -177,8 +194,9 @@ friedman irf pvar001    # from stored tag
 | `--ci` | | String | `bootstrap` | `none`, `bootstrap` |
 | `--replications` | | Int | 500 | Bootstrap replications |
 | `--conf-level` | | Float64 | 0.95 | Confidence level |
-| `--from-tag` | | String | | Load model from stored tag |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
 
 **Output:** IRFs per variable with bootstrap confidence bands.

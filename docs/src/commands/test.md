@@ -260,16 +260,22 @@ friedman test granger data.csv --all --lags=4
 
 ### test lr
 
-Likelihood ratio test comparing two nested models by tag.
+Likelihood ratio test comparing two nested VAR models estimated from separate datasets.
 
 ```bash
-friedman test lr --restricted=var001 --unrestricted=var002
+friedman test lr restricted.csv unrestricted.csv
+friedman test lr data_p2.csv data_p4.csv --lags1=2 --lags2=4
 ```
+
+| Argument | Description |
+|----------|-------------|
+| `<data1>` | Path to CSV for restricted model |
+| `<data2>` | Path to CSV for unrestricted model |
 
 | Option | Short | Type | Default | Description |
 |--------|-------|------|---------|-------------|
-| `--restricted` | | String | (required) | Tag for the restricted model |
-| `--unrestricted` | | String | (required) | Tag for the unrestricted model |
+| `--lags1` | | Int | auto | Lag order for restricted model |
+| `--lags2` | | Int | auto | Lag order for unrestricted model |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
 
@@ -277,16 +283,22 @@ friedman test lr --restricted=var001 --unrestricted=var002
 
 ### test lm
 
-Lagrange multiplier test comparing two nested models by tag.
+Lagrange multiplier test comparing two nested VAR models estimated from separate datasets.
 
 ```bash
-friedman test lm --restricted=var001 --unrestricted=var002
+friedman test lm restricted.csv unrestricted.csv
+friedman test lm data_p2.csv data_p4.csv --lags1=2 --lags2=4
 ```
+
+| Argument | Description |
+|----------|-------------|
+| `<data1>` | Path to CSV for restricted model |
+| `<data2>` | Path to CSV for unrestricted model |
 
 | Option | Short | Type | Default | Description |
 |--------|-------|------|---------|-------------|
-| `--restricted` | | String | (required) | Tag for the restricted model |
-| `--unrestricted` | | String | (required) | Tag for the unrestricted model |
+| `--lags1` | | Int | auto | Lag order for restricted model |
+| `--lags2` | | Int | auto | Lag order for unrestricted model |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
 
