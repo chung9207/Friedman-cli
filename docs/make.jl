@@ -4,7 +4,7 @@ using Friedman
 makedocs(;
     modules = [Friedman],
     sitename = "Friedman-cli",
-    repo = Remotes.GitHub("chung9207", "Friedman-cli"),
+    repo = Remotes.GitHub("FriedmanJP", "Friedman-cli"),
     pages = [
         "Home" => "index.md",
         "Installation" => "installation.md",
@@ -28,14 +28,14 @@ makedocs(;
     ],
     format = Documenter.HTML(;
         prettyurls = get(ENV, "CI", "false") == "true",
-        canonical = "https://chung9207.github.io/Friedman-cli",
+        canonical = "https://friedmanjp.github.io/Friedman-cli",
         edit_link = "master",
     ),
     warnonly = [:missing_docs],
 )
 
 deploydocs(;
-    repo = "github.com/chung9207/Friedman-cli.git",
+    repo = "github.com/FriedmanJP/Friedman-cli.git",
     devbranch = "master",
     push_preview = true,
 )
