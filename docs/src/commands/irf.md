@@ -200,3 +200,7 @@ friedman irf pvar data.csv --ci=bootstrap --replications=500
 | `--plot-save` | | String | | Save plot to HTML file |
 
 **Output:** IRFs per variable with bootstrap confidence bands.
+
+## See Also
+
+For DSGE model IRFs, see [dsge irf](dsge.md#dsge-irf).

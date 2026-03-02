@@ -6,7 +6,7 @@ Friedman-cli uses an **action-first** command hierarchy: commands are organized 
 
 ```
 friedman
-├── estimate     var | bvar | lp | arima | gmm | static | dynamic | gdfm |
+├── estimate     var | bvar | lp | arima | gmm | smm | static | dynamic | gdfm |
 │                arch | garch | egarch | gjr_garch | sv | fastica | ml | vecm | pvar
 ├── test         adf | kpss | pp | za | np | johansen | normality |
 │                identifiability | heteroskedasticity | arch_lm | ljung_box |
@@ -24,10 +24,12 @@ friedman
 ├── filter       hp | hamilton | bn | bk | bhp
 ├── data         list | load | describe | diagnose | fix | transform | filter |
 │                validate | balance
-└── nowcast      dfm | bvar | bridge | news | forecast
+├── nowcast      dfm | bvar | bridge | news | forecast
+└── dsge         solve | irf | fevd | simulate | estimate |
+                 perfect-foresight | steady-state
 ```
 
-**Total: 11 top-level commands, ~103 subcommands.**
+**Total: 12 top-level commands, ~117 subcommands.**
 
 ## Common Options
 

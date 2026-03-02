@@ -23,12 +23,14 @@ Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconomet
 | **Filters** | HP, Hamilton, Beveridge-Nelson, Baxter-King, Boosted HP | `filter hp`, `filter hamilton`, ... |
 | **Nowcasting** | DFM, BVAR, bridge equations, news decomposition | `nowcast dfm`, `nowcast bvar`, ... |
 | **Data Management** | Example datasets, diagnostics, transformations, validation, balancing | `data list`, `data load`, `data describe`, ... |
+| **DSGE** | Solve, IRF, FEVD, simulate, estimate, perfect foresight, steady state | `dsge solve`, `dsge irf`, `dsge simulate`, ... |
+| **SMM** | Simulated Method of Moments estimation | `estimate smm` |
 | **Unit Root Tests** | ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron | `test adf`, `test kpss`, ... |
 | **Cointegration** | Johansen trace and max eigenvalue | `test johansen` |
 | **Diagnostics** | Normality, identifiability, ARCH-LM, Ljung-Box, heteroskedasticity | `test normality`, ... |
 | **Model Comparison** | Granger causality, LR test, LM test | `test granger`, `test lr`, `test lm` |
 
-**11 top-level commands, ~103 subcommands.** Action-first CLI: commands organized by action (`estimate`, `irf`, `forecast`, ...) rather than by model type.
+**12 top-level commands, ~117 subcommands.** Action-first CLI: commands organized by action (`estimate`, `irf`, `forecast`, ...) rather than by model type.
 
 ## Quick Start
 
@@ -56,6 +58,12 @@ julia --project bin/friedman test adf data.csv --column=1
 
 # Nowcast GDP
 julia --project bin/friedman nowcast dfm mixed_freq.csv --factors=3
+
+# Solve a DSGE model
+julia --project bin/friedman dsge solve rbc.toml
+
+# DSGE impulse responses
+julia --project bin/friedman dsge irf rbc.toml --horizon=40
 ```
 
 All commands support `--format=table|csv|json` and `--output=file.csv` for flexible output.
@@ -76,6 +84,7 @@ Pages = [
     "commands/filter.md",
     "commands/data.md",
     "commands/nowcast.md",
+    "commands/dsge.md",
     "configuration.md",
     "api.md",
     "architecture.md",

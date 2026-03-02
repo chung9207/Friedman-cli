@@ -9,7 +9,7 @@ bin/friedman ARGS
   → Pkg.activate(project_dir)
   → Friedman.main(ARGS)
     → build_app()                          # constructs Entry with full command tree
-      → register_estimate_commands!()      # 11 register functions, one per top-level command
+      → register_estimate_commands!()      # 12 register functions, one per top-level command
       → register_test_commands!()
       → register_irf_commands!()
       → register_fevd_commands!()
@@ -20,6 +20,7 @@ bin/friedman ARGS
       → register_filter_commands!()
       → register_data_commands!()
       → register_nowcast_commands!()
+      → register_dsge_commands!()
     → dispatch(entry, args)
       → dispatch_node()                    # walks NodeCommand tree by matching tokens
       → dispatch_leaf()                    # tokenize → bind_args → leaf.handler(; bound...)
@@ -95,7 +96,7 @@ src/
   config.jl               # TOML loader for priors, identification, GMM, non-Gaussian
   commands/
     shared.jl             # ID_METHOD_MAP, shared estimation/output helpers
-    estimate.jl           # 17 estimation subcommands
+    estimate.jl           # 18 estimation subcommands
     test.jl               # 16+ test subcommands (+ nested var 2, pvar 4)
     irf.jl                # 5 IRF subcommands
     fevd.jl               # 5 FEVD subcommands
@@ -106,6 +107,7 @@ src/
     filter.jl             # 5 filter subcommands
     data.jl               # 9 data subcommands
     nowcast.jl            # 5 nowcast subcommands
+    dsge.jl               # 7 DSGE subcommands
 ```
 
 ## Handler Conventions
@@ -127,3 +129,16 @@ src/
 | `TOML` (stdlib) | Configuration file parsing |
 | `LinearAlgebra` (stdlib) | Matrix operations |
 | `Statistics` (stdlib) | Mean, median calculations |
+| `SparseArrays` (stdlib) | Sparse matrix operations |
+| `Random` (stdlib) | Random number generation (DSGE simulation) |
+
+## Compatibility
+
+| | Version |
+|---|---------|
+| Julia | `>= 1.12` |
+| MacroEconometricModels | `0.3.1` |
+
+## Totals
+
+12 top-level commands, ~117 subcommands, ~8,200 lines across 18 source files.

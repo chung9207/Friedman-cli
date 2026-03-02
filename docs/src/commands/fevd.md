@@ -107,3 +107,7 @@ friedman fevd pvar data.csv --id-col=country --time-col=year --horizons=20
 | `--output` | `-o` | String | | Export file path |
 | `--plot` | | Flag | | Open interactive plot in browser |
 | `--plot-save` | | String | | Save plot to HTML file |
+
+## See Also
+
+For DSGE model FEVD, see [dsge fevd](dsge.md#dsge-fevd).

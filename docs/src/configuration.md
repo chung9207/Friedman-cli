@@ -168,6 +168,86 @@ weighting = "twostep"
 | `instruments` | Column names used as instruments |
 | `weighting` | Weighting matrix method (overridden by `--weighting` flag) |
 
+## DSGE Model
+
+Used by `dsge solve`, `dsge irf`, `dsge fevd`, `dsge simulate`, `dsge estimate`, `dsge perfect-foresight`, `dsge steady-state`.
+
+```toml
+[model]
+endogenous = ["y", "c", "k", "n"]
+exogenous = ["eps_a"]
+
+[model.parameters]
+alpha = 0.36
+beta = 0.99
+delta = 0.025
+sigma = 1.0
+phi_n = 1.0
+
+[[model.equations]]
+expr = "c^(-sigma) = beta * c(+1)^(-sigma) * (alpha * exp(eps_a(+1)) * k^(alpha-1) * n(+1)^(1-alpha) + 1 - delta)"
+
+[[model.equations]]
+expr = "phi_n * n^phi_n = c^(-sigma) * (1-alpha) * exp(eps_a) * k(-1)^alpha * n^(-alpha)"
+
+[[model.equations]]
+expr = "k = (1-delta)*k(-1) + y - c"
+
+[[model.equations]]
+expr = "y = exp(eps_a) * k(-1)^alpha * n^(1-alpha)"
+
+[solver]
+method = "gensys"    # gensys|klein|perturbation|projection|pfi
+order = 1            # perturbation order
+degree = 5           # polynomial degree (projection/pfi)
+grid = "auto"        # auto|chebyshev|smolyak
+```
+
+| Section | Description |
+|---------|-------------|
+| `[model]` | Lists endogenous/exogenous variables |
+| `[model.parameters]` | Deep parameters with values |
+| `[[model.equations]]` | Model equations (one per block, `expr` field) |
+| `[solver]` | Solution method and settings |
+
+Time notation: `x(+1)` = lead, `x(-1)` = lag, `x` = current.
+
+## OccBin Constraints
+
+Used by `dsge solve --constraints=...`, `dsge irf --constraints=...`, `dsge steady-state --constraints=...`.
+
+```toml
+[constraints]
+
+[[constraints.bounds]]
+variable = "i_rate"
+lower = 0.0
+
+[[constraints.bounds]]
+variable = "investment"
+lower = 0.0
+upper = 100.0
+```
+
+Each `[[constraints.bounds]]` block specifies a variable with optional `lower` and/or `upper` bounds. The OccBin algorithm solves the piecewise-linear system respecting these occasionally binding constraints.
+
+## SMM Specification
+
+Used by `estimate smm --config=...`.
+
+```toml
+[smm]
+weighting = "two_step"    # identity|optimal|two_step|iterated
+sim_ratio = 5             # simulation-to-sample ratio
+burn = 100                # burn-in periods for simulation
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `weighting` | `two_step` | Weighting matrix method |
+| `sim_ratio` | `5` | How many simulated observations per data observation |
+| `burn` | `100` | Discard this many initial simulation periods |
+
 ## Output Formats
 
 All commands support three output formats:

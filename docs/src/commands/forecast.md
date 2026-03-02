@@ -25,6 +25,9 @@ friedman forecast var data.csv --ci-method=bootstrap
 
 **Output:** Per-variable forecasts with lower/upper bounds and standard errors.
 
+!!! note "v0.3.0"
+    VAR forecasts now return typed `VARForecast` objects with accessor functions: `point_forecast()`, `lower_bound()`, `upper_bound()`, `forecast_horizon()`.
+
 ## forecast bvar
 
 Bayesian forecasts with posterior credible intervals (16th/50th/84th percentiles).
@@ -44,9 +47,15 @@ friedman forecast bvar data.csv --sampler=gibbs --config=prior.toml
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
 
+!!! note "v0.3.0"
+    BVAR forecasts now return typed `BVARForecast` objects with the same accessor interface as `VARForecast`.
+
 ## forecast lp
 
 Direct LP forecasts with configurable impulse path and confidence intervals.
+
+!!! note "v0.3.0"
+    `LPForecast` field renamed: `.forecast` (was `.forecasts` in earlier versions).
 
 ```bash
 friedman forecast lp data.csv --shock=1 --horizons=12 --shock-size=1.0
@@ -264,3 +273,7 @@ friedman forecast vecm data.csv --confidence=0.90 --replications=1000
 | `--plot-save` | | String | | Save plot to HTML file |
 
 **Output:** Per-variable forecasts with bootstrap confidence bands.
+
+## See Also
+
+For DSGE model forecasting via simulation, see [dsge simulate](dsge.md#dsge-simulate).

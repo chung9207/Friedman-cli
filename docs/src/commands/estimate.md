@@ -1,6 +1,6 @@
 # estimate
 
-Estimate econometric models. 17 subcommands covering VAR, BVAR, VECM, Panel VAR, local projections, ARIMA, GMM, factor models, volatility models, and non-Gaussian SVAR identification.
+Estimate econometric models. 18 subcommands covering VAR, BVAR, VECM, Panel VAR, local projections, ARIMA, GMM, SMM, factor models, volatility models, and non-Gaussian SVAR identification.
 
 ## estimate var
 
@@ -156,6 +156,29 @@ friedman estimate gmm data.csv --config=gmm_spec.toml --weighting=twostep
 **Output:** Parameter estimates, J-test for overidentification.
 
 See [Configuration](../configuration.md) for GMM TOML format.
+
+## estimate smm
+
+Estimate via Simulated Method of Moments. Can use TOML config for specification overrides.
+
+```bash
+friedman estimate smm data.csv --weighting=two_step --sim-ratio=5
+friedman estimate smm data.csv --config=smm_spec.toml
+friedman estimate smm data.csv --weighting=optimal --burn=200
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--config` | | String | | TOML config file for SMM specification |
+| `--weighting` | | String | `two_step` | `identity`, `optimal`, `two_step`, `iterated` |
+| `--sim-ratio` | | Int | 5 | Simulation-to-sample ratio |
+| `--burn` | | Int | 100 | Burn-in periods |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Parameter estimates with standard errors, t-statistics, and p-values. Includes J-statistic and convergence status.
+
+See [Configuration](../configuration.md#smm-specification) for TOML format.
 
 ## estimate static
 

@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- **Julia 1.10+** (tested on 1.10, 1.11, and 1.12)
+- **Julia 1.12+**
 - Git
 
 ## Install from Source
@@ -15,6 +15,20 @@ using Pkg
 Pkg.rm("MacroEconometricModels")
 Pkg.add(url="https://github.com/chung9207/MacroEconometricModels.jl.git")
 '
+```
+
+### Optional Dependencies
+
+For DSGE constrained solvers (OccBin), install JuMP and Ipopt:
+
+```bash
+julia --project -e 'using Pkg; Pkg.add(["JuMP", "Ipopt"])'
+```
+
+For GDFM spectral methods, install FFTW:
+
+```bash
+julia --project -e 'using Pkg; Pkg.add("FFTW")'
 ```
 
 This installs `MacroEconometricModels.jl` directly from GitHub along with all other dependencies (`CSV`, `DataFrames`, `PrettyTables`, `JSON3`).
