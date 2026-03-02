@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-# Estimate commands: var, bvar, lp, arima, gmm, static, dynamic, gdfm, arch, garch, egarch, gjr_garch, sv, fastica, ml
+# Estimate commands: var, bvar, lp, arima, gmm, smm, static, dynamic, gdfm, arch, garch, egarch, gjr_garch, sv, fastica, ml
 
 function register_estimate_commands!()
     est_var = LeafCommand("var", _estimate_var;
@@ -244,6 +244,19 @@ function register_estimate_commands!()
         ],
         description="Estimate a Vector Error Correction Model (VECM)")
 
+    est_smm = LeafCommand("smm", _estimate_smm;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("config"; type=String, default="", description="TOML config for SMM specification"),
+            Option("weighting"; type=String, default="two_step",
+                description="identity|optimal|two_step|iterated"),
+            Option("sim-ratio"; type=Int, default=5, description="Simulation-to-sample ratio"),
+            Option("burn"; type=Int, default=100, description="Burn-in periods"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        description="Estimate via Simulated Method of Moments")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "var"       => est_var,
         "bvar"      => est_bvar,
@@ -262,6 +275,7 @@ function register_estimate_commands!()
         "ml"        => est_ml,
         "vecm"      => est_vecm,
         "pvar"      => est_pvar,
+        "smm"       => est_smm,
     )
     return NodeCommand("estimate", subcmds, "Estimate econometric models")
 end
@@ -1092,5 +1106,56 @@ function _estimate_pvar(; data::String, id_col::String="", time_col::String="",
         "Method" => string(model.method),
         "Transformation" => string(model.transformation),
     ]; format=format, title="Panel Summary")
+end
+
+# ── SMM ───────────────────────────────────────────────────
+
+function _estimate_smm(; data::String, config::String="",
+                        weighting::String="two_step", sim_ratio::Int=5,
+                        burn::Int=100,
+                        output::String="", format::String="table")
+    Y, varnames = load_multivariate_data(data)
+    n = size(Y, 2)
+
+    # Load config overrides if provided
+    if !isempty(config)
+        cfg = load_config(config)
+        smm_cfg = get_smm(cfg)
+        weighting = smm_cfg["weighting"]
+        sim_ratio = smm_cfg["sim_ratio"]
+        burn = smm_cfg["burn"]
+    end
+
+    println("Estimating SMM: $n variables, weighting=$weighting, sim_ratio=$sim_ratio")
+    println()
+
+    # Compute sample moments
+    moments = autocovariance_moments(Y; lags=1)
+    theta0 = zeros(Float64, n)
+
+    moment_fn(theta, data) = autocovariance_moments(data; lags=1) .- moments
+
+    model = estimate_smm(moment_fn, theta0, Y;
+                         weighting=Symbol(weighting), sim_ratio=sim_ratio, burn=burn)
+
+    se = sqrt.(abs.(diag(model.vcov)))
+    t_stats = model.theta ./ se
+    p_vals = [2.0 * (1.0 - _normal_cdf(abs(t))) for t in t_stats]
+
+    est_df = DataFrame(
+        parameter = ["param_$i" for i in 1:length(model.theta)],
+        estimate = round.(model.theta; digits=6),
+        std_error = round.(se; digits=6),
+        t_stat = round.(t_stats; digits=4),
+        p_value = round.(p_vals; digits=4),
+    )
+    output_result(est_df; format=Symbol(format), output=output,
+                  title="SMM Estimation (weighting=$weighting, sim_ratio=$sim_ratio)")
+
+    println()
+    printstyled("  J-statistic: $(round(model.J_stat; digits=4))\n"; color=:cyan)
+    printstyled("  J p-value:   $(round(model.J_pvalue; digits=4))\n"; color=:cyan)
+    printstyled("  Converged:   $(model.converged)\n";
+                color = model.converged ? :green : :red)
 end
 

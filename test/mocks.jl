@@ -152,7 +152,7 @@ LPFEVD(R2::Array{T,3}, lp_a, lp_b, bc, bse, h::Int, v::Int, s::Int) where T =
     LPFEVD(R2, bc, bse, R2, R2, :R2, h, 200, T(0.95), true)
 
 struct LPForecast{T}
-    forecasts::Matrix{T}; ci_lower::Matrix{T}; ci_upper::Matrix{T}
+    forecast::Matrix{T}; ci_lower::Matrix{T}; ci_upper::Matrix{T}
     se::Matrix{T}; horizon::Int; response_vars::Vector{Int}; shock_var::Int
     shock_path::Vector{T}; conf_level::T; ci_method::Symbol
 end
@@ -1465,5 +1465,344 @@ export nowcast_dfm, nowcast_bvar, nowcast_bridge, nowcast, nowcast_news
 export TimeSeriesData, DataDiagnostic, DataSummary
 export load_example, to_matrix, varnames, frequency, desc, vardesc, nobs, nvars
 export describe_data, diagnose, fix, apply_tcode, validate_for_model, apply_filter
+
+# ─── DSGE Types ──────────────────────────────────────────────
+
+abstract type AbstractDSGEModel end
+
+struct DSGESpec{T<:Real}
+    endog::Vector{Symbol}; exog::Vector{Symbol}; params::Vector{Symbol}
+    param_values::Dict{Symbol,T}; n_endog::Int; n_exog::Int; n_params::Int
+    varnames::Vector{String}; steady_state::Vector{T}
+end
+function DSGESpec(; n_endog=3, n_exog=1)
+    endog = [Symbol("y$i") for i in 1:n_endog]
+    exog = [Symbol("e$i") for i in 1:n_exog]
+    params = [:alpha, :beta, :delta]
+    param_values = Dict{Symbol,Float64}(:alpha => 0.33, :beta => 0.99, :delta => 0.025)
+    varnames = ["y$i" for i in 1:n_endog]
+    ss = zeros(Float64, n_endog)
+    DSGESpec{Float64}(endog, exog, params, param_values, n_endog, n_exog, length(params),
+                      varnames, ss)
+end
+
+struct LinearDSGE{T<:Real}
+    Gamma0::Matrix{T}; Gamma1::Matrix{T}; C::Vector{T}; Psi::Matrix{T}; Pi::Matrix{T}
+    spec::DSGESpec{T}
+end
+
+struct DSGESolution{T<:Real}
+    G1::Matrix{T}; impact::Matrix{T}; C_sol::Vector{T}; eu::Vector{Int}
+    method::Symbol; eigenvalues::Vector{Complex{T}}; spec::DSGESpec{T}; linear::LinearDSGE{T}
+end
+
+struct PerturbationSolution{T<:Real}
+    order::Int; gx::Matrix{T}; hx::Matrix{T}
+    gxx::Union{Nothing,Array{T,3}}; hxx::Union{Nothing,Array{T,3}}
+    gσσ::Union{Nothing,Vector{T}}; hσσ::Union{Nothing,Vector{T}}
+    eta::Matrix{T}; steady_state::Vector{T}
+    state_indices::Vector{Int}; control_indices::Vector{Int}
+    eu::Vector{Int}; method::Symbol; spec::DSGESpec{T}; linear::LinearDSGE{T}
+end
+
+struct ProjectionSolution{T<:Real}
+    coefficients::Matrix{T}; state_bounds::Matrix{T}; grid_type::Symbol; degree::Int
+    residual_norm::T; converged::Bool; iterations::Int; method::Symbol
+    spec::DSGESpec{T}; linear::LinearDSGE{T}; steady_state::Vector{T}
+    state_indices::Vector{Int}; control_indices::Vector{Int}
+end
+
+struct PerfectForesightPath{T<:Real}
+    path::Matrix{T}; deviations::Matrix{T}; converged::Bool; iterations::Int
+    spec::DSGESpec{T}
+end
+
+struct DSGEEstimation{T<:Real} <: AbstractDSGEModel
+    theta::Vector{T}; vcov::Matrix{T}; param_names::Vector{String}; method::Symbol
+    J_stat::T; J_pvalue::T; converged::Bool; spec::DSGESpec{T}
+end
+
+struct OccBinConstraint{T<:Real}
+    variable::Symbol; bound::T; direction::Symbol
+end
+
+struct OccBinSolution{T<:Real}
+    linear_path::Matrix{T}; piecewise_path::Matrix{T}; steady_state::Vector{T}
+    regime_history::Vector{Int}; converged::Bool; iterations::Int
+    spec::DSGESpec{T}; varnames::Vector{String}
+end
+
+struct OccBinIRF{T<:Real}
+    linear::Array{T,3}; piecewise::Array{T,3}; regime_history::Vector{Int}
+    varnames::Vector{String}; shock_name::String
+end
+
+# ─── DSGE Mock Helpers & Functions ───────────────────────────
+
+function _mock_linear(spec::DSGESpec{T}) where T
+    n = spec.n_endog
+    ne = spec.n_exog
+    Gamma0 = Matrix{T}(I(n))
+    Gamma1 = Matrix{T}(I(n)) * T(0.5)
+    C_vec = zeros(T, n)
+    Psi = zeros(T, n, ne)
+    for i in 1:min(n, ne); Psi[i, i] = T(1.0); end
+    Pi_mat = zeros(T, n, n)
+    LinearDSGE{T}(Gamma0, Gamma1, C_vec, Psi, Pi_mat, spec)
+end
+
+function _mock_solution(spec::DSGESpec{T}; method=:gensys) where T
+    n = spec.n_endog
+    ne = spec.n_exog
+    ld = _mock_linear(spec)
+    G1 = Matrix{T}(I(n)) * T(0.5)
+    impact = zeros(T, n, ne)
+    for i in 1:min(n, ne); impact[i, i] = T(1.0); end
+    C_sol = zeros(T, n)
+    eu = [1, 1]
+    eigs = [complex(T(0.5), T(0.1)), complex(T(0.5), T(-0.1)), complex(T(0.3), T(0.0))]
+    DSGESolution{T}(G1, impact, C_sol, eu, method, eigs[1:min(n, length(eigs))], spec, ld)
+end
+
+function compute_steady_state(spec::DSGESpec; kwargs...)
+    spec
+end
+
+function linearize(spec::DSGESpec)
+    _mock_linear(spec)
+end
+
+function solve(spec::DSGESpec{T}; method=:gensys, order=1, degree=5, grid=:auto, kwargs...) where T
+    n = spec.n_endog
+    ne = spec.n_exog
+    ld = _mock_linear(spec)
+    if method == :perturbation
+        n_states = max(1, n ÷ 2)
+        n_controls = n - n_states
+        gx = ones(T, n_controls, n_states) * T(0.1)
+        hx = Matrix{T}(I(n_states)) * T(0.5)
+        eta = zeros(T, n_states, ne)
+        for i in 1:min(n_states, ne); eta[i, i] = T(1.0); end
+        gxx = order >= 2 ? zeros(T, n_controls, n_states, n_states) : nothing
+        hxx = order >= 2 ? zeros(T, n_states, n_states, n_states) : nothing
+        gσσ = order >= 2 ? zeros(T, n_controls) : nothing
+        hσσ = order >= 2 ? zeros(T, n_states) : nothing
+        ss = zeros(T, n)
+        state_idx = collect(1:n_states)
+        control_idx = collect(n_states+1:n)
+        return PerturbationSolution{T}(order, gx, hx, gxx, hxx, gσσ, hσσ, eta, ss,
+            state_idx, control_idx, [1, 1], :perturbation, spec, ld)
+    elseif method in (:projection, :pfi)
+        n_states = max(1, n ÷ 2)
+        n_controls = n - n_states
+        coeffs = ones(T, n_controls, degree + 1) * T(0.1)
+        bounds = hcat(fill(T(-2.0), n_states), fill(T(2.0), n_states))
+        ss = zeros(T, n)
+        state_idx = collect(1:n_states)
+        control_idx = collect(n_states+1:n)
+        return ProjectionSolution{T}(coeffs, bounds, grid == :auto ? :chebyshev : grid, degree,
+            T(1e-8), true, 50, method, spec, ld, ss, state_idx, control_idx)
+    else
+        return _mock_solution(spec; method=method)
+    end
+end
+
+function gensys(Γ0, Γ1, C, Ψ, Π)
+    _mock_solution(DSGESpec())
+end
+
+function blanchard_kahn(ld::LinearDSGE, spec::DSGESpec)
+    _mock_solution(spec; method=:blanchard_kahn)
+end
+
+function klein(Γ0, Γ1, C, Ψ, n_pre)
+    _mock_solution(DSGESpec(); method=:klein)
+end
+
+function perturbation_solver(spec::DSGESpec; order=1)
+    solve(spec; method=:perturbation, order=order)
+end
+
+function collocation_solver(spec::DSGESpec; degree=5, kwargs...)
+    solve(spec; method=:projection, degree=degree)
+end
+
+function pfi_solver(spec::DSGESpec; kwargs...)
+    solve(spec; method=:pfi)
+end
+
+function perfect_foresight(spec::DSGESpec{T}; shocks=nothing, T_periods=100, kwargs...) where T
+    n = spec.n_endog
+    path = zeros(T, T_periods, n)
+    devs = zeros(T, T_periods, n)
+    PerfectForesightPath{T}(path, devs, true, 25, spec)
+end
+
+function occbin_solve(spec::DSGESpec{T}, shocks, constraints; T_periods=40, kwargs...) where T
+    n = spec.n_endog
+    lp = zeros(T, T_periods, n)
+    pp = zeros(T, T_periods, n)
+    ss = zeros(T, n)
+    regimes = ones(Int, T_periods)
+    OccBinSolution{T}(lp, pp, ss, regimes, true, 15, spec, spec.varnames)
+end
+
+function occbin_irf(spec::DSGESpec{T}, constraints, shock_idx; shock_size=1.0, horizon=40, kwargs...) where T
+    n = spec.n_endog
+    ne = spec.n_exog
+    lin = zeros(T, horizon + 1, n, ne)
+    pw = zeros(T, horizon + 1, n, ne)
+    # Set decaying response for shock_idx
+    for h in 0:horizon
+        for v in 1:n
+            lin[h+1, v, min(shock_idx, ne)] = T(shock_size) * T(0.9)^h
+            pw[h+1, v, min(shock_idx, ne)] = T(shock_size) * T(0.85)^h
+        end
+    end
+    regimes = ones(Int, horizon + 1)
+    OccBinIRF{T}(lin, pw, regimes, spec.varnames, "shock$shock_idx")
+end
+
+function parse_constraint(expr, spec::DSGESpec)
+    OccBinConstraint{Float64}(:i, 0.0, :geq)
+end
+
+function variable_bound(var::Symbol; lower=-Inf, upper=Inf)
+    if upper < Inf
+        OccBinConstraint{Float64}(var, upper, :leq)
+    else
+        OccBinConstraint{Float64}(var, lower, :geq)
+    end
+end
+
+function estimate_dsge(spec::DSGESpec{T}, data, param_names; method=:irf_matching, kwargs...) where T
+    np = length(param_names)
+    theta = ones(T, np) * T(0.5)
+    vcov_mat = Matrix{T}(I(np)) * T(0.01)
+    DSGEEstimation{T}(theta, vcov_mat, String.(param_names), method,
+                      T(2.5), T(0.65), true, spec)
+end
+
+function simulate(sol::DSGESolution{T}, T_periods::Int; kwargs...) where T
+    randn(T, T_periods, sol.spec.n_endog)
+end
+function simulate(sol::PerturbationSolution{T}, T_periods::Int; kwargs...) where T
+    randn(T, T_periods, sol.spec.n_endog)
+end
+function simulate(sol::ProjectionSolution{T}, T_periods::Int; kwargs...) where T
+    randn(T, T_periods, sol.spec.n_endog)
+end
+
+function irf(sol::DSGESolution{T}, horizon::Int; kwargs...) where T
+    n = sol.spec.n_endog; ne = sol.spec.n_exog
+    vals = zeros(T, horizon + 1, n, ne)
+    for h in 0:horizon, v in 1:n, s in 1:ne
+        vals[h+1, v, s] = T(0.1) * T(0.9)^h
+    end
+    ImpulseResponse(vals, nothing, nothing, horizon,
+        sol.spec.varnames, ["shock$i" for i in 1:ne], :dsge)
+end
+function irf(sol::PerturbationSolution{T}, horizon::Int; kwargs...) where T
+    n = sol.spec.n_endog; ne = sol.spec.n_exog
+    vals = zeros(T, horizon + 1, n, ne)
+    for h in 0:horizon, v in 1:n, s in 1:ne
+        vals[h+1, v, s] = T(0.1) * T(0.9)^h
+    end
+    ImpulseResponse(vals, nothing, nothing, horizon,
+        sol.spec.varnames, ["shock$i" for i in 1:ne], :perturbation)
+end
+function irf(sol::ProjectionSolution{T}, horizon::Int; kwargs...) where T
+    n = sol.spec.n_endog; ne = sol.spec.n_exog
+    vals = zeros(T, horizon + 1, n, ne)
+    for h in 0:horizon, v in 1:n, s in 1:ne
+        vals[h+1, v, s] = T(0.1) * T(0.9)^h
+    end
+    ImpulseResponse(vals, nothing, nothing, horizon,
+        sol.spec.varnames, ["shock$i" for i in 1:ne], :projection)
+end
+
+function fevd(sol::DSGESolution{T}, horizon::Int; kwargs...) where T
+    n = sol.spec.n_endog; ne = sol.spec.n_exog
+    props = ones(T, n, ne, horizon) / T(ne)
+    FEVD(props, props)
+end
+function fevd(sol::PerturbationSolution{T}, horizon::Int; kwargs...) where T
+    n = sol.spec.n_endog; ne = sol.spec.n_exog
+    props = ones(T, n, ne, horizon) / T(ne)
+    FEVD(props, props)
+end
+
+function is_determined(sol::Union{DSGESolution,PerturbationSolution,ProjectionSolution})
+    true
+end
+
+function is_stable(sol::Union{DSGESolution,PerturbationSolution,ProjectionSolution})
+    true
+end
+
+function nshocks(sol::Union{DSGESolution,PerturbationSolution,ProjectionSolution})
+    sol.spec.n_exog
+end
+
+export AbstractDSGEModel, DSGESpec, LinearDSGE, DSGESolution, PerturbationSolution
+export ProjectionSolution, PerfectForesightPath, DSGEEstimation
+export OccBinConstraint, OccBinSolution, OccBinIRF
+export compute_steady_state, linearize, solve, gensys, blanchard_kahn, klein
+export perturbation_solver, collocation_solver, pfi_solver
+export perfect_foresight, occbin_solve, occbin_irf, parse_constraint, variable_bound
+export estimate_dsge, simulate, is_determined, is_stable, nshocks
+
+# ─── SMM Types & Functions ───────────────────────────────────
+
+struct SMMModel{T<:Real}
+    theta::Vector{T}; vcov::Matrix{T}; n_moments::Int; n_params::Int; n_obs::Int
+    J_stat::T; J_pvalue::T; converged::Bool; sim_ratio::Int
+end
+
+struct ParameterTransform{T<:Real}
+    lower::Vector{T}; upper::Vector{T}
+end
+
+function estimate_smm(moment_fn, theta0, data; weighting=:two_step, sim_ratio=5, burn=100, kwargs...)
+    np = length(theta0)
+    nm = np + 2
+    theta = ones(Float64, np) * 0.5
+    vcov_mat = Matrix{Float64}(I(np)) * 0.01
+    n_obs = size(data, 1)
+    SMMModel{Float64}(theta, vcov_mat, nm, np, n_obs, 2.0, 0.7, true, sim_ratio)
+end
+
+function autocovariance_moments(data; lags=1)
+    zeros(Float64, size(data, 2) * (lags + 1))
+end
+
+to_unconstrained(x, t::ParameterTransform) = x
+to_constrained(x, t::ParameterTransform) = x
+transform_jacobian(x, t::ParameterTransform) = Matrix{Float64}(I(length(x)))
+
+export SMMModel, ParameterTransform
+export estimate_smm, autocovariance_moments, to_unconstrained, to_constrained, transform_jacobian
+
+# ─── BVARForecast Type & Forecast Accessors ──────────────────
+
+struct BVARForecast{T<:AbstractFloat}
+    forecast::Matrix{T}; ci_lower::Matrix{T}; ci_upper::Matrix{T}
+    horizon::Int; ci_method::Symbol; conf_level::T; varnames::Vector{String}
+end
+
+point_forecast(f::Union{VARForecast,BVARForecast}) = f.forecast
+lower_bound(f::Union{VARForecast,BVARForecast}) = f.ci_lower
+upper_bound(f::Union{VARForecast,BVARForecast}) = f.ci_upper
+forecast_horizon(f::Union{VARForecast,BVARForecast}) = f.horizon
+
+# BVAR forecast dispatch — returns BVARForecast
+function forecast(post::BVARPosterior, h::Int; ci_method=:none, quantiles=[0.16, 0.5, 0.84], conf_level=0.95)
+    n = post.n
+    fc = ones(h, n) * 0.1
+    BVARForecast{Float64}(fc, fc .- 0.5, fc .+ 0.5, h, ci_method, conf_level,
+                           ["var$i" for i in 1:n])
+end
+
+export BVARForecast, point_forecast, lower_bound, upper_bound, forecast_horizon
 
 end # module

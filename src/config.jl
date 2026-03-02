@@ -140,6 +140,73 @@ function get_uhlig_params(config::Dict)
     )
 end
 
+"""
+    get_dsge(config) → Dict
+
+Extract DSGE model specification from a config dict.
+Returns parameters, endogenous/exogenous variables, equations.
+"""
+function get_dsge(config::Dict)
+    model = get(config, "model", Dict())
+    result = Dict{String,Any}()
+
+    result["parameters"] = get(model, "parameters", Dict{String,Any}())
+    result["endogenous"] = get(model, "endogenous", String[])
+    result["exogenous"] = get(model, "exogenous", String[])
+
+    eqs_raw = get(model, "equations", Dict[])
+    result["equations"] = String[eq["expr"] for eq in eqs_raw if haskey(eq, "expr")]
+
+    # Optional solver section
+    solver = get(config, "solver", Dict())
+    result["solver_method"] = get(solver, "method", "gensys")
+    result["solver_order"] = get(solver, "order", 1)
+    result["solver_degree"] = get(solver, "degree", 5)
+    result["solver_grid"] = get(solver, "grid", "auto")
+
+    return result
+end
+
+"""
+    get_dsge_constraints(config) → Dict
+
+Extract DSGE constraint specifications (OccBin bounds, nonlinear).
+"""
+function get_dsge_constraints(config::Dict)
+    con = get(config, "constraints", Dict())
+    result = Dict{String,Any}()
+
+    bounds_raw = get(con, "bounds", Dict[])
+    bounds = Dict{String,Any}[]
+    for b in bounds_raw
+        bound = Dict{String,Any}("variable" => get(b, "variable", ""))
+        if haskey(b, "lower")
+            bound["lower"] = Float64(b["lower"])
+        end
+        if haskey(b, "upper")
+            bound["upper"] = Float64(b["upper"])
+        end
+        push!(bounds, bound)
+    end
+    result["bounds"] = bounds
+
+    return result
+end
+
+"""
+    get_smm(config) → Dict
+
+Extract SMM specification from a config dict.
+"""
+function get_smm(config::Dict)
+    smm = get(config, "smm", Dict())
+    Dict{String,Any}(
+        "weighting" => get(smm, "weighting", "two_step"),
+        "sim_ratio" => get(smm, "sim_ratio", 5),
+        "burn"      => get(smm, "burn", 100),
+    )
+end
+
 # Internal helpers
 
 function _parse_matrix(rows::Vector)

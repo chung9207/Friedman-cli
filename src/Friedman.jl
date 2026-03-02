@@ -20,6 +20,7 @@ using CSV, DataFrames, PrettyTables, JSON3, TOML
 using MacroEconometricModels
 using LinearAlgebra: eigvals, diag, I, svd
 using Statistics: mean, median, var
+using Random
 
 # CLI engine
 include("cli/types.jl")
@@ -46,8 +47,9 @@ include("commands/residuals.jl")
 include("commands/filter.jl")
 include("commands/data.jl")
 include("commands/nowcast.jl")
+include("commands/dsge.jl")
 
-const FRIEDMAN_VERSION = v"0.2.2"
+const FRIEDMAN_VERSION = v"0.3.0"
 
 """
     build_app() -> Entry
@@ -67,6 +69,7 @@ function build_app()
         "filter"    => register_filter_commands!(),
         "data"      => register_data_commands!(),
         "nowcast"   => register_nowcast_commands!(),
+        "dsge"      => register_dsge_commands!(),
     )
 
     root = NodeCommand("friedman", root_cmds,

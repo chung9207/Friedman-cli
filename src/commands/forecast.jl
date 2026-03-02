@@ -243,12 +243,15 @@ function _forecast_var(; data::String, lags=nothing, horizons::Int=12,
     # Bootstrap CI branch
     if ci_method == "bootstrap"
         fc_result = forecast(model, horizons; ci_method=:bootstrap, reps=500, conf_level=confidence)
+        fc_mat = point_forecast(fc_result)
+        ci_lo = lower_bound(fc_result)
+        ci_hi = upper_bound(fc_result)
         fc_df = DataFrame()
         fc_df.horizon = 1:horizons
         for (vi, vname) in enumerate(varnames)
-            fc_df[!, vname] = fc_result.forecast[:, vi]
-            fc_df[!, "$(vname)_lower"] = fc_result.ci_lower[:, vi]
-            fc_df[!, "$(vname)_upper"] = fc_result.ci_upper[:, vi]
+            fc_df[!, vname] = fc_mat[:, vi]
+            fc_df[!, "$(vname)_lower"] = ci_lo[:, vi]
+            fc_df[!, "$(vname)_upper"] = ci_hi[:, vi]
         end
         output_result(fc_df; format=Symbol(format), output=output,
                       title="VAR($p) Forecast (h=$horizons, bootstrap $(Int(round(confidence*100)))% CI)")
@@ -381,10 +384,10 @@ function _forecast_lp(; data::String, shock::Int=1, horizons::Int=12,
 
     fc_df = DataFrame()
     fc_df.horizon = 1:horizons
-    n_resp = size(fc.forecasts, 2)
+    n_resp = size(fc.forecast, 2)
     for vi in 1:n_resp
         vname = _var_name(varnames, vi)
-        fc_df[!, vname] = fc.forecasts[:, vi]
+        fc_df[!, vname] = fc.forecast[:, vi]
         if ci_method != "none"
             fc_df[!, "$(vname)_lower"] = fc.ci_lower[:, vi]
             fc_df[!, "$(vname)_upper"] = fc.ci_upper[:, vi]

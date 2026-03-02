@@ -381,11 +381,11 @@ using Test
         @test contains(help_text, "friedman var")
 
         # Entry help includes version number
-        entry = Entry("friedman", node; version=v"0.2.2")
+        entry = Entry("friedman", node; version=v"0.3.0")
         buf = IOBuffer()
         print_help(buf, entry)
         help_text = String(take!(buf))
-        @test contains(help_text, "0.2.2")
+        @test contains(help_text, "0.3.0")
 
         # Leaf with optional argument shows [arg] not <arg>
         leaf_opt_arg = LeafCommand("test", handler;
@@ -500,9 +500,9 @@ using Test
         @test called_with[][:data] == "test.csv"
 
         # dispatch() with ["--version"] prints version
-        entry = Entry("friedman", outer_node; version=v"0.2.2")
+        entry = Entry("friedman", outer_node; version=v"0.3.0")
         version_output = strip(capture_stdout(() -> dispatch(entry, ["--version"])))
-        @test contains(version_output, "0.2.2")
+        @test contains(version_output, "0.3.0")
 
         # dispatch() with [] shows help (no error)
         help_output = capture_stdout(() -> dispatch(entry, String[]))
@@ -550,7 +550,7 @@ using Test
 
         # -V short flag triggers version
         v_output = strip(capture_stdout(() -> dispatch(entry, ["-V"])))
-        @test contains(v_output, "0.2.2")
+        @test contains(v_output, "0.3.0")
     end
 
     @testset "DispatchError on unknown command" begin
@@ -1475,7 +1475,7 @@ using Test
                 "irf" => irf_node, "fevd" => fevd_node, "hd" => hd_node,
                 "forecast" => NodeCommand("forecast", Dict{String,Union{NodeCommand,LeafCommand}}(), "Forecast")),
             "Friedman CLI")
-        entry = Entry("friedman", root; version=v"0.2.2")
+        entry = Entry("friedman", root; version=v"0.3.0")
 
         # Top level HAS irf, fevd, hd (action-first)
         @test haskey(root.subcmds, "irf")
@@ -2993,9 +2993,191 @@ using TOML
         @test uhlig_partial["n_starts"] == 200
         @test uhlig_partial["n_refine"] == 10  # default
     end
+
+    @testset "get_dsge — valid model config" begin
+        cfg = Dict(
+            "model" => Dict(
+                "parameters" => Dict("rho" => 0.9, "sigma" => 0.01, "beta" => 0.99),
+                "endogenous" => ["C", "K", "Y"],
+                "exogenous" => ["e_A"],
+                "equations" => [
+                    Dict("expr" => "C[t] + K[t] = Y[t]"),
+                    Dict("expr" => "Y[t] = K[t-1]"),
+                    Dict("expr" => "K[t] = rho * K[t-1] + sigma * e_A[t]"),
+                ]
+            )
+        )
+        result = get_dsge(cfg)
+        @test result["parameters"] == Dict("rho" => 0.9, "sigma" => 0.01, "beta" => 0.99)
+        @test result["endogenous"] == ["C", "K", "Y"]
+        @test result["exogenous"] == ["e_A"]
+        @test length(result["equations"]) == 3
+        @test result["equations"][1] == "C[t] + K[t] = Y[t]"
+    end
+
+    @testset "get_dsge — missing model section" begin
+        cfg = Dict{String,Any}()
+        result = get_dsge(cfg)
+        @test isempty(result["endogenous"])
+    end
+
+    @testset "get_dsge — solver defaults" begin
+        cfg = Dict{String,Any}()
+        result = get_dsge(cfg)
+        @test result["solver_method"] == "gensys"
+        @test result["solver_order"] == 1
+        @test result["solver_degree"] == 5
+        @test result["solver_grid"] == "auto"
+    end
+
+    @testset "get_dsge — solver overrides" begin
+        cfg = Dict(
+            "model" => Dict("endogenous" => ["Y"], "exogenous" => ["e"],
+                           "parameters" => Dict{String,Any}(), "equations" => Dict[]),
+            "solver" => Dict("method" => "perturbation", "order" => 2)
+        )
+        result = get_dsge(cfg)
+        @test result["solver_method"] == "perturbation"
+        @test result["solver_order"] == 2
+    end
+
+    @testset "get_dsge_constraints — bounds" begin
+        cfg = Dict(
+            "constraints" => Dict(
+                "bounds" => [
+                    Dict("variable" => "i", "lower" => 0.0),
+                    Dict("variable" => "c", "lower" => 0.0, "upper" => 10.0),
+                ]
+            )
+        )
+        result = get_dsge_constraints(cfg)
+        @test length(result["bounds"]) == 2
+        @test result["bounds"][1]["variable"] == "i"
+        @test result["bounds"][1]["lower"] == 0.0
+        @test !haskey(result["bounds"][1], "upper")
+        @test result["bounds"][2]["upper"] == 10.0
+    end
+
+    @testset "get_dsge_constraints — empty" begin
+        cfg = Dict{String,Any}()
+        result = get_dsge_constraints(cfg)
+        @test isempty(result["bounds"])
+    end
+
+    @testset "get_smm — valid config" begin
+        cfg = Dict(
+            "smm" => Dict(
+                "weighting" => "optimal",
+                "sim_ratio" => 10,
+                "burn" => 200,
+            )
+        )
+        result = get_smm(cfg)
+        @test result["weighting"] == "optimal"
+        @test result["sim_ratio"] == 10
+        @test result["burn"] == 200
+    end
+
+    @testset "get_smm — defaults" begin
+        cfg = Dict{String,Any}()
+        result = get_smm(cfg)
+        @test result["weighting"] == "two_step"
+        @test result["sim_ratio"] == 5
+        @test result["burn"] == 100
+    end
 end
 
 # ──────────────────────────────────────────────────────────────
 # Command handler tests (uses mock MacroEconometricModels)
 # ──────────────────────────────────────────────────────────────
 include(joinpath(@__DIR__, "test_commands.jl"))
+
+# ──────────────────────────────────────────────────────────────
+# CLI structure tests using real register_*_commands!() functions
+# (These run after test_commands.jl which includes mocks + all source files)
+# ──────────────────────────────────────────────────────────────
+
+@testset "DSGE command structure" begin
+    dsge_node = register_dsge_commands!()
+    @test dsge_node isa NodeCommand
+    @test dsge_node.name == "dsge"
+
+    # All 7 subcommands exist
+    @test haskey(dsge_node.subcmds, "solve")
+    @test haskey(dsge_node.subcmds, "irf")
+    @test haskey(dsge_node.subcmds, "fevd")
+    @test haskey(dsge_node.subcmds, "simulate")
+    @test haskey(dsge_node.subcmds, "estimate")
+    @test haskey(dsge_node.subcmds, "perfect-foresight")
+    @test haskey(dsge_node.subcmds, "steady-state")
+    @test length(dsge_node.subcmds) == 7
+
+    # All are LeafCommands
+    for (name, cmd) in dsge_node.subcmds
+        @test cmd isa LeafCommand
+    end
+
+    # solve has model argument and key options
+    solve_cmd = dsge_node.subcmds["solve"]
+    @test length(solve_cmd.args) == 1
+    @test solve_cmd.args[1].name == "model"
+    opt_names = [o.name for o in solve_cmd.options]
+    @test "method" in opt_names
+    @test "order" in opt_names
+    @test "constraints" in opt_names
+    @test "format" in opt_names
+
+    # estimate has data and params options
+    est_cmd = dsge_node.subcmds["estimate"]
+    opt_names = [o.name for o in est_cmd.options]
+    @test "data" in opt_names
+    @test "params" in opt_names
+    @test "method" in opt_names
+    @test "weighting" in opt_names
+
+    # irf has horizon and shock-size
+    irf_cmd = dsge_node.subcmds["irf"]
+    opt_names = [o.name for o in irf_cmd.options]
+    @test "horizon" in opt_names
+    @test "shock-size" in opt_names
+    @test "constraints" in opt_names
+
+    # simulate has periods and burn
+    sim_cmd = dsge_node.subcmds["simulate"]
+    opt_names = [o.name for o in sim_cmd.options]
+    @test "periods" in opt_names
+    @test "burn" in opt_names
+    @test "seed" in opt_names
+    flag_names = [f.name for f in sim_cmd.flags]
+    @test "antithetic" in flag_names
+
+    # perfect-foresight has shocks option
+    pf_cmd = dsge_node.subcmds["perfect-foresight"]
+    opt_names = [o.name for o in pf_cmd.options]
+    @test "shocks" in opt_names
+    @test "periods" in opt_names
+end
+
+@testset "estimate smm command structure" begin
+    est_node = register_estimate_commands!()
+    @test haskey(est_node.subcmds, "smm")
+    smm_cmd = est_node.subcmds["smm"]
+    @test smm_cmd isa LeafCommand
+    @test length(smm_cmd.args) == 1
+    @test smm_cmd.args[1].name == "data"
+    opt_names = [o.name for o in smm_cmd.options]
+    @test "weighting" in opt_names
+    @test "sim-ratio" in opt_names
+    @test "burn" in opt_names
+    @test "config" in opt_names
+
+    # Verify estimate now has 18 subcommands (17 original + smm)
+    @test length(est_node.subcmds) == 18
+    @test haskey(est_node.subcmds, "smm")
+    for key in ["var", "bvar", "lp", "arima", "gmm", "static", "dynamic", "gdfm",
+                 "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml",
+                 "vecm", "pvar", "smm"]
+        @test haskey(est_node.subcmds, key)
+        @test est_node.subcmds[key] isa LeafCommand
+    end
+end
