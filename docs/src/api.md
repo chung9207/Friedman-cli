@@ -91,22 +91,3 @@ Friedman._solve_dsge
 Friedman._load_dsge_constraints
 Friedman._per_var_output_path
 ```
-
-## DSGE Commands
-
-```@docs
-Friedman.register_dsge_commands!
-Friedman._dsge_solve
-Friedman._dsge_irf
-Friedman._dsge_fevd
-Friedman._dsge_simulate
-Friedman._dsge_estimate
-Friedman._dsge_perfect_foresight
-Friedman._dsge_steady_state
-```
-
-## SMM
-
-```@docs
-Friedman._estimate_smm
-```
