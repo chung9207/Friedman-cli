@@ -12,3 +12,4 @@ friedman.so
 bin/friedman-wrapper
 data.csv
 .friedmanlog.bson
+docs/plans/
