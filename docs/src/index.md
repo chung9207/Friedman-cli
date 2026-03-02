@@ -1,6 +1,6 @@
 # Friedman-cli
 
-Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl).
+Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/FriedmanJP/MacroEconometricModels.jl).
 
 ## Features
 
@@ -36,12 +36,12 @@ Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconomet
 
 ```bash
 # Install
-git clone https://github.com/chung9207/Friedman-cli.git
+git clone https://github.com/FriedmanJP/Friedman-cli.git
 cd Friedman-cli
 julia --project -e '
 using Pkg
 Pkg.rm("MacroEconometricModels")
-Pkg.add(url="https://github.com/chung9207/MacroEconometricModels.jl.git")
+Pkg.add(url="https://github.com/FriedmanJP/MacroEconometricModels.jl.git")
 '
 
 # Estimate a VAR(2) model

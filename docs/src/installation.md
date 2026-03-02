@@ -8,12 +8,12 @@
 ## Install from Source
 
 ```bash
-git clone https://github.com/chung9207/Friedman-cli.git
+git clone https://github.com/FriedmanJP/Friedman-cli.git
 cd Friedman-cli
 julia --project -e '
 using Pkg
 Pkg.rm("MacroEconometricModels")
-Pkg.add(url="https://github.com/chung9207/MacroEconometricModels.jl.git")
+Pkg.add(url="https://github.com/FriedmanJP/MacroEconometricModels.jl.git")
 '
 ```
 

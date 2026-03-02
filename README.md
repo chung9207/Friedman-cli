@@ -1,10 +1,10 @@
 # Friedman-cli
 
-[![CI](https://github.com/chung9207/Friedman-cli/actions/workflows/CI.yml/badge.svg)](https://github.com/chung9207/Friedman-cli/actions/workflows/CI.yml)
+[![CI](https://github.com/FriedmanJP/Friedman-cli/actions/workflows/CI.yml/badge.svg)](https://github.com/FriedmanJP/Friedman-cli/actions/workflows/CI.yml)
 [![codecov](https://codecov.io/gh/FriedmanJP/Friedman-cli/graph/badge.svg?token=TIYTWTJG36)](https://codecov.io/gh/FriedmanJP/Friedman-cli)
-[![Documentation](https://github.com/chung9207/Friedman-cli/actions/workflows/Documentation.yml/badge.svg)](https://chung9207.github.io/Friedman-cli/dev/)
+[![Documentation](https://github.com/FriedmanJP/Friedman-cli/actions/workflows/Documentation.yml/badge.svg)](https://friedmanjp.github.io/Friedman-cli/dev/)
 
-Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl) (v0.3.1).
+Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/FriedmanJP/MacroEconometricModels.jl) (v0.3.1).
 
 12 top-level commands, ~117 subcommands. Action-first CLI: commands are organized by action (`estimate`, `irf`, `forecast`, `dsge`, ...) rather than by model type.
 
@@ -13,12 +13,12 @@ Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconomet
 Requires Julia 1.12+.
 
 ```bash
-git clone https://github.com/chung9207/Friedman-cli.git
+git clone https://github.com/FriedmanJP/Friedman-cli.git
 cd Friedman-cli
 julia --project -e '
 using Pkg
 Pkg.rm("MacroEconometricModels")
-Pkg.add(url="https://github.com/chung9207/MacroEconometricModels.jl.git")
+Pkg.add(url="https://github.com/FriedmanJP/MacroEconometricModels.jl.git")
 '
 ```
 
