@@ -381,11 +381,11 @@ using Test
         @test contains(help_text, "friedman var")
 
         # Entry help includes version number
-        entry = Entry("friedman", node; version=v"0.2.2")
+        entry = Entry("friedman", node; version=v"0.3.0")
         buf = IOBuffer()
         print_help(buf, entry)
         help_text = String(take!(buf))
-        @test contains(help_text, "0.2.2")
+        @test contains(help_text, "0.3.0")
 
         # Leaf with optional argument shows [arg] not <arg>
         leaf_opt_arg = LeafCommand("test", handler;
@@ -500,9 +500,9 @@ using Test
         @test called_with[][:data] == "test.csv"
 
         # dispatch() with ["--version"] prints version
-        entry = Entry("friedman", outer_node; version=v"0.2.2")
+        entry = Entry("friedman", outer_node; version=v"0.3.0")
         version_output = strip(capture_stdout(() -> dispatch(entry, ["--version"])))
-        @test contains(version_output, "0.2.2")
+        @test contains(version_output, "0.3.0")
 
         # dispatch() with [] shows help (no error)
         help_output = capture_stdout(() -> dispatch(entry, String[]))
@@ -550,7 +550,7 @@ using Test
 
         # -V short flag triggers version
         v_output = strip(capture_stdout(() -> dispatch(entry, ["-V"])))
-        @test contains(v_output, "0.2.2")
+        @test contains(v_output, "0.3.0")
     end
 
     @testset "DispatchError on unknown command" begin
@@ -1475,7 +1475,7 @@ using Test
                 "irf" => irf_node, "fevd" => fevd_node, "hd" => hd_node,
                 "forecast" => NodeCommand("forecast", Dict{String,Union{NodeCommand,LeafCommand}}(), "Forecast")),
             "Friedman CLI")
-        entry = Entry("friedman", root; version=v"0.2.2")
+        entry = Entry("friedman", root; version=v"0.3.0")
 
         # Top level HAS irf, fevd, hd (action-first)
         @test haskey(root.subcmds, "irf")
@@ -2992,6 +2992,98 @@ using TOML
         uhlig_partial = get_uhlig_params(cfg_partial)
         @test uhlig_partial["n_starts"] == 200
         @test uhlig_partial["n_refine"] == 10  # default
+    end
+
+    @testset "get_dsge — valid model config" begin
+        cfg = Dict(
+            "model" => Dict(
+                "parameters" => Dict("rho" => 0.9, "sigma" => 0.01, "beta" => 0.99),
+                "endogenous" => ["C", "K", "Y"],
+                "exogenous" => ["e_A"],
+                "equations" => [
+                    Dict("expr" => "C[t] + K[t] = Y[t]"),
+                    Dict("expr" => "Y[t] = K[t-1]"),
+                    Dict("expr" => "K[t] = rho * K[t-1] + sigma * e_A[t]"),
+                ]
+            )
+        )
+        result = get_dsge(cfg)
+        @test result["parameters"] == Dict("rho" => 0.9, "sigma" => 0.01, "beta" => 0.99)
+        @test result["endogenous"] == ["C", "K", "Y"]
+        @test result["exogenous"] == ["e_A"]
+        @test length(result["equations"]) == 3
+        @test result["equations"][1] == "C[t] + K[t] = Y[t]"
+    end
+
+    @testset "get_dsge — missing model section" begin
+        cfg = Dict{String,Any}()
+        result = get_dsge(cfg)
+        @test isempty(result["endogenous"])
+    end
+
+    @testset "get_dsge — solver defaults" begin
+        cfg = Dict{String,Any}()
+        result = get_dsge(cfg)
+        @test result["solver_method"] == "gensys"
+        @test result["solver_order"] == 1
+        @test result["solver_degree"] == 5
+        @test result["solver_grid"] == "auto"
+    end
+
+    @testset "get_dsge — solver overrides" begin
+        cfg = Dict(
+            "model" => Dict("endogenous" => ["Y"], "exogenous" => ["e"],
+                           "parameters" => Dict{String,Any}(), "equations" => Dict[]),
+            "solver" => Dict("method" => "perturbation", "order" => 2)
+        )
+        result = get_dsge(cfg)
+        @test result["solver_method"] == "perturbation"
+        @test result["solver_order"] == 2
+    end
+
+    @testset "get_dsge_constraints — bounds" begin
+        cfg = Dict(
+            "constraints" => Dict(
+                "bounds" => [
+                    Dict("variable" => "i", "lower" => 0.0),
+                    Dict("variable" => "c", "lower" => 0.0, "upper" => 10.0),
+                ]
+            )
+        )
+        result = get_dsge_constraints(cfg)
+        @test length(result["bounds"]) == 2
+        @test result["bounds"][1]["variable"] == "i"
+        @test result["bounds"][1]["lower"] == 0.0
+        @test !haskey(result["bounds"][1], "upper")
+        @test result["bounds"][2]["upper"] == 10.0
+    end
+
+    @testset "get_dsge_constraints — empty" begin
+        cfg = Dict{String,Any}()
+        result = get_dsge_constraints(cfg)
+        @test isempty(result["bounds"])
+    end
+
+    @testset "get_smm — valid config" begin
+        cfg = Dict(
+            "smm" => Dict(
+                "weighting" => "optimal",
+                "sim_ratio" => 10,
+                "burn" => 200,
+            )
+        )
+        result = get_smm(cfg)
+        @test result["weighting"] == "optimal"
+        @test result["sim_ratio"] == 10
+        @test result["burn"] == 200
+    end
+
+    @testset "get_smm — defaults" begin
+        cfg = Dict{String,Any}()
+        result = get_smm(cfg)
+        @test result["weighting"] == "two_step"
+        @test result["sim_ratio"] == 5
+        @test result["burn"] == 100
     end
 end
 
