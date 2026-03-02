@@ -4,13 +4,13 @@
 [![codecov](https://codecov.io/gh/chung9207/Friedman-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/chung9207/Friedman-cli)
 [![Documentation](https://github.com/chung9207/Friedman-cli/actions/workflows/Documentation.yml/badge.svg)](https://chung9207.github.io/Friedman-cli/dev/)
 
-Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl) (v0.2.4).
+Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/chung9207/MacroEconometricModels.jl) (v0.3.1).
 
-11 top-level commands, ~107 subcommands. Action-first CLI: commands are organized by action (`estimate`, `irf`, `forecast`, ...) rather than by model type.
+12 top-level commands, ~117 subcommands. Action-first CLI: commands are organized by action (`estimate`, `irf`, `forecast`, `dsge`, ...) rather than by model type.
 
 ## Installation
 
-Requires Julia 1.10+.
+Requires Julia 1.12+.
 
 ```bash
 git clone https://github.com/chung9207/Friedman-cli.git
@@ -32,7 +32,7 @@ julia --project bin/friedman [command] [subcommand] [args...] [options...]
 
 | Command | Subcommands | Description |
 |---------|-------------|-------------|
-| `estimate` | `var` `bvar` `lp` `arima` `gmm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `fastica` `ml` `vecm` `pvar` | Estimate models (17 model types) |
+| `estimate` | `var` `bvar` `lp` `arima` `gmm` `smm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `fastica` `ml` `vecm` `pvar` | Estimate models (18 model types) |
 | `test` | `adf` `kpss` `pp` `za` `np` `johansen` `normality` `identifiability` `heteroskedasticity` `arch_lm` `ljung_box` `granger` `lr` `lm` + `var` (`lagselect` `stability`) + `pvar` (`hansen_j` `mmsc` `lagselect` `stability`) | Statistical tests (14 + nested) |
 | `irf` | `var` `bvar` `lp` `vecm` `pvar` | Impulse response functions |
 | `fevd` | `var` `bvar` `lp` `vecm` `pvar` | Forecast error variance decomposition |
@@ -43,6 +43,7 @@ julia --project bin/friedman [command] [subcommand] [args...] [options...]
 | `filter` | `hp` `hamilton` `bn` `bk` `bhp` | Time series filters |
 | `data` | `list` `load` `describe` `diagnose` `fix` `transform` `filter` `validate` `balance` | Data management |
 | `nowcast` | `dfm` `bvar` `bridge` `news` `forecast` | Nowcasting (DFM, BVAR, bridge equations) |
+| `dsge` | `solve` `irf` `fevd` `simulate` `estimate` `perfect-foresight` `steady-state` | DSGE models (7 subcommands) |
 
 All commands support `--format` (`table`|`csv`|`json`) and `--output` (file path) options.
 
@@ -85,6 +86,9 @@ friedman estimate arima data.csv --criterion=bic   # auto-select
 
 # GMM
 friedman estimate gmm data.csv --config=gmm_spec.toml --weighting=twostep
+
+# Simulated Method of Moments (SMM)
+friedman estimate smm data.csv --config=smm_spec.toml --weighting=two_step --sim-ratio=5
 
 # Static factor model (PCA) — auto-selects factors via Bai-Ng IC
 friedman estimate static data.csv
@@ -376,6 +380,46 @@ friedman nowcast news --data-new=new.csv --data-old=old.csv --monthly-vars=4 --q
 friedman nowcast forecast data.csv --method=dfm --horizons=4
 ```
 
+### DSGE Models
+
+```bash
+# Solve a DSGE model (from TOML specification)
+friedman dsge solve model.toml --method=gensys
+friedman dsge solve model.toml --method=perturbation --order=2
+friedman dsge solve model.toml --method=projection --degree=5 --grid=chebyshev
+
+# Solve with OccBin occasionally binding constraints (e.g., ZLB)
+friedman dsge solve model.toml --method=gensys --constraints=zlb.toml --periods=40
+
+# Solve from Julia model file
+friedman dsge solve model.jl --method=klein
+
+# Impulse response functions
+friedman dsge irf model.toml --horizon=40 --shock-size=1.0
+friedman dsge irf model.toml --method=perturbation --order=2 --n-sim=500
+
+# OccBin piecewise-linear IRFs
+friedman dsge irf model.toml --constraints=zlb.toml --horizon=40
+
+# Forecast error variance decomposition
+friedman dsge fevd model.toml --horizon=40
+
+# Simulate time series from solved model
+friedman dsge simulate model.toml --periods=200 --burn=100 --seed=42
+friedman dsge simulate model.toml --method=perturbation --antithetic
+
+# Estimate DSGE parameters
+friedman dsge estimate model.toml --data=macro.csv --method=irf_matching --params=rho,sigma
+friedman dsge estimate model.toml --data=macro.csv --method=smm --params=alpha,beta --sim-ratio=5
+
+# Perfect foresight transition path
+friedman dsge perfect-foresight model.toml --shocks=shock_path.csv --periods=100
+
+# Compute steady state
+friedman dsge steady-state model.toml
+friedman dsge steady-state model.toml --constraints=zlb.toml
+```
+
 ## Output Formats
 
 All commands support `--format` and `--output`:
@@ -485,6 +529,45 @@ n_regimes = 2
 moment_conditions = ["output", "inflation"]
 instruments = ["lag_output", "lag_inflation"]
 weighting = "twostep"
+```
+
+**DSGE model (TOML format):**
+
+```toml
+[model]
+parameters = { rho = 0.9, sigma = 0.01, beta = 0.99, alpha = 0.36, delta = 0.025 }
+endogenous = ["C", "K", "Y", "A"]
+exogenous = ["e_A"]
+
+[[model.equations]]
+expr = "C[t] + K[t] = (1-delta)*K[t-1] + Y[t]"
+[[model.equations]]
+expr = "Y[t] = A[t] * K[t-1]^alpha"
+[[model.equations]]
+expr = "1/C[t] = beta * E[t](1/C[t+1] * (alpha*A[t+1]*K[t]^(alpha-1) + 1-delta))"
+[[model.equations]]
+expr = "A[t] = rho * A[t-1] + sigma * e_A[t]"
+
+[solver]
+method = "gensys"
+```
+
+**OccBin constraints (for ZLB, etc.):**
+
+```toml
+[constraints]
+[[constraints.bounds]]
+variable = "i"
+lower = 0.0
+```
+
+**SMM specification:**
+
+```toml
+[smm]
+weighting = "two_step"
+sim_ratio = 5
+burn = 100
 ```
 
 ## License
