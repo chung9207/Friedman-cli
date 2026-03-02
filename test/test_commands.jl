@@ -5117,4 +5117,120 @@ end  # Nowcast handlers
 
 end  # Plot Support
 
+# ─── DSGE Shared Helpers ─────────────────────────────────────────
+
+@testset "DSGE shared helpers" begin
+    @testset "_load_dsge_model — TOML file" begin
+        mktempdir() do dir
+            toml_path = joinpath(dir, "model.toml")
+            write(toml_path, """
+            [model]
+            parameters = { rho = 0.9, sigma = 0.01, beta = 0.99 }
+            endogenous = ["C", "K", "Y"]
+            exogenous = ["e_A"]
+
+            [[model.equations]]
+            expr = "C[t] + K[t] = Y[t]"
+            [[model.equations]]
+            expr = "Y[t] = K[t-1]"
+            [[model.equations]]
+            expr = "K[t] = rho * K[t-1] + sigma * e_A[t]"
+            """)
+            out = _capture() do
+                spec = _load_dsge_model(toml_path)
+                @test spec isa MacroEconometricModels.DSGESpec
+                @test spec.n_endog == 3
+                @test spec.n_exog == 1
+            end
+            @test occursin("Loaded DSGE model from TOML", out)
+        end
+    end
+
+    @testset "_load_dsge_model — .jl file" begin
+        mktempdir() do dir
+            jl_path = joinpath(dir, "model.jl")
+            write(jl_path, """
+            model = MacroEconometricModels.DSGESpec(; n_endog=4, n_exog=2)
+            """)
+            out = _capture() do
+                spec = _load_dsge_model(jl_path)
+                @test spec isa MacroEconometricModels.DSGESpec
+                @test spec.n_endog == 4
+                @test spec.n_exog == 2
+            end
+            @test occursin("Loaded DSGE model from Julia file", out)
+        end
+    end
+
+    @testset "_load_dsge_model — missing file" begin
+        @test_throws ErrorException _load_dsge_model("/nonexistent/model.toml")
+    end
+
+    @testset "_load_dsge_model — unsupported extension" begin
+        mktempdir() do dir
+            bad_path = joinpath(dir, "model.csv")
+            write(bad_path, "a,b\n1,2\n")
+            @test_throws ErrorException _load_dsge_model(bad_path)
+        end
+    end
+
+    @testset "_load_dsge_model — TOML missing endogenous" begin
+        mktempdir() do dir
+            toml_path = joinpath(dir, "model.toml")
+            write(toml_path, """
+            [model]
+            parameters = { rho = 0.9 }
+            """)
+            @test_throws ErrorException _load_dsge_model(toml_path)
+        end
+    end
+
+    @testset "_solve_dsge — default method" begin
+        spec = MacroEconometricModels.DSGESpec(; n_endog=3, n_exog=1)
+        out = _capture() do
+            sol = _solve_dsge(spec)
+            @test sol isa MacroEconometricModels.DSGESolution
+        end
+        @test occursin("Computing steady state", out)
+        @test occursin("Linearizing", out)
+        @test occursin("Solving", out)
+        @test occursin("Determinacy", out)
+    end
+
+    @testset "_solve_dsge — perturbation" begin
+        spec = MacroEconometricModels.DSGESpec(; n_endog=3, n_exog=1)
+        out = _capture() do
+            sol = _solve_dsge(spec; method="perturbation", order=1)
+            @test sol isa MacroEconometricModels.PerturbationSolution
+        end
+        @test occursin("perturbation", out)
+    end
+
+    @testset "_solve_dsge — projection" begin
+        spec = MacroEconometricModels.DSGESpec(; n_endog=3, n_exog=1)
+        out = _capture() do
+            sol = _solve_dsge(spec; method="projection", degree=5)
+            @test sol isa MacroEconometricModels.ProjectionSolution
+        end
+    end
+
+    @testset "_load_dsge_constraints" begin
+        mktempdir() do dir
+            con_path = joinpath(dir, "constraints.toml")
+            write(con_path, """
+            [[constraints.bounds]]
+            variable = "i"
+            lower = 0.0
+            [[constraints.bounds]]
+            variable = "c"
+            lower = 0.0
+            upper = 10.0
+            """)
+            cons = _load_dsge_constraints(con_path)
+            @test length(cons) == 2
+            @test cons[1] isa MacroEconometricModels.OccBinConstraint
+        end
+    end
+end
+
 end  # Command Handlers

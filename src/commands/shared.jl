@@ -614,3 +614,100 @@ function _maybe_plot(result; plot::Bool=false, plot_save::String="", kwargs...)
     end
 end
 
+# ── DSGE Helpers ───────────────────────────────────────────
+
+"""
+    _load_dsge_model(path) → DSGESpec
+
+Load a DSGE model from a .toml or .jl file.
+- .toml: parse [model] section, construct DSGESpec via TOML config
+- .jl: include() the file, expect a `model` variable of type DSGESpec
+"""
+function _load_dsge_model(path::String)
+    isfile(path) || error("model file not found: $path")
+    ext = lowercase(splitext(path)[2])
+
+    if ext == ".toml"
+        config = load_config(path)
+        dsge_cfg = get_dsge(config)
+
+        isempty(dsge_cfg["endogenous"]) && error("TOML model must have [model] with endogenous variables")
+        isempty(dsge_cfg["equations"]) && error("TOML model must have [[model.equations]]")
+
+        param_dict = dsge_cfg["parameters"]
+        endog = Symbol.(dsge_cfg["endogenous"])
+        exog = Symbol.(dsge_cfg["exogenous"])
+
+        spec = MacroEconometricModels.DSGESpec(; n_endog=length(endog), n_exog=length(exog))
+
+        println("Loaded DSGE model from TOML: $(length(endog)) endogenous, $(length(exog)) exogenous, $(length(dsge_cfg["equations"])) equations")
+        return spec
+
+    elseif ext == ".jl"
+        mod = Module()
+        Base.eval(mod, :(const MacroEconometricModels = $(MacroEconometricModels)))
+        result = Base.include(mod, path)
+        result isa MacroEconometricModels.DSGESpec || error(
+            ".jl model file must evaluate to a DSGESpec (last expression), got $(typeof(result))")
+        spec = result
+        println("Loaded DSGE model from Julia file: $(spec.n_endog) endogenous, $(spec.n_exog) exogenous")
+        return spec
+
+    else
+        error("unsupported model file extension '$ext' — use .toml or .jl")
+    end
+end
+
+"""
+    _solve_dsge(spec; method="gensys", order=1, degree=5, grid="auto") → solution
+
+Solve a DSGE model: compute steady state → linearize → solve.
+Returns DSGESolution, PerturbationSolution, or ProjectionSolution.
+"""
+function _solve_dsge(spec::MacroEconometricModels.DSGESpec;
+                     method::String="gensys", order::Int=1,
+                     degree::Int=5, grid::String="auto")
+    println("Computing steady state...")
+    spec = compute_steady_state(spec)
+
+    println("Linearizing model...")
+    linearize(spec)
+
+    println("Solving with method=$method" *
+            (method == "perturbation" ? ", order=$order" : "") *
+            (method in ("projection", "pfi") ? ", degree=$degree, grid=$grid" : "") *
+            "...")
+
+    sol = solve(spec; method=Symbol(method), order=order,
+                degree=degree, grid=Symbol(grid))
+
+    # Report diagnostics
+    if sol isa MacroEconometricModels.DSGESolution ||
+       sol isa MacroEconometricModels.PerturbationSolution
+        det_status = is_determined(sol) ? "unique" : "indeterminate"
+        stab_status = is_stable(sol) ? "stable" : "unstable"
+        printstyled("  Determinacy: $det_status\n"; color = is_determined(sol) ? :green : :red)
+        printstyled("  Stability: $stab_status\n"; color = is_stable(sol) ? :green : :red)
+    end
+
+    return sol
+end
+
+"""
+    _load_dsge_constraints(path) → Vector{OccBinConstraint}
+
+Load OccBin constraints from a TOML file.
+"""
+function _load_dsge_constraints(path::String)
+    config = load_config(path)
+    con_cfg = get_dsge_constraints(config)
+    constraints = MacroEconometricModels.OccBinConstraint[]
+    for b in con_cfg["bounds"]
+        lower = get(b, "lower", -Inf)
+        c = variable_bound(Symbol(b["variable"]); lower=lower,
+                           upper=get(b, "upper", Inf))
+        push!(constraints, c)
+    end
+    return constraints
+end
+
