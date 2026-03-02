@@ -3091,3 +3091,93 @@ end
 # Command handler tests (uses mock MacroEconometricModels)
 # ──────────────────────────────────────────────────────────────
 include(joinpath(@__DIR__, "test_commands.jl"))
+
+# ──────────────────────────────────────────────────────────────
+# CLI structure tests using real register_*_commands!() functions
+# (These run after test_commands.jl which includes mocks + all source files)
+# ──────────────────────────────────────────────────────────────
+
+@testset "DSGE command structure" begin
+    dsge_node = register_dsge_commands!()
+    @test dsge_node isa NodeCommand
+    @test dsge_node.name == "dsge"
+
+    # All 7 subcommands exist
+    @test haskey(dsge_node.subcmds, "solve")
+    @test haskey(dsge_node.subcmds, "irf")
+    @test haskey(dsge_node.subcmds, "fevd")
+    @test haskey(dsge_node.subcmds, "simulate")
+    @test haskey(dsge_node.subcmds, "estimate")
+    @test haskey(dsge_node.subcmds, "perfect-foresight")
+    @test haskey(dsge_node.subcmds, "steady-state")
+    @test length(dsge_node.subcmds) == 7
+
+    # All are LeafCommands
+    for (name, cmd) in dsge_node.subcmds
+        @test cmd isa LeafCommand
+    end
+
+    # solve has model argument and key options
+    solve_cmd = dsge_node.subcmds["solve"]
+    @test length(solve_cmd.args) == 1
+    @test solve_cmd.args[1].name == "model"
+    opt_names = [o.name for o in solve_cmd.options]
+    @test "method" in opt_names
+    @test "order" in opt_names
+    @test "constraints" in opt_names
+    @test "format" in opt_names
+
+    # estimate has data and params options
+    est_cmd = dsge_node.subcmds["estimate"]
+    opt_names = [o.name for o in est_cmd.options]
+    @test "data" in opt_names
+    @test "params" in opt_names
+    @test "method" in opt_names
+    @test "weighting" in opt_names
+
+    # irf has horizon and shock-size
+    irf_cmd = dsge_node.subcmds["irf"]
+    opt_names = [o.name for o in irf_cmd.options]
+    @test "horizon" in opt_names
+    @test "shock-size" in opt_names
+    @test "constraints" in opt_names
+
+    # simulate has periods and burn
+    sim_cmd = dsge_node.subcmds["simulate"]
+    opt_names = [o.name for o in sim_cmd.options]
+    @test "periods" in opt_names
+    @test "burn" in opt_names
+    @test "seed" in opt_names
+    flag_names = [f.name for f in sim_cmd.flags]
+    @test "antithetic" in flag_names
+
+    # perfect-foresight has shocks option
+    pf_cmd = dsge_node.subcmds["perfect-foresight"]
+    opt_names = [o.name for o in pf_cmd.options]
+    @test "shocks" in opt_names
+    @test "periods" in opt_names
+end
+
+@testset "estimate smm command structure" begin
+    est_node = register_estimate_commands!()
+    @test haskey(est_node.subcmds, "smm")
+    smm_cmd = est_node.subcmds["smm"]
+    @test smm_cmd isa LeafCommand
+    @test length(smm_cmd.args) == 1
+    @test smm_cmd.args[1].name == "data"
+    opt_names = [o.name for o in smm_cmd.options]
+    @test "weighting" in opt_names
+    @test "sim-ratio" in opt_names
+    @test "burn" in opt_names
+    @test "config" in opt_names
+
+    # Verify estimate now has 18 subcommands (17 original + smm)
+    @test length(est_node.subcmds) == 18
+    @test haskey(est_node.subcmds, "smm")
+    for key in ["var", "bvar", "lp", "arima", "gmm", "static", "dynamic", "gdfm",
+                 "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml",
+                 "vecm", "pvar", "smm"]
+        @test haskey(est_node.subcmds, key)
+        @test est_node.subcmds[key] isa LeafCommand
+    end
+end
