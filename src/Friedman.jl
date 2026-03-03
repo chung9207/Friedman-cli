@@ -48,8 +48,9 @@ include("commands/filter.jl")
 include("commands/data.jl")
 include("commands/nowcast.jl")
 include("commands/dsge.jl")
+include("commands/did.jl")
 
-const FRIEDMAN_VERSION = v"0.3.0"
+const FRIEDMAN_VERSION = v"0.3.1"
 
 """
     build_app() -> Entry
@@ -70,6 +71,7 @@ function build_app()
         "data"      => register_data_commands!(),
         "nowcast"   => register_nowcast_commands!(),
         "dsge"      => register_dsge_commands!(),
+        "did"       => register_did_commands!(),
     )
 
     root = NodeCommand("friedman", root_cmds,

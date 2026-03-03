@@ -711,3 +711,16 @@ function _load_dsge_constraints(path::String)
     return constraints
 end
 
+"""
+    _load_panel_for_did(data, id_col, time_col) -> PanelData
+
+Load panel CSV and print summary for DID/event study commands.
+"""
+function _load_panel_for_did(data::String, id_col::String, time_col::String)
+    pd = load_panel_data(data, id_col, time_col)
+    printstyled("  Panel: $(pd.n_groups) groups, $(div(pd.T_obs, pd.n_groups)) periods, " *
+                "$(pd.n_vars) variables"; color=:cyan)
+    pd.balanced && printstyled(" (balanced)"; color=:cyan)
+    println()
+    return pd
+end

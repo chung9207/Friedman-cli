@@ -381,11 +381,11 @@ using Test
         @test contains(help_text, "friedman var")
 
         # Entry help includes version number
-        entry = Entry("friedman", node; version=v"0.3.0")
+        entry = Entry("friedman", node; version=v"0.3.1")
         buf = IOBuffer()
         print_help(buf, entry)
         help_text = String(take!(buf))
-        @test contains(help_text, "0.3.0")
+        @test contains(help_text, "0.3.1")
 
         # Leaf with optional argument shows [arg] not <arg>
         leaf_opt_arg = LeafCommand("test", handler;
@@ -500,9 +500,9 @@ using Test
         @test called_with[][:data] == "test.csv"
 
         # dispatch() with ["--version"] prints version
-        entry = Entry("friedman", outer_node; version=v"0.3.0")
+        entry = Entry("friedman", outer_node; version=v"0.3.1")
         version_output = strip(capture_stdout(() -> dispatch(entry, ["--version"])))
-        @test contains(version_output, "0.3.0")
+        @test contains(version_output, "0.3.1")
 
         # dispatch() with [] shows help (no error)
         help_output = capture_stdout(() -> dispatch(entry, String[]))
@@ -550,7 +550,7 @@ using Test
 
         # -V short flag triggers version
         v_output = strip(capture_stdout(() -> dispatch(entry, ["-V"])))
-        @test contains(v_output, "0.3.0")
+        @test contains(v_output, "0.3.1")
     end
 
     @testset "DispatchError on unknown command" begin
@@ -1475,7 +1475,7 @@ using Test
                 "irf" => irf_node, "fevd" => fevd_node, "hd" => hd_node,
                 "forecast" => NodeCommand("forecast", Dict{String,Union{NodeCommand,LeafCommand}}(), "Forecast")),
             "Friedman CLI")
-        entry = Entry("friedman", root; version=v"0.3.0")
+        entry = Entry("friedman", root; version=v"0.3.1")
 
         # Top level HAS irf, fevd, hd (action-first)
         @test haskey(root.subcmds, "irf")
@@ -3180,4 +3180,78 @@ end
         @test haskey(est_node.subcmds, key)
         @test est_node.subcmds[key] isa LeafCommand
     end
+end
+
+@testset "DID command structure" begin
+    did_node = register_did_commands!()
+    @test did_node isa NodeCommand
+    @test did_node.name == "did"
+
+    @test haskey(did_node.subcmds, "estimate")
+    @test haskey(did_node.subcmds, "event-study")
+    @test haskey(did_node.subcmds, "lp-did")
+    @test haskey(did_node.subcmds, "test")
+    @test length(did_node.subcmds) == 4
+
+    @test did_node.subcmds["estimate"] isa LeafCommand
+    @test did_node.subcmds["event-study"] isa LeafCommand
+    @test did_node.subcmds["lp-did"] isa LeafCommand
+
+    test_node = did_node.subcmds["test"]
+    @test test_node isa NodeCommand
+    @test haskey(test_node.subcmds, "bacon")
+    @test haskey(test_node.subcmds, "pretrend")
+    @test haskey(test_node.subcmds, "negweight")
+    @test haskey(test_node.subcmds, "honest")
+    @test length(test_node.subcmds) == 4
+    for (name, cmd) in test_node.subcmds
+        @test cmd isa LeafCommand
+    end
+
+    est_cmd = did_node.subcmds["estimate"]
+    @test length(est_cmd.args) == 1
+    @test est_cmd.args[1].name == "data"
+    opt_names = [o.name for o in est_cmd.options]
+    @test "outcome" in opt_names
+    @test "treatment" in opt_names
+    @test "method" in opt_names
+    @test "id-col" in opt_names
+    @test "time-col" in opt_names
+    @test "control-group" in opt_names
+    @test "cluster" in opt_names
+    flag_names = [f.name for f in est_cmd.flags]
+    @test "plot" in flag_names
+
+    es_cmd = did_node.subcmds["event-study"]
+    opt_names = [o.name for o in es_cmd.options]
+    @test "outcome" in opt_names
+    @test "treatment" in opt_names
+    @test "leads" in opt_names
+    @test "horizon" in opt_names
+    @test "lags" in opt_names
+
+    lp_cmd = did_node.subcmds["lp-did"]
+    opt_names = [o.name for o in lp_cmd.options]
+    @test "outcome" in opt_names
+    @test "treatment" in opt_names
+    @test "leads" in opt_names
+
+    bacon_cmd = test_node.subcmds["bacon"]
+    opt_names = [o.name for o in bacon_cmd.options]
+    @test "outcome" in opt_names
+    @test "treatment" in opt_names
+
+    pt_cmd = test_node.subcmds["pretrend"]
+    opt_names = [o.name for o in pt_cmd.options]
+    @test "method" in opt_names
+    @test "did-method" in opt_names
+
+    nw_cmd = test_node.subcmds["negweight"]
+    opt_names = [o.name for o in nw_cmd.options]
+    @test "treatment" in opt_names
+
+    h_cmd = test_node.subcmds["honest"]
+    opt_names = [o.name for o in h_cmd.options]
+    @test "mbar" in opt_names
+    @test "method" in opt_names
 end

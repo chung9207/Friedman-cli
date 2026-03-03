@@ -4,9 +4,9 @@
 [![codecov](https://codecov.io/gh/FriedmanJP/Friedman-cli/graph/badge.svg?token=TIYTWTJG36)](https://codecov.io/gh/FriedmanJP/Friedman-cli)
 [![Documentation](https://github.com/FriedmanJP/Friedman-cli/actions/workflows/Documentation.yml/badge.svg)](https://friedmanjp.github.io/Friedman-cli/dev/)
 
-Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/FriedmanJP/MacroEconometricModels.jl) (v0.3.1).
+Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/FriedmanJP/MacroEconometricModels.jl) (v0.3.2).
 
-12 top-level commands, ~117 subcommands. Action-first CLI: commands are organized by action (`estimate`, `irf`, `forecast`, `dsge`, ...) rather than by model type.
+13 top-level commands, ~124 subcommands. Action-first CLI: commands are organized by action (`estimate`, `irf`, `forecast`, `dsge`, `did`, ...) rather than by model type.
 
 ## Installation
 
@@ -44,6 +44,7 @@ julia --project bin/friedman [command] [subcommand] [args...] [options...]
 | `data` | `list` `load` `describe` `diagnose` `fix` `transform` `filter` `validate` `balance` | Data management |
 | `nowcast` | `dfm` `bvar` `bridge` `news` `forecast` | Nowcasting (DFM, BVAR, bridge equations) |
 | `dsge` | `solve` `irf` `fevd` `simulate` `estimate` `perfect-foresight` `steady-state` | DSGE models (7 subcommands) |
+| `did` | `estimate` `event-study` `lp-did` + `test` (`bacon` `pretrend` `negweight` `honest`) | Difference-in-differences (3 + 4 nested) |
 
 All commands support `--format` (`table`|`csv`|`json`) and `--output` (file path) options.
 
@@ -418,6 +419,44 @@ friedman dsge perfect-foresight model.toml --shocks=shock_path.csv --periods=100
 # Compute steady state
 friedman dsge steady-state model.toml
 friedman dsge steady-state model.toml --constraints=zlb.toml
+```
+
+### Difference-in-Differences
+
+```bash
+# TWFE DID estimation
+friedman did estimate panel.csv --outcome=y --treatment=treat --method=twfe
+
+# Callaway-Sant'Anna (2021) with group-time ATT
+friedman did estimate panel.csv --outcome=y --treatment=treat --method=cs --control-group=never_treated
+
+# Sun-Abraham (2021)
+friedman did estimate panel.csv --outcome=y --treatment=treat --method=sa
+
+# Borusyak-Jaravel-Spiess (2024) imputation estimator
+friedman did estimate panel.csv --outcome=y --treatment=treat --method=bjs
+
+# de Chaisemartin-D'Haultfoeuille (2020)
+friedman did estimate panel.csv --outcome=y --treatment=treat --method=dcdh --n-boot=500
+
+# Panel event study LP (Jordà 2005 + panel FE)
+friedman did event-study panel.csv --outcome=y --treatment=treat --leads=3 --horizon=5
+
+# LP-DiD with clean controls (Dube et al. 2023)
+friedman did lp-did panel.csv --outcome=y --treatment=treat --leads=3 --horizon=5
+
+# Bacon decomposition (Goodman-Bacon 2021) — diagnose TWFE bias
+friedman did test bacon panel.csv --outcome=y --treatment=treat
+
+# Pre-trend test for parallel trends assumption
+friedman did test pretrend panel.csv --outcome=y --treatment=treat
+friedman did test pretrend panel.csv --outcome=y --treatment=treat --method=event-study
+
+# Negative weight check (de Chaisemartin-D'Haultfoeuille 2020)
+friedman did test negweight panel.csv --treatment=treat
+
+# HonestDiD sensitivity analysis (Rambachan-Roth 2023)
+friedman did test honest panel.csv --outcome=y --treatment=treat --mbar=1.0
 ```
 
 ## Output Formats

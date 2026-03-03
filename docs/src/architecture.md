@@ -9,7 +9,7 @@ bin/friedman ARGS
   → Pkg.activate(project_dir)
   → Friedman.main(ARGS)
     → build_app()                          # constructs Entry with full command tree
-      → register_estimate_commands!()      # 12 register functions, one per top-level command
+      → register_estimate_commands!()      # 13 register functions, one per top-level command
       → register_test_commands!()
       → register_irf_commands!()
       → register_fevd_commands!()
@@ -21,6 +21,7 @@ bin/friedman ARGS
       → register_data_commands!()
       → register_nowcast_commands!()
       → register_dsge_commands!()
+      → register_did_commands!()
     → dispatch(entry, args)
       → dispatch_node()                    # walks NodeCommand tree by matching tokens
       → dispatch_leaf()                    # tokenize → bind_args → leaf.handler(; bound...)
@@ -108,6 +109,7 @@ src/
     data.jl               # 9 data subcommands
     nowcast.jl            # 5 nowcast subcommands
     dsge.jl               # 7 DSGE subcommands
+    did.jl                # 7 DID subcommands (3 estimation + 4 test)
 ```
 
 ## Handler Conventions
@@ -137,8 +139,8 @@ src/
 | | Version |
 |---|---------|
 | Julia | `>= 1.12` |
-| MacroEconometricModels | `0.3.1` |
+| MacroEconometricModels | `0.3.2` |
 
 ## Totals
 
-12 top-level commands, ~117 subcommands, ~8,200 lines across 18 source files.
+13 top-level commands, ~124 subcommands, ~8,700 lines across 19 source files.
