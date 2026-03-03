@@ -53,7 +53,8 @@ function _did_estimate(; data::String, outcome::String, treatment::String,
         CI_Lower = round.(result.ci_lower; digits=6),
         CI_Upper = round.(result.ci_upper; digits=6)
     )
-    output_result(att_df; format=format, output=output,
+    fmt = Symbol(lowercase(format))
+    output_result(att_df; format=fmt, output=output,
         title="DID Estimation — $(uppercase(method))")
 
     println()
@@ -68,7 +69,7 @@ function _did_estimate(; data::String, outcome::String, treatment::String,
         println()
         gt_df = DataFrame(result.group_time_att, ["t=$(t)" for t in result.event_times])
         insertcols!(gt_df, 1, :Cohort => result.cohorts)
-        output_result(gt_df; format=format, output="",
+        output_result(gt_df; format=fmt, output="",
             title="Group-Time ATT (Callaway-Sant'Anna)")
     end
 
@@ -103,7 +104,8 @@ function _did_event_study(; data::String, outcome::String, treatment::String,
         CI_Lower = round.(result.ci_lower; digits=6),
         CI_Upper = round.(result.ci_upper; digits=6)
     )
-    output_result(coef_df; format=format, output=output,
+    fmt = Symbol(lowercase(format))
+    output_result(coef_df; format=fmt, output=output,
         title="Event Study LP — $(result.outcome_var)")
 
     println()
@@ -147,7 +149,8 @@ function _did_lp_did(; data::String, outcome::String, treatment::String,
         CI_Lower = round.(result.ci_lower; digits=6),
         CI_Upper = round.(result.ci_upper; digits=6)
     )
-    output_result(coef_df; format=format, output=output,
+    fmt = Symbol(lowercase(format))
+    output_result(coef_df; format=fmt, output=output,
         title="LP-DiD (Dube et al. 2023) — $(result.outcome_var)")
 
     println()
@@ -180,7 +183,8 @@ function _did_test_bacon(; data::String, outcome::String, treatment::String,
         Estimate = round.(result.estimates; digits=6),
         Weight = round.(result.weights; digits=6)
     )
-    output_result(dec_df; format=format, output=output,
+    fmt = Symbol(lowercase(format))
+    output_result(dec_df; format=fmt, output=output,
         title="Bacon Decomposition (Goodman-Bacon 2021)")
 
     println()
@@ -215,7 +219,7 @@ function _did_test_pretrend(; data::String, outcome::String, treatment::String,
         result = pretrend_test(est)
     end
 
-    output_kv("Pre-Trend Test", [
+    output_kv([
         "Test type" => String(result.test_type),
         "F-statistic" => round(result.statistic; digits=4),
         "p-value" => round(result.pvalue; digits=4),
@@ -223,7 +227,7 @@ function _did_test_pretrend(; data::String, outcome::String, treatment::String,
         "Verdict" => result.pvalue > 0.05 ?
             "Cannot reject parallel trends (p > 0.05)" :
             "Reject parallel trends (p ≤ 0.05)"
-    ]; format=format, output=output)
+    ]; format=format, output=output, title="Pre-Trend Test")
 end
 
 function _did_test_negweight(; data::String, treatment::String,
@@ -238,11 +242,12 @@ function _did_test_negweight(; data::String, treatment::String,
 
     result = negative_weight_check(pd, treatment)
 
-    output_kv("Negative Weight Check (de Chaisemartin-D'Haultfoeuille 2020)", [
+    fmt = Symbol(lowercase(format))
+    output_kv([
         "Negative weights found" => result.has_negative_weights ? "yes" : "no",
         "Number of negative weights" => result.n_negative,
         "Total negative weight" => round(result.total_negative_weight; digits=6),
-    ]; format=format, output=output)
+    ]; format=format, output=output, title="Negative Weight Check (de Chaisemartin-D'Haultfoeuille 2020)")
 
     if result.has_negative_weights && !isempty(result.cohort_time_pairs)
         wt_df = DataFrame(
@@ -251,7 +256,7 @@ function _did_test_negweight(; data::String, treatment::String,
             Weight = round.(result.weights; digits=6)
         )
         println()
-        output_result(wt_df; format=format, output="",
+        output_result(wt_df; format=fmt, output="",
             title="Weight Details")
     end
 end
@@ -291,7 +296,8 @@ function _did_test_honest(; data::String, outcome::String, treatment::String,
         Original_CI_Lower = round.(result.original_ci_lower; digits=6),
         Original_CI_Upper = round.(result.original_ci_upper; digits=6)
     )
-    output_result(hon_df; format=format, output=output,
+    fmt = Symbol(lowercase(format))
+    output_result(hon_df; format=fmt, output=output,
         title="HonestDiD Sensitivity (Rambachan-Roth 2023, M̄=$(mbar))")
 
     println()

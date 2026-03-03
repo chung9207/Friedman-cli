@@ -5707,4 +5707,223 @@ end
     end
 end
 
+# ─── DID Commands ────────────────────────────────────────────────
+
+@testset "DID commands" begin
+
+    function _make_did_csv(dir; G=5, T_per=20)
+        rows = G * T_per
+        data = Dict{String,Vector}()
+        data["unit"] = repeat(1:G, inner=T_per)
+        data["time"] = repeat(1:T_per, outer=G)
+        data["outcome"] = randn(rows) .+ 1.0
+        treat = zeros(Int, rows)
+        for i in 1:rows
+            g = data["unit"][i]
+            t = data["time"][i]
+            if g <= 2 && t >= 10
+                treat[i] = 1
+            elseif g == 3 && t >= 15
+                treat[i] = 1
+            end
+        end
+        data["treat"] = treat
+        data["covar1"] = randn(rows)
+        path = joinpath(dir, "did_panel.csv")
+        CSV.write(path, DataFrame(data))
+        return path
+    end
+
+    @testset "_did_estimate — twfe default" begin
+        mktempdir() do dir
+            csv = _make_did_csv(dir)
+            out = _capture() do
+                _did_estimate(; data=csv, outcome="outcome", treatment="treat",
+                    id_col="unit", time_col="time", format="table")
+            end
+            @test occursin("DID Estimation", out)
+            @test occursin("TWFE", out)
+            @test occursin("ATT", out)
+            @test occursin("Overall ATT", out)
+        end
+    end
+
+    @testset "_did_estimate — callaway_santanna with group-time" begin
+        mktempdir() do dir
+            csv = _make_did_csv(dir)
+            out = _capture() do
+                _did_estimate(; data=csv, outcome="outcome", treatment="treat",
+                    method="cs", id_col="unit", time_col="time", format="table")
+            end
+            @test occursin("DID Estimation", out)
+            @test occursin("CS", out)
+            @test occursin("Group-Time ATT", out)
+        end
+    end
+
+    @testset "_did_estimate — methods cycle" begin
+        for m in ["twfe", "sa", "bjs", "dcdh"]
+            mktempdir() do dir
+                csv = _make_did_csv(dir)
+                out = _capture() do
+                    _did_estimate(; data=csv, outcome="outcome", treatment="treat",
+                        method=m, id_col="unit", time_col="time", format="table")
+                end
+                @test occursin("DID Estimation", out)
+            end
+        end
+    end
+
+    @testset "_did_estimate — missing outcome" begin
+        mktempdir() do dir
+            csv = _make_did_csv(dir)
+            @test_throws ErrorException _did_estimate(;
+                data=csv, outcome="", treatment="treat",
+                id_col="unit", time_col="time", format="table")
+        end
+    end
+
+    @testset "_did_estimate — csv output" begin
+        mktempdir() do dir
+            csv = _make_did_csv(dir)
+            out_path = joinpath(dir, "result.csv")
+            out = _capture() do
+                _did_estimate(; data=csv, outcome="outcome", treatment="treat",
+                    id_col="unit", time_col="time", output=out_path, format="csv")
+            end
+            @test isfile(out_path)
+        end
+    end
+
+    @testset "_did_event_study — default" begin
+        mktempdir() do dir
+            csv = _make_did_csv(dir)
+            out = _capture() do
+                _did_event_study(; data=csv, outcome="outcome", treatment="treat",
+                    id_col="unit", time_col="time", format="table")
+            end
+            @test occursin("Event Study LP", out)
+            @test occursin("Coefficient", out)
+            @test occursin("Lags", out)
+        end
+    end
+
+    @testset "_did_event_study — custom leads/horizon" begin
+        mktempdir() do dir
+            csv = _make_did_csv(dir)
+            out = _capture() do
+                _did_event_study(; data=csv, outcome="outcome", treatment="treat",
+                    id_col="unit", time_col="time", leads=5, horizon=10, lags=2,
+                    format="table")
+            end
+            @test occursin("Event Study LP", out)
+        end
+    end
+
+    @testset "_did_lp_did — default" begin
+        mktempdir() do dir
+            csv = _make_did_csv(dir)
+            out = _capture() do
+                _did_lp_did(; data=csv, outcome="outcome", treatment="treat",
+                    id_col="unit", time_col="time", format="table")
+            end
+            @test occursin("LP-DiD", out)
+            @test occursin("Clean controls", out) || occursin("clean", out)
+        end
+    end
+
+    @testset "_did_test_bacon — default" begin
+        mktempdir() do dir
+            csv = _make_did_csv(dir)
+            out = _capture() do
+                _did_test_bacon(; data=csv, outcome="outcome", treatment="treat",
+                    id_col="unit", time_col="time", format="table")
+            end
+            @test occursin("Bacon Decomposition", out)
+            @test occursin("Weight", out)
+            @test occursin("Overall ATT", out)
+        end
+    end
+
+    @testset "_did_test_pretrend — did method" begin
+        mktempdir() do dir
+            csv = _make_did_csv(dir)
+            out = _capture() do
+                _did_test_pretrend(; data=csv, outcome="outcome", treatment="treat",
+                    id_col="unit", time_col="time", method="did",
+                    did_method="twfe", format="table")
+            end
+            @test occursin("Pre-Trend Test", out)
+            @test occursin("p-value", out) || occursin("pvalue", out)
+        end
+    end
+
+    @testset "_did_test_pretrend — event-study method" begin
+        mktempdir() do dir
+            csv = _make_did_csv(dir)
+            out = _capture() do
+                _did_test_pretrend(; data=csv, outcome="outcome", treatment="treat",
+                    id_col="unit", time_col="time", method="event-study",
+                    format="table")
+            end
+            @test occursin("Pre-Trend Test", out)
+        end
+    end
+
+    @testset "_did_test_negweight — default" begin
+        mktempdir() do dir
+            csv = _make_did_csv(dir)
+            out = _capture() do
+                _did_test_negweight(; data=csv, treatment="treat",
+                    id_col="unit", time_col="time", format="table")
+            end
+            @test occursin("Negative Weight", out)
+            @test occursin("Weight Details", out) || occursin("weight", out)
+        end
+    end
+
+    @testset "_did_test_honest — did method" begin
+        mktempdir() do dir
+            csv = _make_did_csv(dir)
+            out = _capture() do
+                _did_test_honest(; data=csv, outcome="outcome", treatment="treat",
+                    id_col="unit", time_col="time", mbar=1.5,
+                    method="did", did_method="twfe", format="table")
+            end
+            @test occursin("HonestDiD", out)
+            @test occursin("Breakdown", out) || occursin("breakdown", out)
+        end
+    end
+
+    @testset "_did_test_honest — event-study method" begin
+        mktempdir() do dir
+            csv = _make_did_csv(dir)
+            out = _capture() do
+                _did_test_honest(; data=csv, outcome="outcome", treatment="treat",
+                    id_col="unit", time_col="time", mbar=2.0,
+                    method="event-study", format="table")
+            end
+            @test occursin("HonestDiD", out)
+        end
+    end
+
+    @testset "register_did_commands! — structure" begin
+        node = register_did_commands!()
+        @test node isa NodeCommand
+        @test node.name == "did"
+        @test haskey(node.subcmds, "estimate")
+        @test haskey(node.subcmds, "event-study")
+        @test haskey(node.subcmds, "lp-did")
+        @test haskey(node.subcmds, "test")
+        @test length(node.subcmds) == 4
+        test_node = node.subcmds["test"]
+        @test test_node isa NodeCommand
+        @test haskey(test_node.subcmds, "bacon")
+        @test haskey(test_node.subcmds, "pretrend")
+        @test haskey(test_node.subcmds, "negweight")
+        @test haskey(test_node.subcmds, "honest")
+        @test length(test_node.subcmds) == 4
+    end
+end
+
 end  # Command Handlers

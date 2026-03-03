@@ -1864,8 +1864,8 @@ function estimate_did(pd::PanelData{T}, outcome, treatment;
     se = fill(T(0.1), n_et)
     ci_lo = att .- T(1.96) .* se
     ci_hi = att .+ T(1.96) .* se
-    gt_att = method == :callaway_santanna ? ones(T, 3, n_et) * T(0.4) : nothing
-    cohorts = method == :callaway_santanna ? [5, 10, 15] : nothing
+    gt_att = method in (:callaway_santanna, :cs) ? ones(T, 3, n_et) * T(0.4) : nothing
+    cohorts = method in (:callaway_santanna, :cs) ? [5, 10, 15] : nothing
     DIDResult{T}(att, se, ci_lo, ci_hi, et, -1, gt_att, cohorts,
         T(0.45), T(0.08), pd.T_obs, pd.n_groups,
         div(pd.n_groups, 2), pd.n_groups - div(pd.n_groups, 2),
