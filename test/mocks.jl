@@ -1805,4 +1805,153 @@ end
 
 export BVARForecast, point_forecast, lower_bound, upper_bound, forecast_horizon
 
+# ─── DID & Event Study LP Types & Functions ─────────────────
+
+struct DIDResult{T<:Real}
+    att::Vector{T}; se::Vector{T}; ci_lower::Vector{T}; ci_upper::Vector{T}
+    event_times::Vector{Int}; reference_period::Int
+    group_time_att::Union{Matrix{T}, Nothing}; cohorts::Union{Vector{Int}, Nothing}
+    overall_att::T; overall_se::T
+    n_obs::Int; n_groups::Int; n_treated::Int; n_control::Int
+    method::Symbol; outcome_var::String; treatment_var::String
+    control_group::Symbol; cluster::Symbol; conf_level::T
+end
+
+struct EventStudyLP{T<:Real}
+    coefficients::Vector{T}; se::Vector{T}; ci_lower::Vector{T}; ci_upper::Vector{T}
+    event_times::Vector{Int}; reference_period::Int
+    B::Vector{Matrix{T}}; residuals_per_h::Vector{Matrix{T}}
+    vcov::Vector{Matrix{T}}; T_eff::Vector{Int}
+    outcome_var::String; treatment_var::String
+    n_obs::Int; n_groups::Int; lags::Int; leads::Int; horizon::Int
+    clean_controls::Bool; cluster::Symbol; conf_level::T
+    data::PanelData{T}
+end
+
+struct BaconDecomposition{T<:Real}
+    estimates::Vector{T}; weights::Vector{T}
+    comparison_type::Vector{Symbol}; cohort_i::Vector{Int}; cohort_j::Vector{Int}
+    overall_att::T
+end
+
+struct PretrendTestResult{T<:Real}
+    statistic::T; pvalue::T; df::Int
+    pre_coefficients::Vector{T}; pre_se::Vector{T}; test_type::Symbol
+end
+
+struct NegativeWeightResult{T<:Real}
+    has_negative_weights::Bool; n_negative::Int; total_negative_weight::T
+    weights::Vector{T}; cohort_time_pairs::Vector{Tuple{Int,Int}}
+end
+
+struct HonestDiDResult{T<:Real}
+    Mbar::T
+    robust_ci_lower::Vector{T}; robust_ci_upper::Vector{T}
+    original_ci_lower::Vector{T}; original_ci_upper::Vector{T}
+    breakdown_value::T; post_event_times::Vector{Int}; post_att::Vector{T}
+    conf_level::T
+end
+
+# ─── DID Mock Functions ─────────────────────────────────────
+
+function estimate_did(pd::PanelData{T}, outcome, treatment;
+        method=:twfe, leads=0, horizon=5, covariates=String[],
+        control_group=:never_treated, cluster=:unit,
+        conf_level=0.95, n_boot=200) where T
+    et = collect(-leads:horizon)
+    n_et = length(et)
+    att = fill(T(0.5), n_et)
+    se = fill(T(0.1), n_et)
+    ci_lo = att .- T(1.96) .* se
+    ci_hi = att .+ T(1.96) .* se
+    gt_att = method == :callaway_santanna ? ones(T, 3, n_et) * T(0.4) : nothing
+    cohorts = method == :callaway_santanna ? [5, 10, 15] : nothing
+    DIDResult{T}(att, se, ci_lo, ci_hi, et, -1, gt_att, cohorts,
+        T(0.45), T(0.08), pd.T_obs, pd.n_groups,
+        div(pd.n_groups, 2), pd.n_groups - div(pd.n_groups, 2),
+        method, String(outcome), String(treatment),
+        control_group, cluster, T(conf_level))
+end
+
+function estimate_event_study_lp(pd::PanelData{T}, outcome, treatment, H::Int;
+        leads=3, lags=4, covariates=String[], cluster=:unit, conf_level=0.95) where T
+    et = collect(-leads:H)
+    n_et = length(et)
+    coefs = fill(T(0.3), n_et)
+    se = fill(T(0.1), n_et)
+    n_h = leads + H + 1
+    B_mats = [ones(T, pd.n_vars, pd.n_vars) * T(0.1) for _ in 1:n_h]
+    resid = [randn(T, div(pd.T_obs, pd.n_groups), pd.n_vars) for _ in 1:n_h]
+    vcov_mats = [Matrix{T}(I(pd.n_vars)) * T(0.01) for _ in 1:n_h]
+    t_eff = fill(div(pd.T_obs, pd.n_groups) - lags, n_h)
+    EventStudyLP{T}(coefs, se, coefs .- T(1.96) .* se, coefs .+ T(1.96) .* se,
+        et, -1, B_mats, resid, vcov_mats, t_eff,
+        String(outcome), String(treatment),
+        pd.T_obs, pd.n_groups, lags, leads, H, false, cluster, T(conf_level), pd)
+end
+
+function estimate_lp_did(pd::PanelData{T}, outcome, treatment, H::Int;
+        leads=3, lags=4, covariates=String[], cluster=:unit, conf_level=0.95) where T
+    result = estimate_event_study_lp(pd, outcome, treatment, H;
+        leads=leads, lags=lags, covariates=covariates, cluster=cluster, conf_level=conf_level)
+    EventStudyLP{T}(result.coefficients, result.se, result.ci_lower, result.ci_upper,
+        result.event_times, result.reference_period,
+        result.B, result.residuals_per_h, result.vcov, result.T_eff,
+        result.outcome_var, result.treatment_var,
+        result.n_obs, result.n_groups, result.lags, result.leads, result.horizon,
+        true, result.cluster, result.conf_level, result.data)
+end
+
+function bacon_decomposition(pd::PanelData{T}, outcome, treatment) where T
+    BaconDecomposition{T}(
+        [T(0.6), T(0.4), T(0.3)],
+        [T(0.5), T(0.3), T(0.2)],
+        [:treated_vs_untreated, :earlier_vs_later, :later_vs_earlier],
+        [5, 5, 10], [0, 10, 5],
+        T(0.47))
+end
+
+function pretrend_test(result::DIDResult{T}) where T
+    pre_idx = findall(t -> t < 0, result.event_times)
+    PretrendTestResult{T}(T(1.2), T(0.35), length(pre_idx),
+        result.att[pre_idx], result.se[pre_idx], :f_test)
+end
+
+function pretrend_test(result::EventStudyLP{T}) where T
+    pre_idx = findall(t -> t < 0, result.event_times)
+    PretrendTestResult{T}(T(0.8), T(0.55), length(pre_idx),
+        result.coefficients[pre_idx], result.se[pre_idx], :f_test)
+end
+
+function negative_weight_check(pd::PanelData{T}, treatment) where T
+    NegativeWeightResult{T}(true, 2, T(-0.15),
+        [T(0.4), T(0.3), T(-0.1), T(0.5), T(-0.05), T(-0.05)],
+        [(5, 3), (5, 4), (10, 3), (10, 4), (10, 5), (10, 6)])
+end
+
+function honest_did(result::DIDResult{T}; Mbar=1.0, conf_level=0.95) where T
+    post_idx = findall(t -> t >= 0, result.event_times)
+    post_et = result.event_times[post_idx]
+    post_att = result.att[post_idx]
+    HonestDiDResult{T}(T(Mbar),
+        post_att .- T(0.3), post_att .+ T(0.3),
+        result.ci_lower[post_idx], result.ci_upper[post_idx],
+        T(2.5), post_et, post_att, T(conf_level))
+end
+
+function honest_did(result::EventStudyLP{T}; Mbar=1.0, conf_level=0.95) where T
+    post_idx = findall(t -> t >= 0, result.event_times)
+    post_et = result.event_times[post_idx]
+    post_att = result.coefficients[post_idx]
+    HonestDiDResult{T}(T(Mbar),
+        post_att .- T(0.3), post_att .+ T(0.3),
+        result.ci_lower[post_idx], result.ci_upper[post_idx],
+        T(2.5), post_et, post_att, T(conf_level))
+end
+
+export DIDResult, EventStudyLP, BaconDecomposition
+export PretrendTestResult, NegativeWeightResult, HonestDiDResult
+export estimate_did, estimate_event_study_lp, estimate_lp_did
+export bacon_decomposition, pretrend_test, negative_weight_check, honest_did
+
 end # module
