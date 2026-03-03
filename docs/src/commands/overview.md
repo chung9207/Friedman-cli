@@ -25,11 +25,13 @@ friedman
 ├── data         list | load | describe | diagnose | fix | transform | filter |
 │                validate | balance
 ├── nowcast      dfm | bvar | bridge | news | forecast
-└── dsge         solve | irf | fevd | simulate | estimate |
-                 perfect-foresight | steady-state
+├── dsge         solve | irf | fevd | simulate | estimate |
+│                perfect-foresight | steady-state
+└── did          estimate | event-study | lp-did |
+                 test (bacon | pretrend | negweight | honest)
 ```
 
-**Total: 12 top-level commands, ~117 subcommands.**
+**Total: 13 top-level commands, ~124 subcommands.**
 
 ## Common Options
 

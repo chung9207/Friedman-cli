@@ -24,13 +24,15 @@ Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconomet
 | **Nowcasting** | DFM, BVAR, bridge equations, news decomposition | `nowcast dfm`, `nowcast bvar`, ... |
 | **Data Management** | Example datasets, diagnostics, transformations, validation, balancing | `data list`, `data load`, `data describe`, ... |
 | **DSGE** | Solve, IRF, FEVD, simulate, estimate, perfect foresight, steady state | `dsge solve`, `dsge irf`, `dsge simulate`, ... |
+| **DID** | TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCdH, event study LP, LP-DiD | `did estimate`, `did event-study`, `did lp-did` |
+| **DID Diagnostics** | Bacon decomposition, pre-trend test, negative weights, HonestDiD | `did test bacon`, `did test pretrend`, ... |
 | **SMM** | Simulated Method of Moments estimation | `estimate smm` |
 | **Unit Root Tests** | ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron | `test adf`, `test kpss`, ... |
 | **Cointegration** | Johansen trace and max eigenvalue | `test johansen` |
 | **Diagnostics** | Normality, identifiability, ARCH-LM, Ljung-Box, heteroskedasticity | `test normality`, ... |
 | **Model Comparison** | Granger causality, LR test, LM test | `test granger`, `test lr`, `test lm` |
 
-**12 top-level commands, ~117 subcommands.** Action-first CLI: commands organized by action (`estimate`, `irf`, `forecast`, ...) rather than by model type.
+**13 top-level commands, ~124 subcommands.** Action-first CLI: commands organized by action (`estimate`, `irf`, `forecast`, `did`, ...) rather than by model type.
 
 ## Quick Start
 
@@ -64,6 +66,12 @@ julia --project bin/friedman dsge solve rbc.toml
 
 # DSGE impulse responses
 julia --project bin/friedman dsge irf rbc.toml --horizon=40
+
+# Difference-in-differences (Callaway-Sant'Anna)
+julia --project bin/friedman did estimate panel.csv --outcome=y --treatment=treat --method=cs
+
+# Event study LP
+julia --project bin/friedman did event-study panel.csv --outcome=y --treatment=treat
 ```
 
 All commands support `--format=table|csv|json` and `--output=file.csv` for flexible output.
@@ -85,6 +93,7 @@ Pages = [
     "commands/data.md",
     "commands/nowcast.md",
     "commands/dsge.md",
+    "commands/did.md",
     "configuration.md",
     "api.md",
     "architecture.md",

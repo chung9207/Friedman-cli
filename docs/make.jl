@@ -21,6 +21,7 @@ makedocs(;
             "data" => "commands/data.md",
             "nowcast" => "commands/nowcast.md",
             "dsge" => "commands/dsge.md",
+            "did" => "commands/did.md",
         ],
         "Configuration" => "configuration.md",
         "API Reference" => "api.md",
