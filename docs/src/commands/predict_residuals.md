@@ -1,6 +1,6 @@
 # predict & residuals
 
-In-sample fitted values (`predict`) and model residuals (`residuals`). 12 subcommands each, covering the same model types.
+In-sample fitted values (`predict`) and model residuals (`residuals`). 13 subcommands each, covering the same model types.
 
 Both commands share identical subcommand structure and options. Each subcommand estimates the model and extracts fitted values or residuals.
 
@@ -20,6 +20,7 @@ Both commands share identical subcommand structure and options. Each subcommand 
 | `egarch` | EGARCH volatility |
 | `gjr_garch` | GJR-GARCH volatility |
 | `sv` | Stochastic volatility |
+| `favar` | Factor-Augmented VAR |
 
 ## predict
 

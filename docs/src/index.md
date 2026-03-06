@@ -11,6 +11,8 @@ Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconomet
 | **Panel VAR** | GMM/FE-OLS estimation, OIRF/GIRF | `estimate pvar` |
 | **Local Projections** | Standard, IV, Smooth, State-dependent, Propensity score, Doubly robust | `estimate lp --method=...` |
 | **Factor Models** | Static (PCA), Dynamic, Generalized Dynamic (spectral) | `estimate static`, `dynamic`, `gdfm` |
+| **FAVAR** | Factor-Augmented VAR (Bernanke, Boivin & Eliasz 2005) | `estimate favar`, `irf favar`, `forecast favar`, ... |
+| **Structural DFM** | Structural Dynamic Factor Model (Forni et al. 2009) | `estimate sdfm`, `irf sdfm`, `fevd sdfm` |
 | **ARIMA** | AR, MA, ARMA, ARIMA with auto order selection | `estimate arima` |
 | **Volatility** | ARCH, GARCH, EGARCH, GJR-GARCH, Stochastic Volatility | `estimate arch`, `garch`, ... |
 | **Non-Gaussian SVAR** | FastICA, JADE, SOBI, dCov, HSIC, ML (Student-t, mixture, PML, skew-normal) | `estimate fastica`, `estimate ml` |
@@ -23,16 +25,18 @@ Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconomet
 | **Filters** | HP, Hamilton, Beveridge-Nelson, Baxter-King, Boosted HP | `filter hp`, `filter hamilton`, ... |
 | **Nowcasting** | DFM, BVAR, bridge equations, news decomposition | `nowcast dfm`, `nowcast bvar`, ... |
 | **Data Management** | Example datasets, diagnostics, transformations, validation, balancing | `data list`, `data load`, `data describe`, ... |
-| **DSGE** | Solve, IRF, FEVD, simulate, estimate, perfect foresight, steady state | `dsge solve`, `dsge irf`, `dsge simulate`, ... |
+| **DSGE** | Solve, IRF, FEVD, simulate, estimate, Bayesian, perfect foresight, steady state | `dsge solve`, `dsge irf`, `dsge bayes`, ... |
 | **DID** | TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, dCdH, event study LP, LP-DiD | `did estimate`, `did event-study`, `did lp-did` |
 | **DID Diagnostics** | Bacon decomposition, pre-trend test, negative weights, HonestDiD | `did test bacon`, `did test pretrend`, ... |
 | **SMM** | Simulated Method of Moments estimation | `estimate smm` |
+| **Structural Breaks** | Andrews (1993), Bai-Perron (1998) multiple breaks | `test andrews`, `test bai-perron` |
+| **Panel Unit Root** | PANIC (Bai-Ng), CIPS (Pesaran), Moon-Perron, factor break | `test panic`, `test cips`, ... |
 | **Unit Root Tests** | ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron | `test adf`, `test kpss`, ... |
 | **Cointegration** | Johansen trace and max eigenvalue | `test johansen` |
 | **Diagnostics** | Normality, identifiability, ARCH-LM, Ljung-Box, heteroskedasticity | `test normality`, ... |
 | **Model Comparison** | Granger causality, LR test, LM test | `test granger`, `test lr`, `test lm` |
 
-**13 top-level commands, ~124 subcommands.** Action-first CLI: commands organized by action (`estimate`, `irf`, `forecast`, `did`, ...) rather than by model type.
+**13 top-level commands, ~141 subcommands.** Action-first CLI: commands organized by action (`estimate`, `irf`, `forecast`, `did`, ...) rather than by model type.
 
 ## Quick Start
 
@@ -72,6 +76,12 @@ julia --project bin/friedman did estimate panel.csv --outcome=y --treatment=trea
 
 # Event study LP
 julia --project bin/friedman did event-study panel.csv --outcome=y --treatment=treat
+
+# FAVAR estimation
+julia --project bin/friedman estimate favar macro.csv --key-vars=ffr,cpi --factors=3
+
+# Bayesian DSGE estimation
+julia --project bin/friedman dsge bayes rbc.toml --data=macro.csv --params=alpha,beta --priors=priors.toml
 ```
 
 All commands support `--format=table|csv|json` and `--output=file.csv` for flexible output.
@@ -94,6 +104,9 @@ Pages = [
     "commands/nowcast.md",
     "commands/dsge.md",
     "commands/did.md",
+    "commands/favar.md",
+    "commands/structural-breaks.md",
+    "commands/panel-unit-root.md",
     "configuration.md",
     "api.md",
     "architecture.md",

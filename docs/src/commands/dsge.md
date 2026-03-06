@@ -1,6 +1,6 @@
 # dsge
 
-DSGE modeling from the terminal. 7 subcommands: `solve`, `irf`, `fevd`, `simulate`, `estimate`, `perfect-foresight`, `steady-state`.
+DSGE modeling from the terminal. 8 subcommands: `solve`, `irf`, `fevd`, `simulate`, `estimate`, `bayes`, `perfect-foresight`, `steady-state`.
 
 Friedman supports DSGE models specified as TOML files or Julia scripts. See [Configuration](../configuration.md#dsge-model) for TOML format details.
 
@@ -218,13 +218,65 @@ friedman dsge steady-state rbc.toml --constraints=occbin.toml
 
 **Output:** Variable names and steady-state values.
 
+## dsge bayes
+
+Bayesian DSGE estimation via Sequential Monte Carlo (SMC), SMC-squared, or Metropolis-Hastings. Requires data, parameter names, and a priors TOML file.
+
+```bash
+friedman dsge bayes rbc.toml --data=macro.csv --params=alpha,beta --priors=priors.toml
+friedman dsge bayes rbc.toml --data=macro.csv --params=alpha,beta --priors=priors.toml --sampler=mh --n-draws=20000 --burnin=10000
+friedman dsge bayes rbc.toml --data=macro.csv --params=alpha,beta --priors=priors.toml --sampler=smc2 --n-particles=1000
+friedman dsge bayes rbc.toml --data=macro.csv --params=alpha,beta --priors=priors.toml --solver=perturbation --order=3
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--data` | `-d` | String | (required) | Path to CSV data file |
+| `--params` | | String | (required) | Comma-separated parameter names to estimate |
+| `--priors` | | String | (required) | Path to priors TOML file |
+| `--sampler` | | String | `smc` | `smc`, `smc2`, `mh` |
+| `--n-smc` | | Int | 5000 | SMC particles |
+| `--n-particles` | | Int | 500 | Particle filter particles (smc2 only) |
+| `--n-draws` | | Int | 10000 | Total posterior draws (mh only) |
+| `--burnin` | | Int | 5000 | Burn-in draws (mh only) |
+| `--ess-target` | | Float64 | 0.5 | ESS target for resampling |
+| `--observables` | | String | | Observable variable names (comma-separated) |
+| `--solver` | | String | `gensys` | `gensys`, `klein`, `perturbation` |
+| `--order` | | Int | 1 | Perturbation order (1, 2, or 3) |
+| `--delayed-acceptance` | | Flag | | Use delayed acceptance for MH (Christen & Fox 2005) |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Posterior summary table (mean, std, 5th/50th/95th percentiles per parameter) + log marginal likelihood and acceptance rate.
+
+### Priors TOML Format
+
+```toml
+[priors.alpha]
+dist = "beta"
+a = 2.0
+b = 5.0
+
+[priors.beta]
+dist = "normal"
+a = 0.99    # mean
+b = 0.01    # std
+
+[priors.sigma]
+dist = "inverse_gamma"
+a = 2.0
+b = 0.1
+```
+
+Each parameter must have a `dist` key (distribution name) and shape parameters `a`, `b`.
+
 ## Solution Methods
 
 | Method | `--method` value | When to use |
 |--------|-----------------|-------------|
 | Gensys (Sims 2002) | `gensys` | Default. Linear rational expectations models |
 | Klein (2000) | `klein` | Alternative generalized Schur decomposition solver |
-| Perturbation | `perturbation` | Higher-order approximations (order 1 or 2) |
+| Perturbation | `perturbation` | Higher-order approximations (order 1, 2, or 3) |
 | Projection | `projection` | Global solutions, nonlinear models, accuracy matters |
 | Policy Function Iteration | `pfi` | Global solutions, value function problems |
 

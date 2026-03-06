@@ -1,6 +1,6 @@
 # hd
 
-Compute historical decomposition of shocks. 4 subcommands: `var`, `bvar`, `lp`, `vecm`.
+Compute historical decomposition of shocks. 5 subcommands: `var`, `bvar`, `lp`, `vecm`, `favar`.
 
 Historical decomposition decomposes observed data into contributions from each structural shock plus initial conditions.
 

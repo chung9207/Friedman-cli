@@ -67,6 +67,7 @@ Friedman.get_uhlig_params
 Friedman.get_dsge
 Friedman.get_dsge_constraints
 Friedman.get_smm
+Friedman.get_dsge_priors
 ```
 
 ## Shared Utilities
@@ -79,6 +80,7 @@ Friedman._load_and_estimate_var
 Friedman._load_and_estimate_bvar
 Friedman._load_and_estimate_vecm
 Friedman._load_and_estimate_pvar
+Friedman._load_and_estimate_favar
 Friedman._build_prior
 Friedman._build_check_func
 Friedman._build_identification_kwargs

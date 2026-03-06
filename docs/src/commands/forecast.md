@@ -1,6 +1,6 @@
 # forecast
 
-Compute forecasts. 13 subcommands covering VAR, BVAR, LP, ARIMA, factor models, volatility models, and VECM.
+Compute forecasts. 14 subcommands covering VAR, BVAR, LP, ARIMA, factor models, volatility models, VECM, and FAVAR.
 
 ## forecast var
 

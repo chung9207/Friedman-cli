@@ -7,31 +7,34 @@ Friedman-cli uses an **action-first** command hierarchy: commands are organized 
 ```
 friedman
 ├── estimate     var | bvar | lp | arima | gmm | smm | static | dynamic | gdfm |
-│                arch | garch | egarch | gjr_garch | sv | fastica | ml | vecm | pvar
+│                arch | garch | egarch | gjr_garch | sv | fastica | ml | vecm | pvar |
+│                favar | sdfm
 ├── test         adf | kpss | pp | za | np | johansen | normality |
 │                identifiability | heteroskedasticity | arch_lm | ljung_box |
-│                granger | lr | lm | var (lagselect | stability) |
+│                granger | lr | lm | andrews | bai-perron |
+│                panic | cips | moon-perron | factor-break |
+│                var (lagselect | stability) |
 │                pvar (hansen_j | mmsc | lagselect | stability)
-├── irf          var | bvar | lp | vecm | pvar
-├── fevd         var | bvar | lp | vecm | pvar
-├── hd           var | bvar | lp | vecm
+├── irf          var | bvar | lp | vecm | pvar | favar | sdfm
+├── fevd         var | bvar | lp | vecm | pvar | favar | sdfm
+├── hd           var | bvar | lp | vecm | favar
 ├── forecast     var | bvar | lp | arima | static | dynamic | gdfm |
-│                arch | garch | egarch | gjr_garch | sv | vecm
+│                arch | garch | egarch | gjr_garch | sv | vecm | favar
 ├── predict      var | bvar | arima | vecm | static | dynamic | gdfm |
-│                arch | garch | egarch | gjr_garch | sv
+│                arch | garch | egarch | gjr_garch | sv | favar
 ├── residuals    var | bvar | arima | vecm | static | dynamic | gdfm |
-│                arch | garch | egarch | gjr_garch | sv
+│                arch | garch | egarch | gjr_garch | sv | favar
 ├── filter       hp | hamilton | bn | bk | bhp
 ├── data         list | load | describe | diagnose | fix | transform | filter |
 │                validate | balance
 ├── nowcast      dfm | bvar | bridge | news | forecast
-├── dsge         solve | irf | fevd | simulate | estimate |
+├── dsge         solve | irf | fevd | simulate | estimate | bayes |
 │                perfect-foresight | steady-state
 └── did          estimate | event-study | lp-did |
                  test (bacon | pretrend | negweight | honest)
 ```
 
-**Total: 13 top-level commands, ~124 subcommands.**
+**Total: 13 top-level commands, ~141 subcommands.**
 
 ## Common Options
 

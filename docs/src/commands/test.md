@@ -1,6 +1,6 @@
 # test
 
-Statistical tests: unit root, cointegration, diagnostics, identification, and model comparison tests. 16 subcommands plus nested `var` (2) and `pvar` (4) nodes.
+Statistical tests: unit root, cointegration, diagnostics, identification, model comparison, structural breaks, and panel unit root tests. 22 subcommands plus nested `var` (2) and `pvar` (4) nodes.
 
 ## Unit Root Tests
 
@@ -386,3 +386,7 @@ friedman test pvar stability data.csv --id-col=country --time-col=year --lags=2
 | `--output` | `-o` | String | | Export file path |
 
 **Output:** Companion matrix eigenvalues with moduli, stability verdict, max modulus.
+
+## See Also
+
+For structural break tests (`test andrews`, `test bai-perron`), see [Structural Breaks](structural-breaks.md). For panel unit root tests (`test panic`, `test cips`, `test moon-perron`, `test factor-break`), see [Panel Unit Root](panel-unit-root.md).

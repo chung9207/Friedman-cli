@@ -1,6 +1,6 @@
 # fevd
 
-Compute forecast error variance decomposition. 5 subcommands: `var`, `bvar`, `lp`, `vecm`, `pvar`.
+Compute forecast error variance decomposition. 7 subcommands: `var`, `bvar`, `lp`, `vecm`, `pvar`, `favar`, `sdfm`.
 
 ## fevd var
 

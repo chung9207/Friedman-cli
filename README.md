@@ -4,9 +4,9 @@
 [![codecov](https://codecov.io/gh/FriedmanJP/Friedman-cli/graph/badge.svg?token=TIYTWTJG36)](https://codecov.io/gh/FriedmanJP/Friedman-cli)
 [![Documentation](https://github.com/FriedmanJP/Friedman-cli/actions/workflows/Documentation.yml/badge.svg)](https://friedmanjp.github.io/Friedman-cli/dev/)
 
-Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/FriedmanJP/MacroEconometricModels.jl) (v0.3.2).
+Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/FriedmanJP/MacroEconometricModels.jl) (v0.3.3).
 
-13 top-level commands, ~124 subcommands. Action-first CLI: commands are organized by action (`estimate`, `irf`, `forecast`, `dsge`, `did`, ...) rather than by model type.
+13 top-level commands, ~141 subcommands. Action-first CLI: commands are organized by action (`estimate`, `irf`, `forecast`, `dsge`, `did`, ...) rather than by model type. Features include VAR/BVAR/Panel VAR, FAVAR, structural DFM, local projections, DSGE (including Bayesian estimation and 3rd-order perturbation), DID/event study, factor models, ARIMA, volatility models (ARCH/GARCH/EGARCH/GJR-GARCH/SV), non-Gaussian SVAR, GMM/SMM, time series filtering, nowcasting, structural break tests (Andrews, Bai-Perron), panel unit root tests (PANIC, CIPS, Moon-Perron, factor break), and data management.
 
 ## Installation
 
@@ -32,18 +32,18 @@ julia --project bin/friedman [command] [subcommand] [args...] [options...]
 
 | Command | Subcommands | Description |
 |---------|-------------|-------------|
-| `estimate` | `var` `bvar` `lp` `arima` `gmm` `smm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `fastica` `ml` `vecm` `pvar` | Estimate models (18 model types) |
-| `test` | `adf` `kpss` `pp` `za` `np` `johansen` `normality` `identifiability` `heteroskedasticity` `arch_lm` `ljung_box` `granger` `lr` `lm` + `var` (`lagselect` `stability`) + `pvar` (`hansen_j` `mmsc` `lagselect` `stability`) | Statistical tests (14 + nested) |
-| `irf` | `var` `bvar` `lp` `vecm` `pvar` | Impulse response functions |
-| `fevd` | `var` `bvar` `lp` `vecm` `pvar` | Forecast error variance decomposition |
-| `hd` | `var` `bvar` `lp` `vecm` | Historical decomposition |
-| `forecast` | `var` `bvar` `lp` `arima` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `vecm` | Forecasting (13 model types) |
-| `predict` | `var` `bvar` `arima` `vecm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` | In-sample fitted values (12 model types) |
-| `residuals` | `var` `bvar` `arima` `vecm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` | Model residuals (12 model types) |
+| `estimate` | `var` `bvar` `lp` `arima` `gmm` `smm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `fastica` `ml` `vecm` `pvar` `favar` `sdfm` | Estimate models (20 model types) |
+| `test` | `adf` `kpss` `pp` `za` `np` `johansen` `normality` `identifiability` `heteroskedasticity` `arch_lm` `ljung_box` `granger` `lr` `lm` `andrews` `bai-perron` `panic` `cips` `moon-perron` `factor-break` + `var` (`lagselect` `stability`) + `pvar` (`hansen_j` `mmsc` `lagselect` `stability`) | Statistical tests (20 + nested) |
+| `irf` | `var` `bvar` `lp` `vecm` `pvar` `favar` `sdfm` | Impulse response functions |
+| `fevd` | `var` `bvar` `lp` `vecm` `pvar` `favar` `sdfm` | Forecast error variance decomposition |
+| `hd` | `var` `bvar` `lp` `vecm` `favar` | Historical decomposition |
+| `forecast` | `var` `bvar` `lp` `arima` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `vecm` `favar` | Forecasting (14 model types) |
+| `predict` | `var` `bvar` `arima` `vecm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `favar` | In-sample fitted values (13 model types) |
+| `residuals` | `var` `bvar` `arima` `vecm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `favar` | Model residuals (13 model types) |
 | `filter` | `hp` `hamilton` `bn` `bk` `bhp` | Time series filters |
 | `data` | `list` `load` `describe` `diagnose` `fix` `transform` `filter` `validate` `balance` | Data management |
 | `nowcast` | `dfm` `bvar` `bridge` `news` `forecast` | Nowcasting (DFM, BVAR, bridge equations) |
-| `dsge` | `solve` `irf` `fevd` `simulate` `estimate` `perfect-foresight` `steady-state` | DSGE models (7 subcommands) |
+| `dsge` | `solve` `irf` `fevd` `simulate` `estimate` `perfect-foresight` `steady-state` `bayes` | DSGE models (8 subcommands) |
 | `did` | `estimate` `event-study` `lp-did` + `test` (`bacon` `pretrend` `negweight` `honest`) | Difference-in-differences (3 + 4 nested) |
 
 All commands support `--format` (`table`|`csv`|`json`) and `--output` (file path) options.
@@ -116,6 +116,14 @@ friedman estimate vecm data.csv --rank=1 --deterministic=constant
 # Panel VAR (GMM or FE-OLS)
 friedman estimate pvar data.csv --id-col=country --time-col=year --lags=2
 friedman estimate pvar data.csv --id-col=country --time-col=year --method=feols
+
+# Factor-Augmented VAR (FAVAR)
+friedman estimate favar data.csv --lags=4 --nfactors=3
+friedman estimate favar data.csv --lags=4 --nfactors=3 --slow-vars=1,2,3
+
+# Structural Dynamic Factor Model (SDFM)
+friedman estimate sdfm data.csv --nfactors=3 --factor-lags=2
+friedman estimate sdfm data.csv --nfactors=3 --id=cholesky
 ```
 
 ### Volatility Models
@@ -176,6 +184,16 @@ friedman test pvar hansen_j data.csv --id-col=country --time-col=year --lags=2
 friedman test pvar mmsc data.csv --id-col=country --time-col=year --max-lags=8
 friedman test pvar lagselect data.csv --id-col=country --time-col=year --max-lags=8
 friedman test pvar stability data.csv --id-col=country --time-col=year --lags=2
+
+# Structural break tests
+friedman test andrews data.csv --column=1 --trim=0.15
+friedman test bai-perron data.csv --column=1 --max-breaks=5
+
+# Panel unit root tests
+friedman test panic data.csv --id-col=country --time-col=year --column=gdp
+friedman test cips data.csv --id-col=country --time-col=year --column=gdp --lags=1
+friedman test moon-perron data.csv --id-col=country --time-col=year --column=gdp
+friedman test factor-break data.csv --id-col=country --time-col=year --column=gdp
 ```
 
 ### Impulse Response Functions
@@ -222,6 +240,12 @@ friedman irf vecm data.csv --shock=1 --horizons=20 --rank=2
 # Panel VAR IRFs (OIRF or GIRF)
 friedman irf pvar data.csv --id-col=country --time-col=year --horizons=20
 friedman irf pvar data.csv --irf-type=girf --horizons=12
+
+# FAVAR IRFs
+friedman irf favar data.csv --shock=1 --horizons=20 --nfactors=3
+
+# Structural DFM IRFs
+friedman irf sdfm data.csv --shock=1 --horizons=20 --nfactors=3
 ```
 
 ### FEVD
@@ -242,6 +266,12 @@ friedman fevd vecm data.csv --horizons=20 --rank=2
 
 # Panel VAR FEVD
 friedman fevd pvar data.csv --id-col=country --time-col=year --horizons=20
+
+# FAVAR FEVD
+friedman fevd favar data.csv --horizons=20 --nfactors=3
+
+# Structural DFM FEVD
+friedman fevd sdfm data.csv --horizons=20 --nfactors=3
 ```
 
 ### Historical Decomposition
@@ -254,6 +284,9 @@ friedman hd lp data.csv --id=cholesky
 
 # VECM historical decomposition
 friedman hd vecm data.csv --id=cholesky --rank=2
+
+# FAVAR historical decomposition
+friedman hd favar data.csv --id=cholesky --nfactors=3
 ```
 
 ### Forecasting
@@ -288,6 +321,9 @@ friedman forecast sv data.csv --column=1 --horizons=12
 
 # VECM forecast (bootstrap CIs)
 friedman forecast vecm data.csv --horizons=12 --rank=2
+
+# FAVAR forecast
+friedman forecast favar data.csv --horizons=12 --nfactors=3
 ```
 
 ### Predict & Residuals
@@ -300,6 +336,7 @@ friedman predict arima data.csv --p=1 --d=1 --q=1
 friedman predict vecm data.csv --rank=1
 friedman predict static data.csv --nfactors=3
 friedman predict garch data.csv --column=1 --p=1 --q=1
+friedman predict favar data.csv --lags=4 --nfactors=3
 
 # Model residuals
 friedman residuals var data.csv --lags=2
@@ -308,6 +345,7 @@ friedman residuals arima data.csv --p=1 --d=1 --q=1
 friedman residuals vecm data.csv --rank=1
 friedman residuals static data.csv --nfactors=3
 friedman residuals garch data.csv --column=1 --p=1 --q=1
+friedman residuals favar data.csv --lags=4 --nfactors=3
 ```
 
 ### Filters
@@ -387,6 +425,7 @@ friedman nowcast forecast data.csv --method=dfm --horizons=4
 # Solve a DSGE model (from TOML specification)
 friedman dsge solve model.toml --method=gensys
 friedman dsge solve model.toml --method=perturbation --order=2
+friedman dsge solve model.toml --method=perturbation --order=3
 friedman dsge solve model.toml --method=projection --degree=5 --grid=chebyshev
 
 # Solve with OccBin occasionally binding constraints (e.g., ZLB)
@@ -415,6 +454,10 @@ friedman dsge estimate model.toml --data=macro.csv --method=smm --params=alpha,b
 
 # Perfect foresight transition path
 friedman dsge perfect-foresight model.toml --shocks=shock_path.csv --periods=100
+
+# Bayesian DSGE estimation (posterior sampling)
+friedman dsge bayes model.toml --data=macro.csv --params=rho,sigma --draws=5000 --sampler=nuts
+friedman dsge bayes model.toml --data=macro.csv --params=alpha,beta --prior=prior.toml
 
 # Compute steady state
 friedman dsge steady-state model.toml

@@ -1,6 +1,6 @@
 # irf
 
-Compute impulse response functions. 5 subcommands: `var`, `bvar`, `lp`, `vecm`, `pvar`.
+Compute impulse response functions. 7 subcommands: `var`, `bvar`, `lp`, `vecm`, `pvar`, `favar`, `sdfm`.
 
 ## irf var
 
@@ -203,4 +203,4 @@ friedman irf pvar data.csv --ci=bootstrap --replications=500
 
 ## See Also
 
-For DSGE model IRFs, see [dsge irf](dsge.md#dsge-irf).
+For FAVAR and Structural DFM IRFs, see [favar & sdfm](favar.md). For DSGE model IRFs, see [dsge irf](dsge.md#dsge-irf).

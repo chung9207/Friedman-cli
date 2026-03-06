@@ -1,6 +1,6 @@
 # estimate
 
-Estimate econometric models. 18 subcommands covering VAR, BVAR, VECM, Panel VAR, local projections, ARIMA, GMM, SMM, factor models, volatility models, and non-Gaussian SVAR identification.
+Estimate econometric models. 20 subcommands covering VAR, BVAR, VECM, Panel VAR, FAVAR, Structural DFM, local projections, ARIMA, GMM, SMM, factor models, volatility models, and non-Gaussian SVAR identification.
 
 ## estimate var
 
