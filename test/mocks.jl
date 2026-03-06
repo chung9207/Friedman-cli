@@ -1281,8 +1281,26 @@ function load_example(name::Symbol)
         group_ids = repeat(1:n_countries, inner=T_per)
         time_ids = repeat(1:T_per, outer=n_countries)
         PanelData(data, vn, group_ids, time_ids, n_countries, n_vars, T_obs, true)
+    elseif name == :mpdta
+        # Callaway-Sant'Anna (2021) minimum wage panel: 500 counties × 5 years × 3 vars
+        n_groups = 500; n_years = 5; n_vars = 3
+        T_obs = n_groups * n_years
+        data = randn(T_obs, n_vars) .+ 1.0
+        vn = ["lemp", "lpop", "first_treat"]
+        group_ids = repeat(1:n_groups, inner=n_years)
+        time_ids = repeat(2003:2007, outer=n_groups)
+        PanelData(data, vn, group_ids, time_ids, n_groups, n_vars, T_obs, true)
+    elseif name == :ddcg
+        # Acemoglu et al. democracy-GDP panel: 184 countries × 51 years
+        n_groups = 184; n_years = 51; n_vars = 5
+        T_obs = n_groups * n_years
+        data = randn(T_obs, n_vars) .+ 1.0
+        vn = ["y", "dem", "tradewb", "lgdp", "lpop"]
+        group_ids = repeat(1:n_groups, inner=n_years)
+        time_ids = repeat(1960:2010, outer=n_groups)
+        PanelData(data, vn, group_ids, time_ids, n_groups, n_vars, T_obs, true)
     else
-        error("unknown dataset: $name (available: fred_md, fred_qd, pwt)")
+        error("unknown dataset: $name (available: fred_md, fred_qd, pwt, mpdta, ddcg)")
     end
 end
 
@@ -1828,6 +1846,17 @@ struct EventStudyLP{T<:Real}
     data::PanelData{T}
 end
 
+struct LPDiDResult{T<:AbstractFloat}
+    coefficients::Vector{T}; se_vec::Vector{T}; ci_lower::Vector{T}; ci_upper::Vector{T}
+    event_times::Vector{Int}; reference_period::Int; nobs_h::Vector{Int}
+    pooled_post_result::Union{NamedTuple,Nothing}; pooled_pre_result::Union{NamedTuple,Nothing}
+    vcov_all::Vector; outcome_name::String; treatment_name::String
+    T_obs::Int; n_groups::Int; spec_type::Symbol
+    pmd::Union{Nothing,Symbol,Int}; reweight::Bool; nocomp::Bool
+    ylags::Int; dylags::Int; pre_window::Int; post_window::Int
+    cluster::Symbol; conf_level::T; pd::PanelData{T}
+end
+
 struct BaconDecomposition{T<:Real}
     estimates::Vector{T}; weights::Vector{T}
     comparison_type::Vector{Symbol}; cohort_i::Vector{Int}; cohort_j::Vector{Int}
@@ -1857,7 +1886,7 @@ end
 function estimate_did(pd::PanelData{T}, outcome, treatment;
         method=:twfe, leads=0, horizon=5, covariates=String[],
         control_group=:never_treated, cluster=:unit,
-        conf_level=0.95, n_boot=200) where T
+        conf_level=0.95, n_boot=200, base_period=:varying) where T
     et = collect(-leads:horizon)
     n_et = length(et)
     att = fill(T(0.5), n_et)
@@ -1891,15 +1920,23 @@ function estimate_event_study_lp(pd::PanelData{T}, outcome, treatment, H::Int;
 end
 
 function estimate_lp_did(pd::PanelData{T}, outcome, treatment, H::Int;
-        leads=3, lags=4, covariates=String[], cluster=:unit, conf_level=0.95) where T
-    result = estimate_event_study_lp(pd, outcome, treatment, H;
-        leads=leads, lags=lags, covariates=covariates, cluster=cluster, conf_level=conf_level)
-    EventStudyLP{T}(result.coefficients, result.se, result.ci_lower, result.ci_upper,
-        result.event_times, result.reference_period,
-        result.B, result.residuals_per_h, result.vcov, result.T_eff,
-        result.outcome_var, result.treatment_var,
-        result.n_obs, result.n_groups, result.lags, result.leads, result.horizon,
-        true, result.cluster, result.conf_level, result.data)
+        pre_window=3, post_window=H, ylags=0, dylags=0,
+        covariates=String[], nonabsorbing=nothing, notyet=false,
+        nevertreated=false, firsttreat=false, oneoff=false,
+        pmd=nothing, reweight=false, nocomp=false,
+        cluster=:unit, conf_level=0.95,
+        only_pooled=false, only_event=false,
+        post_pooled=nothing, pre_pooled=nothing) where T
+    nt = pre_window + post_window + 1
+    et = collect(-pre_window:post_window)
+    c = fill(T(0.3), nt); se = fill(T(0.1), nt)
+    pp = (coef=T(0.5), se=T(0.1), ci_lower=T(0.3), ci_upper=T(0.7), nobs=100)
+    spec = oneoff ? :oneoff : (isnothing(nonabsorbing) ? :absorbing : :nonabsorbing)
+    LPDiDResult{T}(c, se, c .- T(1.96) .* se, c .+ T(1.96) .* se,
+        et, -1, fill(100, nt), pp, pp, Matrix{T}[],
+        String(outcome), String(treatment), pd.T_obs, pd.n_groups,
+        spec, pmd, reweight, nocomp, ylags, dylags, pre_window, post_window,
+        cluster, T(conf_level), pd)
 end
 
 function bacon_decomposition(pd::PanelData{T}, outcome, treatment) where T
@@ -1949,7 +1986,7 @@ function honest_did(result::EventStudyLP{T}; Mbar=1.0, conf_level=0.95) where T
         T(2.5), post_et, post_att, T(conf_level))
 end
 
-export DIDResult, EventStudyLP, BaconDecomposition
+export DIDResult, EventStudyLP, LPDiDResult, BaconDecomposition
 export PretrendTestResult, NegativeWeightResult, HonestDiDResult
 export estimate_did, estimate_event_study_lp, estimate_lp_did
 export bacon_decomposition, pretrend_test, negative_weight_check, honest_did
@@ -2230,5 +2267,379 @@ end
 export PANICResult, PesaranCIPSResult, MoonPerronResult, FactorBreakResult
 export panic_test, pesaran_cips_test, moon_perron_test, factor_break_test
 export panel_unit_root_summary
+
+# ─── Cross-Sectional Regression Types & Functions ──────────────────
+
+struct RegModel{T<:Real}
+    y::Vector{T}; X::Matrix{T}; beta::Vector{T}; var_beta::Matrix{T}
+    residuals::Vector{T}; fitted::Vector{T}; ssr::T; tss::T; r2::T; adj_r2::T
+    f_stat::T; f_pvalue::T; loglik::T; aic::T; bic::T
+    nobs::Int; rank::Int; dof_resid::Int; cov_type::Symbol
+    weights::Union{Vector{T},Nothing}; varnames::Vector{String}
+    clusters::Union{Vector{Int},Nothing}; method::Symbol
+    Z::Union{Matrix{T},Nothing}; endogenous::Union{Vector{Int},Nothing}
+    first_stage_f::Union{T,Nothing}; sargan_stat::Union{T,Nothing}; sargan_pval::Union{T,Nothing}
+end
+
+struct LogitModel{T<:Real}
+    y::Vector{T}; X::Matrix{T}; beta::Vector{T}; var_beta::Matrix{T}
+    residuals::Vector{T}; fitted::Vector{T}; loglik::T; loglik_null::T; pseudo_r2::T
+    aic::T; bic::T; nobs::Int; varnames::Vector{String}
+    converged::Bool; iterations::Int; cov_type::Symbol
+end
+
+struct ProbitModel{T<:Real}
+    y::Vector{T}; X::Matrix{T}; beta::Vector{T}; var_beta::Matrix{T}
+    residuals::Vector{T}; fitted::Vector{T}; loglik::T; loglik_null::T; pseudo_r2::T
+    aic::T; bic::T; nobs::Int; varnames::Vector{String}
+    converged::Bool; iterations::Int; cov_type::Symbol
+end
+
+struct MarginalEffects{T<:Real}
+    effects::Vector{T}; se::Vector{T}; z_stat::Vector{T}; p_values::Vector{T}
+    ci_lower::Vector{T}; ci_upper::Vector{T}; varnames::Vector{String}
+    type::Symbol; conf_level::T
+end
+
+# StatsAPI dispatches for RegModel
+coef(m::RegModel) = m.beta
+vcov(m::RegModel) = m.var_beta
+residuals(m::RegModel) = m.residuals
+predict(m::RegModel) = m.fitted
+stderror(m::RegModel) = [sqrt(m.var_beta[i,i]) for i in 1:size(m.var_beta, 1)]
+nobs(m::RegModel) = m.nobs
+loglikelihood(m::RegModel) = m.loglik
+aic(m::RegModel) = m.aic
+bic(m::RegModel) = m.bic
+r2(m::RegModel) = m.r2
+confint(m::RegModel; level=0.95) = hcat(m.beta .- 1.96 .* stderror(m), m.beta .+ 1.96 .* stderror(m))
+
+# StatsAPI dispatches for LogitModel
+coef(m::LogitModel) = m.beta
+vcov(m::LogitModel) = m.var_beta
+residuals(m::LogitModel) = m.residuals
+predict(m::LogitModel) = m.fitted
+stderror(m::LogitModel) = [sqrt(m.var_beta[i,i]) for i in 1:size(m.var_beta, 1)]
+nobs(m::LogitModel) = m.nobs
+loglikelihood(m::LogitModel) = m.loglik
+aic(m::LogitModel) = m.aic
+bic(m::LogitModel) = m.bic
+r2(m::LogitModel) = m.pseudo_r2
+confint(m::LogitModel; level=0.95) = hcat(m.beta .- 1.96 .* stderror(m), m.beta .+ 1.96 .* stderror(m))
+
+# StatsAPI dispatches for ProbitModel
+coef(m::ProbitModel) = m.beta
+vcov(m::ProbitModel) = m.var_beta
+residuals(m::ProbitModel) = m.residuals
+predict(m::ProbitModel) = m.fitted
+stderror(m::ProbitModel) = [sqrt(m.var_beta[i,i]) for i in 1:size(m.var_beta, 1)]
+nobs(m::ProbitModel) = m.nobs
+loglikelihood(m::ProbitModel) = m.loglik
+aic(m::ProbitModel) = m.aic
+bic(m::ProbitModel) = m.bic
+r2(m::ProbitModel) = m.pseudo_r2
+confint(m::ProbitModel; level=0.95) = hcat(m.beta .- 1.96 .* stderror(m), m.beta .+ 1.96 .* stderror(m))
+
+# Mock functions
+
+function estimate_reg(y::AbstractVector{T}, X::AbstractMatrix{T};
+                      cov_type=:hc1, weights=nothing, varnames=nothing,
+                      clusters=nothing) where T
+    n, k = size(X)
+    beta = ones(T, k) * T(0.5)
+    var_beta = Matrix{T}(I(k)) * T(0.01)
+    fitted_vals = X * beta
+    resids = y .- fitted_vals
+    ssr = sum(resids .^ 2)
+    tss = sum((y .- mean(y)) .^ 2)
+    r2_val = one(T) - ssr / tss
+    adj_r2_val = one(T) - (one(T) - r2_val) * (n - 1) / (n - k)
+    f_val = T(25.0)
+    f_p = T(0.001)
+    ll = T(-100.0)
+    aic_val = T(210.0)
+    bic_val = T(220.0)
+    vnames = varnames === nothing ? ["x$i" for i in 1:k] : varnames
+    RegModel{T}(y, X, beta, var_beta, resids, fitted_vals, ssr, tss,
+                r2_val, adj_r2_val, f_val, f_p, ll, aic_val, bic_val,
+                n, k, n - k, cov_type, weights, vnames, clusters, :ols,
+                nothing, nothing, nothing, nothing, nothing)
+end
+
+function estimate_iv(y::AbstractVector{T}, X::AbstractMatrix{T}, Z::AbstractMatrix{T};
+                     endogenous=Int[], cov_type=:hc1, varnames=nothing) where T
+    n, k = size(X)
+    beta = ones(T, k) * T(0.5)
+    var_beta = Matrix{T}(I(k)) * T(0.01)
+    fitted_vals = X * beta
+    resids = y .- fitted_vals
+    ssr = sum(resids .^ 2)
+    tss = sum((y .- mean(y)) .^ 2)
+    r2_val = one(T) - ssr / tss
+    adj_r2_val = one(T) - (one(T) - r2_val) * (n - 1) / (n - k)
+    f_val = T(20.0)
+    f_p = T(0.002)
+    ll = T(-105.0)
+    aic_val = T(220.0)
+    bic_val = T(230.0)
+    vnames = varnames === nothing ? ["x$i" for i in 1:k] : varnames
+    first_f = T(15.0)
+    sargan_s = T(2.5)
+    sargan_p = T(0.30)
+    RegModel{T}(y, X, beta, var_beta, resids, fitted_vals, ssr, tss,
+                r2_val, adj_r2_val, f_val, f_p, ll, aic_val, bic_val,
+                n, k, n - k, cov_type, nothing, vnames, nothing, :iv,
+                Z, endogenous, first_f, sargan_s, sargan_p)
+end
+
+function _build_logit_probit(::Type{M}, y::AbstractVector{T}, X::AbstractMatrix{T};
+                             cov_type=:ols, varnames=nothing, clusters=nothing,
+                             maxiter=100, tol=1e-8) where {T, M}
+    n, k = size(X)
+    beta = ones(T, k) * T(0.3)
+    var_beta = Matrix{T}(I(k)) * T(0.02)
+    fitted_vals = ones(T, n) * T(0.5)
+    resids = y .- fitted_vals
+    ll = T(-80.0)
+    ll_null = T(-100.0)
+    pseudo = one(T) - ll / ll_null
+    aic_val = T(170.0)
+    bic_val = T(180.0)
+    vnames = varnames === nothing ? ["x$i" for i in 1:k] : varnames
+    M{T}(y, X, beta, var_beta, resids, fitted_vals, ll, ll_null, pseudo,
+          aic_val, bic_val, n, vnames, true, 5, cov_type)
+end
+
+function estimate_logit(y::AbstractVector{T}, X::AbstractMatrix{T};
+                        cov_type=:ols, varnames=nothing, clusters=nothing,
+                        maxiter=100, tol=1e-8) where T
+    _build_logit_probit(LogitModel, y, X; cov_type=cov_type, varnames=varnames,
+                        clusters=clusters, maxiter=maxiter, tol=tol)
+end
+
+function estimate_probit(y::AbstractVector{T}, X::AbstractMatrix{T};
+                         cov_type=:ols, varnames=nothing, clusters=nothing,
+                         maxiter=100, tol=1e-8) where T
+    _build_logit_probit(ProbitModel, y, X; cov_type=cov_type, varnames=varnames,
+                        clusters=clusters, maxiter=maxiter, tol=tol)
+end
+
+function marginal_effects(m::Union{LogitModel{T},ProbitModel{T}};
+                          type=:ame, at=nothing, conf_level=0.95) where T
+    k = length(m.beta)
+    effects = ones(T, k) * T(0.1)
+    se = ones(T, k) * T(0.02)
+    z = effects ./ se
+    pvals = ones(T, k) * T(0.001)
+    z_crit = T(1.96)
+    ci_lo = effects .- z_crit .* se
+    ci_hi = effects .+ z_crit .* se
+    MarginalEffects{T}(effects, se, z, pvals, ci_lo, ci_hi, m.varnames, type, conf_level)
+end
+
+function odds_ratio(m::LogitModel{T}; conf_level=0.95) where T
+    or = exp.(m.beta)
+    se = stderror(m)
+    z_crit = T(1.96)
+    ci_lo = exp.(m.beta .- z_crit .* se)
+    ci_hi = exp.(m.beta .+ z_crit .* se)
+    (odds_ratio=or, ci_lower=ci_lo, ci_upper=ci_hi, varnames=m.varnames)
+end
+
+function vif(m::RegModel{T}) where T
+    k = length(m.beta)
+    fill(T(2.5), k)
+end
+
+function classification_table(m::Union{LogitModel,ProbitModel}; threshold=0.5)
+    Dict("accuracy" => 0.85, "precision" => 0.80, "recall" => 0.75,
+         "f1" => 0.77, "true_positive" => 30, "true_negative" => 55,
+         "false_positive" => 8, "false_negative" => 10, "threshold" => threshold)
+end
+
+export RegModel, LogitModel, ProbitModel, MarginalEffects
+export estimate_reg, estimate_iv, estimate_logit, estimate_probit
+export marginal_effects, odds_ratio, vif, classification_table
+export vcov, confint, r2
+
+# ─── Advanced Unit Root Test Types & Functions ─────────────────
+
+struct FourierADFResult{T<:AbstractFloat}
+    statistic::T; pvalue::T; frequency::Int; f_statistic::T; f_pvalue::T
+    lags::Int; regression::Symbol
+    critical_values::Dict{Int,T}; f_critical_values::Dict{Int,T}; nobs::Int
+end
+
+struct FourierKPSSResult{T<:AbstractFloat}
+    statistic::T; pvalue::T; frequency::Int; f_statistic::T; f_pvalue::T
+    regression::Symbol; critical_values::Dict{Int,T}; f_critical_values::Dict{Int,T}
+    bandwidth::Int; nobs::Int
+end
+
+struct DFGLSResult{T<:AbstractFloat}
+    tau_statistic::T; pt_statistic::T; mgls_statistics::Dict{Symbol,T}
+    pvalue::T; lags::Int; regression::Symbol; critical_values::Dict{Int,T}; nobs::Int
+end
+
+struct LMUnitRootResult{T<:AbstractFloat}
+    statistic::T; pvalue::T; break_indices::Union{Nothing,Vector{Int}}
+    break_fractions::Union{Nothing,Vector{T}}; breaks::Int; regression::Symbol
+    critical_values::Dict{Int,T}; lags::Int; nobs::Int
+end
+
+struct ADF2BreakResult{T<:AbstractFloat}
+    statistic::T; pvalue::T; break_index1::Int; break_index2::Int
+    break_fraction1::T; break_fraction2::T; lags::Int; model::Symbol
+    critical_values::Dict{Int,T}; nobs::Int
+end
+
+struct GregoryHansenResult{T<:AbstractFloat}
+    adf_statistic::T; adf_pvalue::T; adf_break_index::Int
+    zt_statistic::T; zt_pvalue::T; zt_break_index::Int
+    za_statistic::T; za_pvalue::T; za_break_index::Int
+    model::Symbol; critical_values::Dict{Int,T}; nobs::Int
+end
+
+function fourier_adf_test(y::AbstractVector{T};
+        regression=:constant, fmax=3, lags=:aic,
+        max_lags=nothing, trim=0.15) where T
+    n = length(y)
+    p = lags == :aic ? max(1, round(Int, n^(1/3))) : lags
+    freq = min(fmax, 3)
+    cvs = Dict(1 => T(-4.82), 5 => T(-4.25), 10 => T(-3.96))
+    f_cvs = Dict(1 => T(6.93), 5 => T(4.68), 10 => T(3.85))
+    FourierADFResult{T}(T(-4.5), T(0.02), freq, T(8.5), T(0.005),
+        p, regression, cvs, f_cvs, n)
+end
+
+function fourier_kpss_test(y::AbstractVector{T};
+        regression=:constant, fmax=3, bandwidth=nothing) where T
+    n = length(y)
+    bw = isnothing(bandwidth) ? max(1, round(Int, n^(1/4))) : bandwidth
+    freq = min(fmax, 3)
+    cvs = Dict(1 => T(0.739), 5 => T(0.463), 10 => T(0.347))
+    f_cvs = Dict(1 => T(6.93), 5 => T(4.68), 10 => T(3.85))
+    FourierKPSSResult{T}(T(0.35), T(0.10), freq, T(5.2), T(0.01),
+        regression, cvs, f_cvs, bw, n)
+end
+
+function dfgls_test(y::AbstractVector{T};
+        regression=:constant, lags=:aic, max_lags=nothing) where T
+    n = length(y)
+    p = lags == :aic ? max(1, round(Int, n^(1/3))) : lags
+    mgls = Dict(:MZa => T(-15.0), :MZt => T(-2.7), :MSB => T(0.18), :MPT => T(3.5))
+    cvs = Dict(1 => T(-3.48), 5 => T(-2.89), 10 => T(-2.57))
+    DFGLSResult{T}(T(-3.2), T(4.5), mgls, T(0.02), p, regression, cvs, n)
+end
+
+function lm_unitroot_test(y::AbstractVector{T};
+        breaks=0, regression=:level, lags=:aic,
+        max_lags=nothing, trim=0.15) where T
+    n = length(y)
+    p = lags == :aic ? max(1, round(Int, n^(1/3))) : lags
+    cvs = Dict(1 => T(-4.24), 5 => T(-3.57), 10 => T(-3.21))
+    bi = breaks > 0 ? [div(n, i + 1) for i in 1:breaks] : nothing
+    bf = breaks > 0 ? [T(1.0 / (i + 1)) for i in 1:breaks] : nothing
+    LMUnitRootResult{T}(T(-3.8), T(0.03), bi, bf, breaks, regression, cvs, p, n)
+end
+
+function adf_2break_test(y::AbstractVector{T};
+        model=:level, lags=:aic, max_lags=nothing, trim=0.10) where T
+    n = length(y)
+    p = lags == :aic ? max(1, round(Int, n^(1/3))) : lags
+    b1 = div(n, 3)
+    b2 = div(2n, 3)
+    cvs = Dict(1 => T(-5.65), 5 => T(-5.13), 10 => T(-4.82))
+    ADF2BreakResult{T}(T(-5.3), T(0.03), b1, b2, T(b1 / n), T(b2 / n),
+        p, model, cvs, n)
+end
+
+function gregory_hansen_test(Y::AbstractMatrix{T};
+        model=:C, lags=:aic, max_lags=nothing, trim=0.15) where T
+    n = size(Y, 1)
+    bp = div(n, 2)
+    cvs = Dict(1 => T(-5.13), 5 => T(-4.61), 10 => T(-4.34))
+    GregoryHansenResult{T}(T(-4.8), T(0.03), bp,
+        T(-4.5), T(0.04), bp + 2,
+        T(-35.0), T(0.02), bp - 1,
+        model, cvs, n)
+end
+
+export FourierADFResult, FourierKPSSResult, DFGLSResult
+export LMUnitRootResult, ADF2BreakResult, GregoryHansenResult
+export fourier_adf_test, fourier_kpss_test, dfgls_test
+export lm_unitroot_test, adf_2break_test, gregory_hansen_test
+
+# ─── Bayesian DSGE Enhancements ────────────────────────────
+
+struct BayesianDSGESimulation{T<:AbstractFloat}
+    quantiles::Array{T,3}
+    point_estimate::Matrix{T}
+    all_paths::Array{T,3}
+    variables::Vector{String}
+    quantile_levels::Vector{T}
+end
+
+# irf dispatch on BayesianDSGE
+function irf(result::BayesianDSGE{T}, horizon::Int;
+        n_draws=200, quantiles=[0.05, 0.16, 0.84, 0.95],
+        solver=:gensys, solver_kwargs=NamedTuple(), rng=nothing) where T
+    nv = length(result.param_names)
+    ns = max(1, nv)
+    q = Array{T,4}(undef, horizon + 1, nv, ns, length(quantiles))
+    fill!(q, T(0.1))
+    m = zeros(T, horizon + 1, nv, ns)
+    BayesianImpulseResponse{T}(q, m, horizon,
+        String.(result.param_names), ["shock$i" for i in 1:ns], T.(quantiles))
+end
+
+# fevd dispatch on BayesianDSGE
+function fevd(result::BayesianDSGE{T}, horizon::Int;
+        n_draws=200, quantiles=[0.05, 0.16, 0.84, 0.95],
+        solver=:gensys, solver_kwargs=NamedTuple(), rng=nothing) where T
+    nv = length(result.param_names)
+    ns = max(1, nv)
+    q = Array{T,4}(undef, horizon, nv, ns, length(quantiles))
+    fill!(q, T(1.0 / ns))
+    m = fill(T(1.0 / ns), horizon, nv, ns)
+    BayesianFEVD{T}(q, m, horizon,
+        String.(result.param_names), ["shock$i" for i in 1:ns], T.(quantiles))
+end
+
+# simulate dispatch on BayesianDSGE
+function simulate(result::BayesianDSGE{T}, T_periods::Int;
+        n_draws=200, quantiles=[0.05, 0.16, 0.84, 0.95],
+        solver=:gensys, solver_kwargs=NamedTuple(), rng=nothing) where T
+    nv = length(result.param_names)
+    nq = length(quantiles)
+    q = randn(T, T_periods, nv, nq)
+    pe = randn(T, T_periods, nv)
+    ap = randn(T, n_draws, T_periods, nv)
+    BayesianDSGESimulation{T}(q, pe, ap, String.(result.param_names), T.(quantiles))
+end
+
+function posterior_summary(result::BayesianDSGE{T}) where T
+    Dict(p => Dict(:mean => T(0.5), :median => T(0.49), :std => T(0.1),
+        :q05 => T(0.3), :q95 => T(0.7)) for p in result.param_names)
+end
+
+function bayes_factor(r1::BayesianDSGE, r2::BayesianDSGE)
+    exp(r1.log_marginal_likelihood - r2.log_marginal_likelihood)
+end
+
+function prior_posterior_table(result::BayesianDSGE{T}) where T
+    [(param=p, prior_mean=T(0.5), prior_std=T(0.2),
+      post_mean=T(0.5), post_std=T(0.1), post_q05=T(0.3), post_q95=T(0.7))
+     for p in result.param_names]
+end
+
+function posterior_predictive(result::BayesianDSGE{T}, n_sim::Int;
+        T_periods=100, rng=nothing) where T
+    nv = length(result.param_names)
+    randn(T, n_sim, T_periods, nv)
+end
+
+export BayesianDSGESimulation
+export posterior_summary, bayes_factor, prior_posterior_table, posterior_predictive
 
 end # module

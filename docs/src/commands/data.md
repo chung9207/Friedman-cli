@@ -22,6 +22,8 @@ friedman data list
 | `fred_md` | Time Series | 804 x 126 | FRED-MD Monthly Database (126 macroeconomic indicators) |
 | `fred_qd` | Time Series | 268 x 245 | FRED-QD Quarterly Database (245 macroeconomic indicators) |
 | `pwt` | Panel | 38 x 74 x 42 | Penn World Table (38 OECD countries, 74 years, 42 variables) |
+| `mpdta` | Panel | 500 x 5 x 3 | Callaway-Sant'Anna (2021) minimum wage panel |
+| `ddcg` | Panel | 184 x 51 | Acemoglu et al. democracy-GDP panel |
 
 ## data load
 
@@ -39,7 +41,7 @@ friedman data load mydata --path=data.csv --dates=date_column
 
 | Argument | Description |
 |----------|-------------|
-| `<name>` | Dataset name (`fred_md`, `fred_qd`, `pwt`) or label for `--path` |
+| `<name>` | Dataset name (`fred_md`, `fred_qd`, `pwt`, `mpdta`, `ddcg`) or label for `--path` |
 
 | Option | Short | Type | Default | Description |
 |--------|-------|------|---------|-------------|

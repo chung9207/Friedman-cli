@@ -93,4 +93,8 @@ Friedman._solve_dsge
 Friedman._load_dsge_constraints
 Friedman._load_panel_for_did
 Friedman._per_var_output_path
+Friedman._load_reg_data
+Friedman._load_clusters
+Friedman._load_weights
+Friedman._reg_coef_table
 ```

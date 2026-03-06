@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-# DSGE commands: solve, irf, fevd, simulate, estimate, perfect-foresight, steady-state
+# DSGE commands: solve, irf, fevd, simulate, estimate, perfect-foresight, steady-state, bayes (NodeCommand)
 
 function register_dsge_commands!()
     dsge_solve = LeafCommand("solve", _dsge_solve;
@@ -119,28 +119,107 @@ function register_dsge_commands!()
         ],
         description="Compute the steady state of a DSGE model")
 
-    dsge_bayes = LeafCommand("bayes", _dsge_bayes;
+    # ── Bayesian DSGE sub-commands (NodeCommand with 7 leaves) ──
+
+    _bayes_common_options = [
+        Option("data"; short="d", type=String, default="", description="Path to CSV data file"),
+        Option("params"; type=String, default="", description="Comma-separated parameter names"),
+        Option("priors"; type=String, default="", description="Path to priors TOML file"),
+        Option("sampler"; type=String, default="smc", description="smc|smc2|mh"),
+        Option("n-smc"; type=Int, default=5000, description="SMC particles"),
+        Option("n-particles"; type=Int, default=500, description="Particle filter particles (smc2)"),
+        Option("n-draws"; type=Int, default=10000, description="Total posterior draws"),
+        Option("burnin"; type=Int, default=5000, description="Burn-in draws"),
+        Option("ess-target"; type=Float64, default=0.5, description="ESS target for resampling"),
+        Option("observables"; type=String, default="", description="Observable variable names (comma-separated)"),
+        Option("solver"; type=String, default="gensys", description="gensys|klein|perturbation"),
+        Option("order"; type=Int, default=1, description="Perturbation order (1, 2, or 3)"),
+        Option("output"; short="o", type=String, default="", description="Export results to file"),
+        Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+    ]
+
+    bayes_estimate = LeafCommand("estimate", _dsge_bayes_estimate;
         args=[Argument("model"; description="Path to DSGE model file (.toml or .jl)")],
-        options=[
-            Option("data"; short="d", type=String, default="", description="Path to CSV data file"),
-            Option("params"; type=String, default="", description="Comma-separated parameter names"),
-            Option("priors"; type=String, default="", description="Path to priors TOML file"),
-            Option("sampler"; type=String, default="smc", description="smc|smc2|mh"),
-            Option("n-smc"; type=Int, default=5000, description="SMC particles"),
-            Option("n-particles"; type=Int, default=500, description="Particle filter particles (smc2)"),
-            Option("n-draws"; type=Int, default=10000, description="Total posterior draws (mh)"),
-            Option("burnin"; type=Int, default=5000, description="Burn-in draws (mh)"),
-            Option("ess-target"; type=Float64, default=0.5, description="ESS target for resampling"),
-            Option("observables"; type=String, default="", description="Observable variable names (comma-separated)"),
-            Option("solver"; type=String, default="gensys", description="gensys|klein|perturbation"),
-            Option("order"; type=Int, default=1, description="Perturbation order (1, 2, or 3)"),
-            Option("output"; short="o", type=String, default="", description="Export results to file"),
-            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        options=[_bayes_common_options...],
+        flags=[Flag("delayed-acceptance"; description="Use delayed acceptance for MH (Christen & Fox 2005)")],
+        description="Bayesian DSGE estimation (SMC / SMC² / Metropolis-Hastings)")
+
+    bayes_irf = LeafCommand("irf", _dsge_bayes_irf;
+        args=[Argument("model"; description="Path to DSGE model file (.toml or .jl)")],
+        options=[_bayes_common_options...,
+            Option("horizon"; short="h", type=Int, default=40, description="IRF horizon"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
         flags=[
-            Flag("delayed-acceptance"; description="Use delayed acceptance for MH (Christen & Fox 2005)"),
+            Flag("delayed-acceptance"; description="Use delayed acceptance for MH"),
+            Flag("plot"; description="Open interactive plot in browser"),
         ],
-        description="Bayesian DSGE estimation (SMC / SMC² / Metropolis-Hastings)")
+        description="IRF from Bayesian DSGE posterior draws")
+
+    bayes_fevd = LeafCommand("fevd", _dsge_bayes_fevd;
+        args=[Argument("model"; description="Path to DSGE model file (.toml or .jl)")],
+        options=[_bayes_common_options...,
+            Option("horizon"; short="h", type=Int, default=40, description="FEVD horizon"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
+        ],
+        flags=[
+            Flag("delayed-acceptance"; description="Use delayed acceptance for MH"),
+            Flag("plot"; description="Open interactive plot in browser"),
+        ],
+        description="FEVD from Bayesian DSGE posterior draws")
+
+    bayes_simulate = LeafCommand("simulate", _dsge_bayes_simulate;
+        args=[Argument("model"; description="Path to DSGE model file (.toml or .jl)")],
+        options=[_bayes_common_options...,
+            Option("periods"; type=Int, default=200, description="Simulation periods"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
+        ],
+        flags=[
+            Flag("delayed-acceptance"; description="Use delayed acceptance for MH"),
+            Flag("plot"; description="Open interactive plot in browser"),
+        ],
+        description="Simulate from Bayesian DSGE posterior draws")
+
+    bayes_summary = LeafCommand("summary", _dsge_bayes_summary;
+        args=[Argument("model"; description="Path to DSGE model file (.toml or .jl)")],
+        options=[_bayes_common_options...],
+        flags=[Flag("delayed-acceptance"; description="Use delayed acceptance for MH")],
+        description="Posterior summary with prior-posterior comparison")
+
+    bayes_compare = LeafCommand("compare", _dsge_bayes_compare;
+        args=[Argument("model"; description="Path to DSGE model file (.toml or .jl)")],
+        options=[_bayes_common_options...,
+            Option("model2"; type=String, default="", description="Path to second DSGE model file"),
+            Option("params2"; type=String, default="", description="Parameters for second model (comma-separated)"),
+            Option("priors2"; type=String, default="", description="Priors TOML for second model"),
+        ],
+        flags=[Flag("delayed-acceptance"; description="Use delayed acceptance for MH")],
+        description="Bayesian model comparison via Bayes factor")
+
+    bayes_predictive = LeafCommand("predictive", _dsge_bayes_predictive;
+        args=[Argument("model"; description="Path to DSGE model file (.toml or .jl)")],
+        options=[_bayes_common_options...,
+            Option("n-sim"; type=Int, default=500, description="Number of predictive simulations"),
+            Option("periods"; type=Int, default=100, description="Periods per simulation"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
+        ],
+        flags=[
+            Flag("delayed-acceptance"; description="Use delayed acceptance for MH"),
+            Flag("plot"; description="Open interactive plot in browser"),
+        ],
+        description="Posterior predictive checks")
+
+    bayes_subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
+        "estimate"   => bayes_estimate,
+        "irf"        => bayes_irf,
+        "fevd"       => bayes_fevd,
+        "simulate"   => bayes_simulate,
+        "summary"    => bayes_summary,
+        "compare"    => bayes_compare,
+        "predictive" => bayes_predictive,
+    )
+    bayes_node = NodeCommand("bayes", bayes_subcmds,
+        "Bayesian DSGE: estimation, IRF, FEVD, simulation, summary, comparison, predictive checks")
 
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "solve"              => dsge_solve,
@@ -148,7 +227,7 @@ function register_dsge_commands!()
         "fevd"               => dsge_fevd,
         "simulate"           => dsge_simulate,
         "estimate"           => dsge_estimate,
-        "bayes"              => dsge_bayes,
+        "bayes"              => bayes_node,
         "perfect-foresight"  => dsge_pf,
         "steady-state"       => dsge_ss,
     )
@@ -433,16 +512,13 @@ function _dsge_perfect_foresight(; model::String, shocks::String="",
                   title="Perfect Foresight Path (T=$n_periods, converged=$(pf.converged))")
 end
 
-# ── Bayesian DSGE ─────────────────────────────────────
+# ── Bayesian DSGE Handlers ─────────────────────────────────────
 
-function _dsge_bayes(; model::String, data::String="", params::String="",
-                      priors::String="", sampler::String="smc",
-                      n_smc::Int=5000, n_particles::Int=500,
-                      n_draws::Int=10000, burnin::Int=5000,
-                      ess_target::Float64=0.5, observables::String="",
-                      solver::String="gensys", order::Int=1,
-                      delayed_acceptance::Bool=false,
-                      output::String="", format::String="table")
+"""Shared helper: run Bayesian DSGE estimation and return the result."""
+function _dsge_bayes_run_estimation(; model::String, data::String, params::String,
+        priors::String, sampler::String, n_smc::Int, n_particles::Int,
+        n_draws::Int, burnin::Int, ess_target::Float64, observables::String,
+        solver::String, order::Int, delayed_acceptance::Bool)
     isempty(data) && error("--data is required")
     isempty(params) && error("--params is required (comma-separated parameter names)")
     isempty(priors) && error("--priors is required (path to priors TOML)")
@@ -451,7 +527,6 @@ function _dsge_bayes(; model::String, data::String="", params::String="",
 
     df = load_data(data)
     Y = df_to_matrix(df)
-    varnames = variable_names(df)
 
     param_names = [strip(p) for p in split(params, ",")]
     theta0 = ones(Float64, length(param_names)) * 0.5
@@ -478,6 +553,21 @@ function _dsge_bayes(; model::String, data::String="", params::String="",
         solver=Symbol(solver), solver_kwargs=solver_kwargs,
         delayed_acceptance=delayed_acceptance)
 
+    return result
+end
+
+function _dsge_bayes_estimate(; model::String, data::String="", params::String="",
+                               priors::String="", sampler::String="smc",
+                               n_smc::Int=5000, n_particles::Int=500,
+                               n_draws::Int=10000, burnin::Int=5000,
+                               ess_target::Float64=0.5, observables::String="",
+                               solver::String="gensys", order::Int=1,
+                               delayed_acceptance::Bool=false,
+                               output::String="", format::String="table")
+    result = _dsge_bayes_run_estimation(; model, data, params, priors, sampler,
+        n_smc, n_particles, n_draws, burnin, ess_target, observables,
+        solver, order, delayed_acceptance)
+
     # Posterior summary table
     draws = result.theta_draws
     np = size(draws, 2)
@@ -496,4 +586,241 @@ function _dsge_bayes(; model::String, data::String="", params::String="",
     printstyled("  Log marginal likelihood: $(round(result.log_marginal_likelihood; digits=4))\n"; color=:cyan)
     printstyled("  Acceptance rate: $(round(result.acceptance_rate; digits=4))\n"; color=:cyan)
     printstyled("  Method: $(result.method)\n"; color=:cyan)
+end
+
+function _dsge_bayes_irf(; model::String, data::String="", params::String="",
+                          priors::String="", sampler::String="smc",
+                          n_smc::Int=5000, n_particles::Int=500,
+                          n_draws::Int=10000, burnin::Int=5000,
+                          ess_target::Float64=0.5, observables::String="",
+                          solver::String="gensys", order::Int=1,
+                          delayed_acceptance::Bool=false,
+                          horizon::Int=40,
+                          output::String="", format::String="table",
+                          plot::Bool=false, plot_save::String="")
+    result = _dsge_bayes_run_estimation(; model, data, params, priors, sampler,
+        n_smc, n_particles, n_draws, burnin, ess_target, observables,
+        solver, order, delayed_acceptance)
+
+    solver_kwargs = order > 1 ? (order=order,) : NamedTuple()
+
+    println("Computing Bayesian DSGE IRF: horizon=$horizon")
+    irf_result = irf(result, horizon; n_draws=n_draws,
+        solver=Symbol(solver), solver_kwargs=solver_kwargs)
+
+    _maybe_plot(irf_result; plot=plot, plot_save=plot_save)
+
+    n_h = size(irf_result.mean, 1)
+    ns = size(irf_result.mean, 3)
+    varnames = irf_result.variables
+    for si in 1:ns
+        shock_name = si <= length(irf_result.shocks) ? irf_result.shocks[si] : "shock_$si"
+        irf_df = DataFrame()
+        irf_df.horizon = 0:(n_h - 1)
+        for (vi, vname) in enumerate(varnames)
+            vi > size(irf_result.mean, 2) && break
+            irf_df[!, vname] = irf_result.mean[:, vi, si]
+        end
+        output_result(irf_df; format=Symbol(format),
+                      output=_per_var_output_path(output, shock_name),
+                      title="Bayesian DSGE IRF: shock=$shock_name ($sampler, h=$horizon)")
+    end
+end
+
+function _dsge_bayes_fevd(; model::String, data::String="", params::String="",
+                           priors::String="", sampler::String="smc",
+                           n_smc::Int=5000, n_particles::Int=500,
+                           n_draws::Int=10000, burnin::Int=5000,
+                           ess_target::Float64=0.5, observables::String="",
+                           solver::String="gensys", order::Int=1,
+                           delayed_acceptance::Bool=false,
+                           horizon::Int=40,
+                           output::String="", format::String="table",
+                           plot::Bool=false, plot_save::String="")
+    result = _dsge_bayes_run_estimation(; model, data, params, priors, sampler,
+        n_smc, n_particles, n_draws, burnin, ess_target, observables,
+        solver, order, delayed_acceptance)
+
+    solver_kwargs = order > 1 ? (order=order,) : NamedTuple()
+
+    println("Computing Bayesian DSGE FEVD: horizon=$horizon")
+    fevd_result = fevd(result, horizon; n_draws=n_draws,
+        solver=Symbol(solver), solver_kwargs=solver_kwargs)
+
+    _maybe_plot(fevd_result; plot=plot, plot_save=plot_save)
+
+    n_v = size(fevd_result.mean, 2)
+    ns = size(fevd_result.mean, 3)
+    n_h = size(fevd_result.mean, 1)
+    varnames = fevd_result.variables
+    for vi in 1:min(n_v, length(varnames))
+        vname = varnames[vi]
+        fevd_df = DataFrame()
+        fevd_df.horizon = 1:n_h
+        for si in 1:ns
+            shock_name = si <= length(fevd_result.shocks) ? fevd_result.shocks[si] : "shock_$si"
+            fevd_df[!, shock_name] = fevd_result.mean[:, vi, si]
+        end
+        output_result(fevd_df; format=Symbol(format),
+                      output=_per_var_output_path(output, vname),
+                      title="Bayesian DSGE FEVD: $vname ($sampler, h=$horizon)")
+    end
+end
+
+function _dsge_bayes_simulate(; model::String, data::String="", params::String="",
+                               priors::String="", sampler::String="smc",
+                               n_smc::Int=5000, n_particles::Int=500,
+                               n_draws::Int=10000, burnin::Int=5000,
+                               ess_target::Float64=0.5, observables::String="",
+                               solver::String="gensys", order::Int=1,
+                               delayed_acceptance::Bool=false,
+                               periods::Int=200,
+                               output::String="", format::String="table",
+                               plot::Bool=false, plot_save::String="")
+    result = _dsge_bayes_run_estimation(; model, data, params, priors, sampler,
+        n_smc, n_particles, n_draws, burnin, ess_target, observables,
+        solver, order, delayed_acceptance)
+
+    solver_kwargs = order > 1 ? (order=order,) : NamedTuple()
+
+    println("Simulating from Bayesian DSGE posterior: T=$periods")
+    sim = simulate(result, periods; n_draws=n_draws,
+        solver=Symbol(solver), solver_kwargs=solver_kwargs)
+
+    _maybe_plot(sim; plot=plot, plot_save=plot_save)
+
+    varnames = sim.variables
+    sim_df = DataFrame()
+    sim_df.period = 1:periods
+    for (vi, vname) in enumerate(varnames)
+        vi > size(sim.point_estimate, 2) && break
+        sim_df[!, vname] = sim.point_estimate[:, vi]
+    end
+    output_result(sim_df; format=Symbol(format), output=output,
+                  title="Bayesian DSGE Simulation ($sampler, T=$periods)")
+end
+
+function _dsge_bayes_summary(; model::String, data::String="", params::String="",
+                              priors::String="", sampler::String="smc",
+                              n_smc::Int=5000, n_particles::Int=500,
+                              n_draws::Int=10000, burnin::Int=5000,
+                              ess_target::Float64=0.5, observables::String="",
+                              solver::String="gensys", order::Int=1,
+                              delayed_acceptance::Bool=false,
+                              output::String="", format::String="table")
+    result = _dsge_bayes_run_estimation(; model, data, params, priors, sampler,
+        n_smc, n_particles, n_draws, burnin, ess_target, observables,
+        solver, order, delayed_acceptance)
+
+    summary = posterior_summary(result)
+    pp_table = prior_posterior_table(result)
+
+    # Posterior summary table
+    pnames = result.param_names
+    sum_df = DataFrame(
+        parameter = pnames,
+        mean = [round(summary[p][:mean]; digits=6) for p in pnames],
+        median = [round(summary[p][:median]; digits=6) for p in pnames],
+        std = [round(summary[p][:std]; digits=6) for p in pnames],
+        q05 = [round(summary[p][:q05]; digits=6) for p in pnames],
+        q95 = [round(summary[p][:q95]; digits=6) for p in pnames],
+    )
+    output_result(sum_df; format=Symbol(format), output=output,
+                  title="Bayesian DSGE Posterior Summary ($sampler)")
+
+    # Prior-posterior comparison
+    pp_df = DataFrame(
+        parameter = [r.param for r in pp_table],
+        prior_mean = [round(r.prior_mean; digits=6) for r in pp_table],
+        prior_std = [round(r.prior_std; digits=6) for r in pp_table],
+        post_mean = [round(r.post_mean; digits=6) for r in pp_table],
+        post_std = [round(r.post_std; digits=6) for r in pp_table],
+        post_q05 = [round(r.post_q05; digits=6) for r in pp_table],
+        post_q95 = [round(r.post_q95; digits=6) for r in pp_table],
+    )
+    output_result(pp_df; format=Symbol(format),
+                  output=_per_var_output_path(output, "prior_posterior"),
+                  title="Prior vs Posterior Comparison")
+
+    println()
+    printstyled("  Log marginal likelihood: $(round(result.log_marginal_likelihood; digits=4))\n"; color=:cyan)
+    printstyled("  Acceptance rate: $(round(result.acceptance_rate; digits=4))\n"; color=:cyan)
+end
+
+function _dsge_bayes_compare(; model::String, data::String="", params::String="",
+                              priors::String="", sampler::String="smc",
+                              n_smc::Int=5000, n_particles::Int=500,
+                              n_draws::Int=10000, burnin::Int=5000,
+                              ess_target::Float64=0.5, observables::String="",
+                              solver::String="gensys", order::Int=1,
+                              delayed_acceptance::Bool=false,
+                              model2::String="", params2::String="", priors2::String="",
+                              output::String="", format::String="table")
+    isempty(model2) && error("--model2 is required for model comparison")
+    isempty(params2) && error("--params2 is required for model comparison")
+    isempty(priors2) && error("--priors2 is required for model comparison")
+
+    println("Estimating Model 1...")
+    r1 = _dsge_bayes_run_estimation(; model, data, params, priors, sampler,
+        n_smc, n_particles, n_draws, burnin, ess_target, observables,
+        solver, order, delayed_acceptance)
+
+    println("Estimating Model 2...")
+    r2 = _dsge_bayes_run_estimation(; model=model2, data, params=params2,
+        priors=priors2, sampler, n_smc, n_particles, n_draws, burnin,
+        ess_target, observables, solver, order, delayed_acceptance)
+
+    bf = bayes_factor(r1, r2)
+
+    comp_df = DataFrame(
+        model = ["Model 1", "Model 2"],
+        log_marginal_likelihood = [round(r1.log_marginal_likelihood; digits=4),
+                                   round(r2.log_marginal_likelihood; digits=4)],
+        acceptance_rate = [round(r1.acceptance_rate; digits=4),
+                          round(r2.acceptance_rate; digits=4)],
+    )
+    output_result(comp_df; format=Symbol(format), output=output,
+                  title="Bayesian Model Comparison")
+
+    println()
+    printstyled("  Bayes factor (M1 vs M2): $(round(bf; digits=4))\n"; color=:cyan)
+    printstyled("  Log Bayes factor: $(round(log(bf); digits=4))\n"; color=:cyan)
+    if bf > 1
+        printstyled("  Evidence favors Model 1\n"; color=:green)
+    else
+        printstyled("  Evidence favors Model 2\n"; color=:yellow)
+    end
+end
+
+function _dsge_bayes_predictive(; model::String, data::String="", params::String="",
+                                 priors::String="", sampler::String="smc",
+                                 n_smc::Int=5000, n_particles::Int=500,
+                                 n_draws::Int=10000, burnin::Int=5000,
+                                 ess_target::Float64=0.5, observables::String="",
+                                 solver::String="gensys", order::Int=1,
+                                 delayed_acceptance::Bool=false,
+                                 n_sim::Int=500, periods::Int=100,
+                                 output::String="", format::String="table",
+                                 plot::Bool=false, plot_save::String="")
+    result = _dsge_bayes_run_estimation(; model, data, params, priors, sampler,
+        n_smc, n_particles, n_draws, burnin, ess_target, observables,
+        solver, order, delayed_acceptance)
+
+    println("Generating posterior predictive simulations: n=$n_sim, T=$periods")
+    pp = posterior_predictive(result, n_sim; T_periods=periods)
+
+    _maybe_plot(pp; plot=plot, plot_save=plot_save)
+
+    # Summary statistics across simulations
+    nv = size(pp, 3)
+    varnames = result.param_names
+    pp_df = DataFrame(
+        variable = varnames[1:min(nv, length(varnames))],
+        mean = [round(mean(pp[:, :, vi]); digits=6) for vi in 1:min(nv, length(varnames))],
+        std = [round(sqrt(var(vec(pp[:, :, vi]))); digits=6) for vi in 1:min(nv, length(varnames))],
+        min = [round(minimum(pp[:, :, vi]); digits=6) for vi in 1:min(nv, length(varnames))],
+        max = [round(maximum(pp[:, :, vi]); digits=6) for vi in 1:min(nv, length(varnames))],
+    )
+    output_result(pp_df; format=Symbol(format), output=output,
+                  title="Posterior Predictive Summary ($sampler, n=$n_sim, T=$periods)")
 end

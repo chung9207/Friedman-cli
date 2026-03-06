@@ -1,6 +1,6 @@
 name = "Friedman"
 uuid = "f7a1e3d0-2b4c-4e8f-9a6d-1c3b5e7f9a2d"
-version = "0.3.2"
+version = "0.3.3"
 
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
@@ -22,7 +22,7 @@ JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 PATHSolver = "f5f7c340-0bb3-4c5b-8559-4718d85f8e3c"
 
 [compat]
-MacroEconometricModels = "0.3.3"
+MacroEconometricModels = "0.3.4"
 julia = "1.12"
 
 [extras]

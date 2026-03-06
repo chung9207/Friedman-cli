@@ -1,6 +1,6 @@
 # test
 
-Statistical tests: unit root, cointegration, diagnostics, identification, model comparison, structural breaks, and panel unit root tests. 22 subcommands plus nested `var` (2) and `pvar` (4) nodes.
+Statistical tests: unit root (including Fourier, DF-GLS, LM with breaks, ADF 2-break), cointegration (including Gregory-Hansen), diagnostics, identification, model comparison, structural breaks, panel unit root, and multicollinearity (VIF). 29 subcommands plus nested `var` (2) and `pvar` (4) nodes.
 
 ## Unit Root Tests
 
@@ -386,6 +386,153 @@ friedman test pvar stability data.csv --id-col=country --time-col=year --lags=2
 | `--output` | `-o` | String | | Export file path |
 
 **Output:** Companion matrix eigenvalues with moduli, stability verdict, max modulus.
+
+## Advanced Unit Root Tests
+
+### test fourier-adf
+
+Fourier ADF unit root test allowing for smooth structural breaks via Fourier frequencies (Enders & Lee 2012).
+
+```bash
+friedman test fourier-adf data.csv --column=1 --regression=constant --fmax=3
+friedman test fourier-adf data.csv --column=2 --lags=aic --trim=0.15
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--column` | `-c` | Int | 1 | Column index (1-based) |
+| `--regression` | | String | `constant` | `constant`, `trend` |
+| `--fmax` | | Int | 3 | Maximum Fourier frequency |
+| `--lags` | | String | `aic` | Lag order or `aic`/`bic` for auto |
+| `--max-lags` | | Int | auto | Maximum lag order |
+| `--trim` | | Float64 | 0.15 | Trimming proportion |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Test statistic, p-value, optimal frequency, Fourier F-test.
+
+### test fourier-kpss
+
+Fourier KPSS stationarity test with smooth breaks (Becker, Enders & Lee 2006).
+
+```bash
+friedman test fourier-kpss data.csv --column=1 --regression=constant --fmax=3
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--column` | `-c` | Int | 1 | Column index (1-based) |
+| `--regression` | | String | `constant` | `constant`, `trend` |
+| `--fmax` | | Int | 3 | Maximum Fourier frequency |
+| `--bandwidth` | | Int | auto | Bandwidth parameter |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Test statistic, p-value, optimal frequency, bandwidth, Fourier F-test.
+
+### test dfgls
+
+Elliott-Rothenberg-Stock DF-GLS unit root test with GLS detrending.
+
+```bash
+friedman test dfgls data.csv --column=1 --regression=constant
+friedman test dfgls data.csv --column=1 --lags=aic --max-lags=12
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--column` | `-c` | Int | 1 | Column index (1-based) |
+| `--regression` | | String | `constant` | `constant`, `trend` |
+| `--lags` | | String | `aic` | Lag order or `aic`/`bic` for auto |
+| `--max-lags` | | Int | auto | Maximum lag order |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** DF-GLS tau statistic, PT statistic, p-value, M-GLS statistics.
+
+### test lm-unitroot
+
+LM unit root test with 0, 1, or 2 endogenous structural breaks (Lee & Strazicich 2003, 2013).
+
+```bash
+friedman test lm-unitroot data.csv --column=1 --breaks=0
+friedman test lm-unitroot data.csv --column=1 --breaks=1 --regression=level --trim=0.15
+friedman test lm-unitroot data.csv --column=1 --breaks=2 --lags=aic
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--column` | `-c` | Int | 1 | Column index (1-based) |
+| `--breaks` | | Int | 0 | Number of structural breaks (0, 1, or 2) |
+| `--regression` | | String | `level` | `level`, `trend` |
+| `--lags` | | String | `aic` | Lag order or `aic`/`bic` for auto |
+| `--max-lags` | | Int | auto | Maximum lag order |
+| `--trim` | | Float64 | 0.15 | Trimming proportion |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** LM statistic, p-value, break indices and fractions (when breaks > 0).
+
+### test adf-2break
+
+ADF unit root test with two endogenous structural breaks.
+
+```bash
+friedman test adf-2break data.csv --column=1 --model=level
+friedman test adf-2break data.csv --column=1 --model=trend --trim=0.10
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--column` | `-c` | Int | 1 | Column index (1-based) |
+| `--model` | | String | `level` | `level`, `trend`, `both` |
+| `--lags` | | String | `aic` | Lag order or `aic`/`bic` for auto |
+| `--max-lags` | | Int | auto | Maximum lag order |
+| `--trim` | | Float64 | 0.10 | Trimming proportion |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Test statistic, p-value, two estimated break dates with fractions.
+
+### test gregory-hansen
+
+Gregory-Hansen cointegration test with regime shift (Gregory & Hansen 1996). Tests for cointegration in the presence of a structural break.
+
+```bash
+friedman test gregory-hansen data.csv --model=C
+friedman test gregory-hansen data.csv --model=C_T --lags=aic --trim=0.15
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--model` | | String | `C` | `C` (level shift), `C_T` (trend shift), `C_S` (regime shift) |
+| `--lags` | | String | `aic` | Lag order or `aic`/`bic` for auto |
+| `--max-lags` | | Int | auto | Maximum lag order |
+| `--trim` | | Float64 | 0.15 | Trimming proportion |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** ADF\*, Zt\*, Za\* statistics with p-values and estimated break indices.
+
+## Multicollinearity Diagnostics
+
+### test vif
+
+Variance Inflation Factors for detecting multicollinearity. Internally estimates OLS regression, then computes VIF per regressor.
+
+```bash
+friedman test vif data.csv --dep=wage
+friedman test vif data.csv --dep=wage --cov-type=hc1
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name |
+| `--cov-type` | | String | `hc1` | Covariance type for internal OLS |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Per-regressor VIF and tolerance values, with colored warnings (VIF > 5 moderate, VIF > 10 severe).
 
 ## See Also
 

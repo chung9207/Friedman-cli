@@ -158,6 +158,24 @@ function register_residuals_commands!()
         ],
         description="FAVAR model residuals")
 
+    res_reg = LeafCommand("reg", _residuals_reg;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            _REG_COMMON_OPTIONS...,
+            Option("weights"; type=String, default="", description="Weight column name (WLS)"),
+        ],
+        description="OLS/WLS model residuals")
+
+    res_logit = LeafCommand("logit", _residuals_logit;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[_REG_COMMON_OPTIONS...],
+        description="Logit model residuals (deviance residuals)")
+
+    res_probit = LeafCommand("probit", _residuals_probit;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[_REG_COMMON_OPTIONS...],
+        description="Probit model residuals (deviance residuals)")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "var"       => res_var,
         "bvar"      => res_bvar,
@@ -172,6 +190,9 @@ function register_residuals_commands!()
         "gjr_garch" => res_gjr_garch,
         "sv"        => res_sv,
         "favar"     => res_favar,
+        "reg"       => res_reg,
+        "logit"     => res_logit,
+        "probit"    => res_probit,
     )
     return NodeCommand("residuals", subcmds, "Model residuals")
 end
@@ -483,4 +504,63 @@ function _residuals_favar(; data::String, factors=nothing, lags::Int=2,
     end
     output_result(res_df; format=Symbol(format), output=output,
                   title="FAVAR Residuals (T_eff=$T_eff)")
+end
+
+# ── Regression Residuals ──────────────────────────────────
+
+function _residuals_reg(; data::String, dep::String="", cov_type::String="hc1",
+                         weights::String="", clusters::String="",
+                         output::String="", format::String="table")
+    y, X, xcols = _load_reg_data(data, dep; weights_col=weights, clusters_col=clusters)
+    w = _load_weights(data, weights)
+    cl = _load_clusters(data, clusters)
+    model = estimate_reg(y, X; cov_type=Symbol(cov_type), weights=w, varnames=xcols, clusters=cl)
+
+    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+    wls_tag = isnothing(w) ? "OLS" : "WLS"
+    println("$wls_tag Residuals: $dep_name ~ $(join(xcols, " + "))")
+    println("  Observations: $(length(y))")
+    println()
+
+    resid = residuals(model)
+    res_df = DataFrame(observation=1:length(resid), residual=round.(resid; digits=6))
+    output_result(res_df; format=Symbol(format), output=output, title="$wls_tag Residuals")
+end
+
+# ── Logit Residuals ───────────────────────────────────────
+
+function _residuals_logit(; data::String, dep::String="", cov_type::String="hc1",
+                           clusters::String="",
+                           output::String="", format::String="table")
+    y, X, xcols = _load_reg_data(data, dep; clusters_col=clusters)
+    cl = _load_clusters(data, clusters)
+    model = estimate_logit(y, X; cov_type=Symbol(cov_type), varnames=xcols, clusters=cl)
+
+    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+    println("Logit Residuals: $dep_name ~ $(join(xcols, " + "))")
+    println("  Observations: $(length(y))")
+    println()
+
+    resid = residuals(model)
+    res_df = DataFrame(observation=1:length(resid), residual=round.(resid; digits=6))
+    output_result(res_df; format=Symbol(format), output=output, title="Logit Residuals")
+end
+
+# ── Probit Residuals ──────────────────────────────────────
+
+function _residuals_probit(; data::String, dep::String="", cov_type::String="hc1",
+                            clusters::String="",
+                            output::String="", format::String="table")
+    y, X, xcols = _load_reg_data(data, dep; clusters_col=clusters)
+    cl = _load_clusters(data, clusters)
+    model = estimate_probit(y, X; cov_type=Symbol(cov_type), varnames=xcols, clusters=cl)
+
+    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+    println("Probit Residuals: $dep_name ~ $(join(xcols, " + "))")
+    println("  Observations: $(length(y))")
+    println()
+
+    resid = residuals(model)
+    res_df = DataFrame(observation=1:length(resid), residual=round.(resid; digits=6))
+    output_result(res_df; format=Symbol(format), output=output, title="Probit Residuals")
 end

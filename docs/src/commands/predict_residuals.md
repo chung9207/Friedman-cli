@@ -1,6 +1,6 @@
 # predict & residuals
 
-In-sample fitted values (`predict`) and model residuals (`residuals`). 13 subcommands each, covering the same model types.
+In-sample fitted values (`predict`) and model residuals (`residuals`). 16 subcommands each, covering time series, volatility, factor, and cross-sectional regression models.
 
 Both commands share identical subcommand structure and options. Each subcommand estimates the model and extracts fitted values or residuals.
 
@@ -21,6 +21,9 @@ Both commands share identical subcommand structure and options. Each subcommand 
 | `gjr_garch` | GJR-GARCH volatility |
 | `sv` | Stochastic volatility |
 | `favar` | Factor-Augmented VAR |
+| `reg` | OLS/WLS regression |
+| `logit` | Logit regression |
+| `probit` | Probit regression |
 
 ## predict
 
@@ -85,3 +88,24 @@ Options match those in the corresponding `estimate` command for each model type.
 | Option | Short | Type | Default | Description |
 |--------|-------|------|---------|-------------|
 | `--nfactors` | `-r` | Int | auto | Number of factors |
+
+### Regression Models (reg, logit, probit)
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name |
+| `--cov-type` | | String | `hc1` | Covariance type |
+| `--clusters` | | String | | Cluster variable column name |
+
+### Logit/Probit Predict Flags
+
+`predict logit` and `predict probit` support additional flags for alternative output:
+
+| Flag | Description |
+|------|-------------|
+| `--marginal-effects` | Output average marginal effects instead of fitted probabilities |
+| `--odds-ratio` | Output odds ratio table (logit only) |
+| `--classification-table` | Output confusion matrix |
+| `--threshold` | Classification threshold (default: 0.5, with `--classification-table`) |
+
+These flags are mutually exclusive with default fitted-values output.

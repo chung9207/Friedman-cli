@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-# Estimate commands: var, bvar, lp, arima, gmm, smm, static, dynamic, gdfm, arch, garch, egarch, gjr_garch, sv, fastica, ml, favar, sdfm
+# Estimate commands: var, bvar, lp, arima, gmm, smm, static, dynamic, gdfm, arch, garch, egarch, gjr_garch, sv, fastica, ml, favar, sdfm, reg, iv, logit, probit
 
 function register_estimate_commands!()
     est_var = LeafCommand("var", _estimate_var;
@@ -289,6 +289,44 @@ function register_estimate_commands!()
         flags=[Flag("plot"; description="Open interactive plot in browser")],
         description="Estimate Structural Dynamic Factor Model (Forni et al. 2009)")
 
+    est_reg = LeafCommand("reg", _estimate_reg;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            _REG_COMMON_OPTIONS...,
+            Option("weights"; type=String, default="", description="Weight column name (WLS)"),
+        ],
+        description="OLS/WLS linear regression")
+
+    est_iv = LeafCommand("iv", _estimate_iv;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("dep"; type=String, default="", description="Dependent variable column name (default: first numeric column)"),
+            Option("endogenous"; type=String, default="", description="Endogenous column names, comma-separated (required)"),
+            Option("instruments"; type=String, default="", description="Instrument column names, comma-separated (required)"),
+            Option("cov-type"; type=String, default="hc1", description="ols|hc0|hc1|hc2|hc3"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        description="Instrumental variables (2SLS) regression")
+
+    est_logit = LeafCommand("logit", _estimate_logit;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            _REG_COMMON_OPTIONS...,
+            Option("maxiter"; type=Int, default=100, description="Maximum IRLS iterations"),
+            Option("tol"; type=Float64, default=1e-8, description="Convergence tolerance"),
+        ],
+        description="Binary logit regression (MLE via IRLS)")
+
+    est_probit = LeafCommand("probit", _estimate_probit;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            _REG_COMMON_OPTIONS...,
+            Option("maxiter"; type=Int, default=100, description="Maximum IRLS iterations"),
+            Option("tol"; type=Float64, default=1e-8, description="Convergence tolerance"),
+        ],
+        description="Binary probit regression (MLE via IRLS)")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "var"       => est_var,
         "bvar"      => est_bvar,
@@ -310,6 +348,10 @@ function register_estimate_commands!()
         "smm"       => est_smm,
         "favar"     => est_favar,
         "sdfm"      => est_sdfm,
+        "reg"       => est_reg,
+        "iv"        => est_iv,
+        "logit"     => est_logit,
+        "probit"    => est_probit,
     )
     return NodeCommand("estimate", subcmds, "Estimate econometric models")
 end
@@ -1259,5 +1301,164 @@ function _estimate_sdfm(; data::String, factors=nothing, id::String="cholesky",
     println("  Shocks: $(join(sdfm.shock_names, ", "))")
 
     _maybe_plot(sdfm; plot=plot, plot_save=plot_save)
+end
+
+# ── OLS/WLS Regression ────────────────────────────────
+
+function _estimate_reg(; data::String, dep::String="", cov_type::String="hc1",
+                        weights::String="", clusters::String="",
+                        output::String="", format::String="table")
+    y, X, xcols = _load_reg_data(data, dep; weights_col=weights, clusters_col=clusters)
+    w = _load_weights(data, weights)
+    cl = _load_clusters(data, clusters)
+
+    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+    wls_tag = isnothing(w) ? "OLS" : "WLS"
+    println("$wls_tag Regression: $dep_name ~ $(join(xcols, " + "))")
+    println("  Observations: $(length(y)), Regressors: $(length(xcols)), Cov type: $cov_type")
+    println()
+
+    model = estimate_reg(y, X; cov_type=Symbol(cov_type), weights=w,
+                         varnames=xcols, clusters=cl)
+
+    coef_df = _reg_coef_table(model, xcols)
+    output_result(coef_df; format=Symbol(format), output=output, title="$wls_tag Regression Coefficients")
+
+    println()
+    pairs = Pair{String,Any}[
+        "R²"              => round(r2(model); digits=6),
+        "Adj. R²"         => round(model.adj_r2; digits=6),
+        "F-statistic"     => round(model.f_stat; digits=4),
+        "F p-value"       => round(model.f_pvalue; digits=4),
+        "Log-likelihood"  => round(loglikelihood(model); digits=4),
+        "AIC"             => round(aic(model); digits=4),
+        "BIC"             => round(bic(model); digits=4),
+    ]
+    output_kv(pairs; format=format, title="Fit Statistics")
+end
+
+# ── IV (2SLS) Regression ──────────────────────────────
+
+function _estimate_iv(; data::String, dep::String="", endogenous::String="",
+                       instruments::String="", cov_type::String="hc1",
+                       output::String="", format::String="table")
+    isempty(endogenous) && error("--endogenous is required for IV estimation")
+    isempty(instruments) && error("--instruments is required for IV estimation")
+
+    df = load_data(data)
+    numcols = variable_names(df)
+
+    dep_col = isempty(dep) ? numcols[1] : dep
+    !isempty(dep) && !(dep_col in numcols) && error("dependent variable '$dep_col' not found in numeric columns: $numcols")
+
+    endog_names = [strip(s) for s in split(endogenous, ",")]
+    inst_names = [strip(s) for s in split(instruments, ",")]
+
+    for nm in endog_names
+        nm in numcols || error("endogenous variable '$nm' not found in numeric columns: $numcols")
+    end
+    for nm in inst_names
+        nm in numcols || error("instrument '$nm' not found in numeric columns: $numcols")
+    end
+
+    exclude = Set([dep_col])
+    xcols = filter(c -> !(c in exclude), numcols)
+    isempty(xcols) && error("no regressor columns remaining after excluding dep='$dep_col'")
+
+    endog_idx = [findfirst(==(nm), xcols) for nm in endog_names]
+    any(isnothing, endog_idx) && error("endogenous variable(s) not found among regressors")
+
+    y = Vector{Float64}(df[!, dep_col])
+    X = Matrix{Float64}(df[!, xcols])
+    Z = Matrix{Float64}(df[!, inst_names])
+
+    println("IV (2SLS) Regression: $dep_col ~ $(join(xcols, " + "))")
+    println("  Endogenous: $(join(endog_names, ", "))")
+    println("  Instruments: $(join(inst_names, ", "))")
+    println("  Observations: $(length(y)), Cov type: $cov_type")
+    println()
+
+    model = estimate_iv(y, X, Z; endogenous=endog_idx, cov_type=Symbol(cov_type), varnames=xcols)
+
+    coef_df = _reg_coef_table(model, xcols)
+    output_result(coef_df; format=Symbol(format), output=output, title="IV (2SLS) Regression Coefficients")
+
+    println()
+    pairs = Pair{String,Any}[
+        "R²"              => round(r2(model); digits=6),
+        "Adj. R²"         => round(model.adj_r2; digits=6),
+    ]
+    if !isnothing(model.first_stage_f)
+        push!(pairs, "First-stage F" => round(model.first_stage_f; digits=4))
+    end
+    if !isnothing(model.sargan_stat)
+        push!(pairs, "Sargan statistic" => round(model.sargan_stat; digits=4))
+        push!(pairs, "Sargan p-value"   => round(model.sargan_pval; digits=4))
+    end
+    output_kv(pairs; format=format, title="IV Diagnostics")
+end
+
+# ── Logit Regression ──────────────────────────────────
+
+function _estimate_logit(; data::String, dep::String="", cov_type::String="hc1",
+                          clusters::String="", maxiter::Int=100, tol::Float64=1e-8,
+                          output::String="", format::String="table")
+    y, X, xcols = _load_reg_data(data, dep; clusters_col=clusters)
+    cl = _load_clusters(data, clusters)
+
+    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+    println("Logit Regression: $dep_name ~ $(join(xcols, " + "))")
+    println("  Observations: $(length(y)), Regressors: $(length(xcols)), Cov type: $cov_type")
+    println()
+
+    model = estimate_logit(y, X; cov_type=Symbol(cov_type), varnames=xcols,
+                           clusters=cl, maxiter=maxiter, tol=tol)
+
+    coef_df = _reg_coef_table(model, xcols)
+    output_result(coef_df; format=Symbol(format), output=output, title="Logit Regression Coefficients")
+
+    println()
+    pairs = Pair{String,Any}[
+        "Pseudo R²"       => round(r2(model); digits=6),
+        "Log-likelihood"  => round(loglikelihood(model); digits=4),
+        "Log-lik (null)"  => round(model.loglik_null; digits=4),
+        "AIC"             => round(aic(model); digits=4),
+        "BIC"             => round(bic(model); digits=4),
+        "Converged"       => model.converged,
+        "Iterations"      => model.iterations,
+    ]
+    output_kv(pairs; format=format, title="Fit Statistics")
+end
+
+# ── Probit Regression ─────────────────────────────────
+
+function _estimate_probit(; data::String, dep::String="", cov_type::String="hc1",
+                           clusters::String="", maxiter::Int=100, tol::Float64=1e-8,
+                           output::String="", format::String="table")
+    y, X, xcols = _load_reg_data(data, dep; clusters_col=clusters)
+    cl = _load_clusters(data, clusters)
+
+    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+    println("Probit Regression: $dep_name ~ $(join(xcols, " + "))")
+    println("  Observations: $(length(y)), Regressors: $(length(xcols)), Cov type: $cov_type")
+    println()
+
+    model = estimate_probit(y, X; cov_type=Symbol(cov_type), varnames=xcols,
+                            clusters=cl, maxiter=maxiter, tol=tol)
+
+    coef_df = _reg_coef_table(model, xcols)
+    output_result(coef_df; format=Symbol(format), output=output, title="Probit Regression Coefficients")
+
+    println()
+    pairs = Pair{String,Any}[
+        "Pseudo R²"       => round(r2(model); digits=6),
+        "Log-likelihood"  => round(loglikelihood(model); digits=4),
+        "Log-lik (null)"  => round(model.loglik_null; digits=4),
+        "AIC"             => round(aic(model); digits=4),
+        "BIC"             => round(bic(model); digits=4),
+        "Converged"       => model.converged,
+        "Iterations"      => model.iterations,
+    ]
+    output_kv(pairs; format=format, title="Fit Statistics")
 end
 

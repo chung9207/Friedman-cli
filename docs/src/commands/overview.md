@@ -8,11 +8,13 @@ Friedman-cli uses an **action-first** command hierarchy: commands are organized 
 friedman
 ├── estimate     var | bvar | lp | arima | gmm | smm | static | dynamic | gdfm |
 │                arch | garch | egarch | gjr_garch | sv | fastica | ml | vecm | pvar |
-│                favar | sdfm
+│                favar | sdfm | reg | iv | logit | probit
 ├── test         adf | kpss | pp | za | np | johansen | normality |
 │                identifiability | heteroskedasticity | arch_lm | ljung_box |
 │                granger | lr | lm | andrews | bai-perron |
 │                panic | cips | moon-perron | factor-break |
+│                fourier-adf | fourier-kpss | dfgls | lm-unitroot |
+│                adf-2break | gregory-hansen | vif |
 │                var (lagselect | stability) |
 │                pvar (hansen_j | mmsc | lagselect | stability)
 ├── irf          var | bvar | lp | vecm | pvar | favar | sdfm
@@ -21,20 +23,21 @@ friedman
 ├── forecast     var | bvar | lp | arima | static | dynamic | gdfm |
 │                arch | garch | egarch | gjr_garch | sv | vecm | favar
 ├── predict      var | bvar | arima | vecm | static | dynamic | gdfm |
-│                arch | garch | egarch | gjr_garch | sv | favar
+│                arch | garch | egarch | gjr_garch | sv | favar | reg | logit | probit
 ├── residuals    var | bvar | arima | vecm | static | dynamic | gdfm |
-│                arch | garch | egarch | gjr_garch | sv | favar
+│                arch | garch | egarch | gjr_garch | sv | favar | reg | logit | probit
 ├── filter       hp | hamilton | bn | bk | bhp
 ├── data         list | load | describe | diagnose | fix | transform | filter |
 │                validate | balance
 ├── nowcast      dfm | bvar | bridge | news | forecast
-├── dsge         solve | irf | fevd | simulate | estimate | bayes |
-│                perfect-foresight | steady-state
+├── dsge         solve | irf | fevd | simulate | estimate |
+│                perfect-foresight | steady-state |
+│                bayes (estimate | irf | fevd | simulate | summary | compare | predictive)
 └── did          estimate | event-study | lp-did |
                  test (bacon | pretrend | negweight | honest)
 ```
 
-**Total: 13 top-level commands, ~141 subcommands.**
+**Total: 13 top-level commands, ~164 subcommands.**
 
 ## Common Options
 

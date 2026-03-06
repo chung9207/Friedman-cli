@@ -4,9 +4,9 @@
 [![codecov](https://codecov.io/gh/FriedmanJP/Friedman-cli/graph/badge.svg?token=TIYTWTJG36)](https://codecov.io/gh/FriedmanJP/Friedman-cli)
 [![Documentation](https://github.com/FriedmanJP/Friedman-cli/actions/workflows/Documentation.yml/badge.svg)](https://friedmanjp.github.io/Friedman-cli/dev/)
 
-Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/FriedmanJP/MacroEconometricModels.jl) (v0.3.3).
+Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconometricModels.jl](https://github.com/FriedmanJP/MacroEconometricModels.jl) (v0.3.4).
 
-13 top-level commands, ~141 subcommands. Action-first CLI: commands are organized by action (`estimate`, `irf`, `forecast`, `dsge`, `did`, ...) rather than by model type. Features include VAR/BVAR/Panel VAR, FAVAR, structural DFM, local projections, DSGE (including Bayesian estimation and 3rd-order perturbation), DID/event study, factor models, ARIMA, volatility models (ARCH/GARCH/EGARCH/GJR-GARCH/SV), non-Gaussian SVAR, GMM/SMM, time series filtering, nowcasting, structural break tests (Andrews, Bai-Perron), panel unit root tests (PANIC, CIPS, Moon-Perron, factor break), and data management.
+13 top-level commands, ~164 subcommands. Action-first CLI: commands are organized by action (`estimate`, `irf`, `forecast`, `dsge`, `did`, ...) rather than by model type. Features include VAR/BVAR/Panel VAR, FAVAR, structural DFM, cross-sectional regression (OLS/WLS/IV/Logit/Probit), local projections, DSGE (including full Bayesian workflow and 3rd-order perturbation), DID/event study/LP-DiD, factor models, ARIMA, volatility models (ARCH/GARCH/EGARCH/GJR-GARCH/SV), non-Gaussian SVAR, GMM/SMM, time series filtering, nowcasting, advanced unit root tests (Fourier ADF/KPSS, DF-GLS, LM with breaks, ADF 2-break, Gregory-Hansen), structural break tests (Andrews, Bai-Perron), panel unit root tests (PANIC, CIPS, Moon-Perron, factor break), VIF multicollinearity diagnostics, and data management.
 
 ## Installation
 
@@ -32,18 +32,18 @@ julia --project bin/friedman [command] [subcommand] [args...] [options...]
 
 | Command | Subcommands | Description |
 |---------|-------------|-------------|
-| `estimate` | `var` `bvar` `lp` `arima` `gmm` `smm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `fastica` `ml` `vecm` `pvar` `favar` `sdfm` | Estimate models (20 model types) |
-| `test` | `adf` `kpss` `pp` `za` `np` `johansen` `normality` `identifiability` `heteroskedasticity` `arch_lm` `ljung_box` `granger` `lr` `lm` `andrews` `bai-perron` `panic` `cips` `moon-perron` `factor-break` + `var` (`lagselect` `stability`) + `pvar` (`hansen_j` `mmsc` `lagselect` `stability`) | Statistical tests (20 + nested) |
+| `estimate` | `var` `bvar` `lp` `arima` `gmm` `smm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `fastica` `ml` `vecm` `pvar` `favar` `sdfm` `reg` `iv` `logit` `probit` | Estimate models (24 model types) |
+| `test` | `adf` `kpss` `pp` `za` `np` `johansen` `normality` `identifiability` `heteroskedasticity` `arch_lm` `ljung_box` `granger` `lr` `lm` `andrews` `bai-perron` `panic` `cips` `moon-perron` `factor-break` `fourier-adf` `fourier-kpss` `dfgls` `lm-unitroot` `adf-2break` `gregory-hansen` `vif` + `var` (`lagselect` `stability`) + `pvar` (`hansen_j` `mmsc` `lagselect` `stability`) | Statistical tests (27 + nested) |
 | `irf` | `var` `bvar` `lp` `vecm` `pvar` `favar` `sdfm` | Impulse response functions |
 | `fevd` | `var` `bvar` `lp` `vecm` `pvar` `favar` `sdfm` | Forecast error variance decomposition |
 | `hd` | `var` `bvar` `lp` `vecm` `favar` | Historical decomposition |
 | `forecast` | `var` `bvar` `lp` `arima` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `vecm` `favar` | Forecasting (14 model types) |
-| `predict` | `var` `bvar` `arima` `vecm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `favar` | In-sample fitted values (13 model types) |
-| `residuals` | `var` `bvar` `arima` `vecm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `favar` | Model residuals (13 model types) |
+| `predict` | `var` `bvar` `arima` `vecm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `favar` `reg` `logit` `probit` | In-sample fitted values (16 model types) |
+| `residuals` | `var` `bvar` `arima` `vecm` `static` `dynamic` `gdfm` `arch` `garch` `egarch` `gjr_garch` `sv` `favar` `reg` `logit` `probit` | Model residuals (16 model types) |
 | `filter` | `hp` `hamilton` `bn` `bk` `bhp` | Time series filters |
 | `data` | `list` `load` `describe` `diagnose` `fix` `transform` `filter` `validate` `balance` | Data management |
 | `nowcast` | `dfm` `bvar` `bridge` `news` `forecast` | Nowcasting (DFM, BVAR, bridge equations) |
-| `dsge` | `solve` `irf` `fevd` `simulate` `estimate` `perfect-foresight` `steady-state` `bayes` | DSGE models (8 subcommands) |
+| `dsge` | `solve` `irf` `fevd` `simulate` `estimate` `perfect-foresight` `steady-state` + `bayes` (`estimate` `irf` `fevd` `simulate` `summary` `compare` `predictive`) | DSGE models (7 + 7 nested bayes) |
 | `did` | `estimate` `event-study` `lp-did` + `test` (`bacon` `pretrend` `negweight` `honest`) | Difference-in-differences (3 + 4 nested) |
 
 All commands support `--format` (`table`|`csv`|`json`) and `--output` (file path) options.
@@ -126,6 +126,31 @@ friedman estimate sdfm data.csv --nfactors=3 --factor-lags=2
 friedman estimate sdfm data.csv --nfactors=3 --id=cholesky
 ```
 
+### Cross-Sectional Regression
+
+```bash
+# OLS regression (first column = dependent, rest = regressors)
+friedman estimate reg data.csv --dep=wage --cov-type=hc1
+
+# Weighted Least Squares
+friedman estimate reg data.csv --dep=wage --weights=pop_weight
+
+# IV (2SLS) regression
+friedman estimate iv data.csv --dep=wage --endogenous=educ --instruments=father_educ,mother_educ
+
+# Logit (binary choice)
+friedman estimate logit data.csv --dep=employed --cov-type=hc1
+
+# Probit
+friedman estimate probit data.csv --dep=employed --clusters=state
+
+# Predictions with marginal effects
+friedman predict logit data.csv --dep=employed --marginal-effects
+
+# VIF multicollinearity check
+friedman test vif data.csv --dep=wage
+```
+
 ### Volatility Models
 
 ```bash
@@ -194,6 +219,17 @@ friedman test panic data.csv --id-col=country --time-col=year --column=gdp
 friedman test cips data.csv --id-col=country --time-col=year --column=gdp --lags=1
 friedman test moon-perron data.csv --id-col=country --time-col=year --column=gdp
 friedman test factor-break data.csv --id-col=country --time-col=year --column=gdp
+
+# Advanced unit root tests
+friedman test fourier-adf data.csv --column=1 --regression=constant --fmax=3
+friedman test fourier-kpss data.csv --column=1 --regression=constant --fmax=3
+friedman test dfgls data.csv --column=1 --regression=constant
+friedman test lm-unitroot data.csv --column=1 --breaks=1 --regression=level
+friedman test adf-2break data.csv --column=1 --model=level --trim=0.10
+friedman test gregory-hansen data.csv --model=C --lags=aic
+
+# Multicollinearity diagnostics
+friedman test vif data.csv --dep=wage --cov-type=hc1
 ```
 
 ### Impulse Response Functions
@@ -337,6 +373,9 @@ friedman predict vecm data.csv --rank=1
 friedman predict static data.csv --nfactors=3
 friedman predict garch data.csv --column=1 --p=1 --q=1
 friedman predict favar data.csv --lags=4 --nfactors=3
+friedman predict reg data.csv --dep=wage
+friedman predict logit data.csv --dep=employed --marginal-effects
+friedman predict probit data.csv --dep=employed --classification-table
 
 # Model residuals
 friedman residuals var data.csv --lags=2
@@ -346,6 +385,9 @@ friedman residuals vecm data.csv --rank=1
 friedman residuals static data.csv --nfactors=3
 friedman residuals garch data.csv --column=1 --p=1 --q=1
 friedman residuals favar data.csv --lags=4 --nfactors=3
+friedman residuals reg data.csv --dep=wage
+friedman residuals logit data.csv --dep=employed
+friedman residuals probit data.csv --dep=employed
 ```
 
 ### Filters
@@ -374,7 +416,7 @@ friedman filter bhp data.csv --column=1 --lambda=1600 --stopping=BIC
 # List available example datasets
 friedman data list
 
-# Load example dataset (FRED-MD, FRED-QD, PWT)
+# Load example dataset (FRED-MD, FRED-QD, PWT, mpdta, ddcg)
 friedman data load fred_md --output=fred_md.csv
 friedman data load fred_md --vars=INDPRO,CPIAUCSL --transform
 
@@ -456,8 +498,16 @@ friedman dsge estimate model.toml --data=macro.csv --method=smm --params=alpha,b
 friedman dsge perfect-foresight model.toml --shocks=shock_path.csv --periods=100
 
 # Bayesian DSGE estimation (posterior sampling)
-friedman dsge bayes model.toml --data=macro.csv --params=rho,sigma --draws=5000 --sampler=nuts
-friedman dsge bayes model.toml --data=macro.csv --params=alpha,beta --prior=prior.toml
+friedman dsge bayes estimate model.toml --data=macro.csv --params=rho,sigma --priors=priors.toml --method=smc
+friedman dsge bayes estimate model.toml --data=macro.csv --params=alpha,beta --priors=priors.toml --method=rwmh --n-draws=10000
+
+# Bayesian DSGE post-estimation
+friedman dsge bayes irf model.toml --data=macro.csv --params=rho,sigma --priors=priors.toml --horizon=40
+friedman dsge bayes fevd model.toml --data=macro.csv --params=rho,sigma --priors=priors.toml --horizon=40
+friedman dsge bayes simulate model.toml --data=macro.csv --params=rho,sigma --priors=priors.toml --periods=200
+friedman dsge bayes summary model.toml --data=macro.csv --params=rho,sigma --priors=priors.toml
+friedman dsge bayes compare model1.toml --data=macro.csv --params=rho,sigma --priors=priors.toml --model2=model2.toml --params2=rho,sigma --priors2=priors2.toml
+friedman dsge bayes predictive model.toml --data=macro.csv --params=rho,sigma --priors=priors.toml --n-sim=100
 
 # Compute steady state
 friedman dsge steady-state model.toml
@@ -485,8 +535,13 @@ friedman did estimate panel.csv --outcome=y --treatment=treat --method=dcdh --n-
 # Panel event study LP (Jordà 2005 + panel FE)
 friedman did event-study panel.csv --outcome=y --treatment=treat --leads=3 --horizon=5
 
-# LP-DiD with clean controls (Dube et al. 2023)
-friedman did lp-did panel.csv --outcome=y --treatment=treat --leads=3 --horizon=5
+# LP-DiD (Dube, Girardi, Jorda & Taylor 2025)
+friedman did lp-did panel.csv --outcome=y --treatment=treat --horizon=5
+friedman did lp-did panel.csv --outcome=y --treatment=treat --horizon=5 --reweight --pmd=ipw
+friedman did lp-did panel.csv --outcome=y --treatment=treat --horizon=5 --notyet --only-pooled
+
+# DID with base period control (CS method)
+friedman did estimate panel.csv --outcome=y --treatment=treat --method=cs --base-period=universal
 
 # Bacon decomposition (Goodman-Bacon 2021) — diagnose TWFE bias
 friedman did test bacon panel.csv --outcome=y --treatment=treat

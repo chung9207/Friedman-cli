@@ -158,6 +158,39 @@ function register_predict_commands!()
         ],
         description="FAVAR in-sample fitted values")
 
+    pred_reg = LeafCommand("reg", _predict_reg;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            _REG_COMMON_OPTIONS...,
+            Option("weights"; type=String, default="", description="Weight column name (WLS)"),
+        ],
+        description="OLS/WLS in-sample fitted values")
+
+    pred_logit = LeafCommand("logit", _predict_logit;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            _REG_COMMON_OPTIONS...,
+            Option("threshold"; type=Float64, default=0.5, description="Classification threshold"),
+        ],
+        flags=[
+            Flag("marginal-effects"; description="Output marginal effects instead of fitted values"),
+            Flag("odds-ratio"; description="Output odds ratios (logit only)"),
+            Flag("classification-table"; description="Output classification table"),
+        ],
+        description="Logit in-sample fitted probabilities")
+
+    pred_probit = LeafCommand("probit", _predict_probit;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            _REG_COMMON_OPTIONS...,
+            Option("threshold"; type=Float64, default=0.5, description="Classification threshold"),
+        ],
+        flags=[
+            Flag("marginal-effects"; description="Output marginal effects instead of fitted values"),
+            Flag("classification-table"; description="Output classification table"),
+        ],
+        description="Probit in-sample fitted probabilities")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "var"       => pred_var,
         "bvar"      => pred_bvar,
@@ -172,6 +205,9 @@ function register_predict_commands!()
         "gjr_garch" => pred_gjr_garch,
         "sv"        => pred_sv,
         "favar"     => pred_favar,
+        "reg"       => pred_reg,
+        "logit"     => pred_logit,
+        "probit"    => pred_probit,
     )
     return NodeCommand("predict", subcmds, "In-sample predictions (fitted values)")
 end
@@ -488,4 +524,107 @@ function _predict_favar(; data::String, factors=nothing, lags::Int=2,
     end
     output_result(pred_df; format=Symbol(format), output=output,
                   title="FAVAR In-Sample Predictions (T_eff=$T_eff)")
+end
+
+# ── Regression Predict ────────────────────────────────────
+
+function _predict_reg(; data::String, dep::String="", cov_type::String="hc1",
+                       weights::String="", clusters::String="",
+                       output::String="", format::String="table")
+    y, X, xcols = _load_reg_data(data, dep; weights_col=weights, clusters_col=clusters)
+    w = _load_weights(data, weights)
+    cl = _load_clusters(data, clusters)
+    model = estimate_reg(y, X; cov_type=Symbol(cov_type), weights=w, varnames=xcols, clusters=cl)
+
+    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+    wls_tag = isnothing(w) ? "OLS" : "WLS"
+    println("$wls_tag Fitted Values: $dep_name ~ $(join(xcols, " + "))")
+    println("  Observations: $(length(y))")
+    println()
+
+    fitted = predict(model)
+    pred_df = DataFrame(observation=1:length(fitted), fitted_value=round.(fitted; digits=6))
+    output_result(pred_df; format=Symbol(format), output=output, title="$wls_tag Fitted Values")
+end
+
+# ── Logit Predict ─────────────────────────────────────────
+
+function _predict_logit(; data::String, dep::String="", cov_type::String="hc1",
+                         clusters::String="", threshold::Float64=0.5,
+                         marginal_effects::Bool=false, odds_ratio::Bool=false,
+                         classification_table::Bool=false,
+                         output::String="", format::String="table")
+    y, X, xcols = _load_reg_data(data, dep; clusters_col=clusters)
+    cl = _load_clusters(data, clusters)
+    model = estimate_logit(y, X; cov_type=Symbol(cov_type), varnames=xcols, clusters=cl)
+
+    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+
+    if marginal_effects
+        me = MacroEconometricModels.marginal_effects(model)
+        me_df = DataFrame(Variable=me.varnames, Effect=round.(me.effects; digits=6),
+            SE=round.(me.se; digits=6), z=round.(me.z_stat; digits=4),
+            p_value=round.(me.p_values; digits=4),
+            CI_Lower=round.(me.ci_lower; digits=6), CI_Upper=round.(me.ci_upper; digits=6))
+        output_result(me_df; format=Symbol(format), output=output,
+                      title="Average Marginal Effects (Logit)")
+    elseif odds_ratio
+        or = MacroEconometricModels.odds_ratio(model)
+        or_df = DataFrame(Variable=or.varnames, Odds_Ratio=round.(or.odds_ratio; digits=6),
+            CI_Lower=round.(or.ci_lower; digits=6), CI_Upper=round.(or.ci_upper; digits=6))
+        output_result(or_df; format=Symbol(format), output=output,
+                      title="Odds Ratios (Logit)")
+    elseif classification_table
+        ct = MacroEconometricModels.classification_table(model; threshold=threshold)
+        println("Classification Table (threshold=$threshold):")
+        for (k, v) in sort(collect(ct))
+            println("  $k: $v")
+        end
+    else
+        println("Logit Fitted Probabilities: $dep_name")
+        println("  Observations: $(length(y))")
+        println()
+        fitted = predict(model)
+        pred_df = DataFrame(observation=1:length(fitted), fitted_prob=round.(fitted; digits=6))
+        output_result(pred_df; format=Symbol(format), output=output,
+                      title="Logit Fitted Probabilities")
+    end
+end
+
+# ── Probit Predict ────────────────────────────────────────
+
+function _predict_probit(; data::String, dep::String="", cov_type::String="hc1",
+                          clusters::String="", threshold::Float64=0.5,
+                          marginal_effects::Bool=false,
+                          classification_table::Bool=false,
+                          output::String="", format::String="table")
+    y, X, xcols = _load_reg_data(data, dep; clusters_col=clusters)
+    cl = _load_clusters(data, clusters)
+    model = estimate_probit(y, X; cov_type=Symbol(cov_type), varnames=xcols, clusters=cl)
+
+    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+
+    if marginal_effects
+        me = MacroEconometricModels.marginal_effects(model)
+        me_df = DataFrame(Variable=me.varnames, Effect=round.(me.effects; digits=6),
+            SE=round.(me.se; digits=6), z=round.(me.z_stat; digits=4),
+            p_value=round.(me.p_values; digits=4),
+            CI_Lower=round.(me.ci_lower; digits=6), CI_Upper=round.(me.ci_upper; digits=6))
+        output_result(me_df; format=Symbol(format), output=output,
+                      title="Average Marginal Effects (Probit)")
+    elseif classification_table
+        ct = MacroEconometricModels.classification_table(model; threshold=threshold)
+        println("Classification Table (threshold=$threshold):")
+        for (k, v) in sort(collect(ct))
+            println("  $k: $v")
+        end
+    else
+        println("Probit Fitted Probabilities: $dep_name")
+        println("  Observations: $(length(y))")
+        println()
+        fitted = predict(model)
+        pred_df = DataFrame(observation=1:length(fitted), fitted_prob=round.(fitted; digits=6))
+        output_result(pred_df; format=Symbol(format), output=output,
+                      title="Probit Fitted Probabilities")
+    end
 end

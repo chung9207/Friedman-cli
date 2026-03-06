@@ -26,7 +26,7 @@ function register_data_commands!()
         description="List available example datasets")
 
     data_load = LeafCommand("load", _data_load;
-        args=[Argument("name"; description="Dataset name (fred_md|fred_qd|pwt) or empty for --path")],
+        args=[Argument("name"; description="Dataset name (fred_md|fred_qd|pwt|mpdta|ddcg) or empty for --path")],
         options=[
             Option("output"; short="o", type=String, default="", description="Output CSV file path"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
@@ -127,6 +127,8 @@ function _data_list(; format::String="table", output::String="")
         ("fred_md",  "Time Series", "804 × 126",    "FRED-MD Monthly Database (126 macroeconomic indicators)"),
         ("fred_qd",  "Time Series", "268 × 245",    "FRED-QD Quarterly Database (245 macroeconomic indicators)"),
         ("pwt",      "Panel",       "38 × 74 × 42", "Penn World Table (38 OECD countries, 74 years, 42 variables)"),
+        ("mpdta",    "Panel",       "500 × 5 × 3",  "Callaway-Sant'Anna (2021) minimum wage panel"),
+        ("ddcg",     "Panel",       "184 × 51",     "Acemoglu et al. democracy-GDP panel"),
     ]
 
     df = DataFrame(

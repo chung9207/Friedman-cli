@@ -50,7 +50,7 @@ include("commands/nowcast.jl")
 include("commands/dsge.jl")
 include("commands/did.jl")
 
-const FRIEDMAN_VERSION = v"0.3.2"
+const FRIEDMAN_VERSION = v"0.3.3"
 
 """
     build_app() -> Entry

@@ -17,6 +17,7 @@ Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconomet
 | **Volatility** | ARCH, GARCH, EGARCH, GJR-GARCH, Stochastic Volatility | `estimate arch`, `garch`, ... |
 | **Non-Gaussian SVAR** | FastICA, JADE, SOBI, dCov, HSIC, ML (Student-t, mixture, PML, skew-normal) | `estimate fastica`, `estimate ml` |
 | **GMM** | Identity, optimal, two-step, iterated weighting | `estimate gmm` |
+| **Cross-Sectional** | OLS, WLS, IV (2SLS), Logit, Probit | `estimate reg`, `estimate iv`, `estimate logit`, `estimate probit` |
 | **IRF** | Cholesky, sign, narrative, long-run, Arias, Uhlig, non-Gaussian methods | `irf var`, `irf bvar`, `irf lp`, `irf vecm`, `irf pvar` |
 | **FEVD** | Frequentist, Bayesian, LP (bias-corrected), VECM, Panel VAR | `fevd var`, `fevd bvar`, `fevd lp`, `fevd vecm`, `fevd pvar` |
 | **Historical Decomposition** | Frequentist, Bayesian, LP-based, VECM | `hd var`, `hd bvar`, `hd lp`, `hd vecm` |
@@ -31,12 +32,15 @@ Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconomet
 | **SMM** | Simulated Method of Moments estimation | `estimate smm` |
 | **Structural Breaks** | Andrews (1993), Bai-Perron (1998) multiple breaks | `test andrews`, `test bai-perron` |
 | **Panel Unit Root** | PANIC (Bai-Ng), CIPS (Pesaran), Moon-Perron, factor break | `test panic`, `test cips`, ... |
+| **Advanced Unit Root** | Fourier ADF, Fourier KPSS, DF-GLS, LM (0/1/2 breaks), ADF 2-break | `test fourier-adf`, `test dfgls`, `test lm-unitroot`, ... |
+| **Cointegration w/ Break** | Gregory-Hansen regime-shift cointegration | `test gregory-hansen` |
+| **Multicollinearity** | Variance inflation factors | `test vif` |
 | **Unit Root Tests** | ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron | `test adf`, `test kpss`, ... |
 | **Cointegration** | Johansen trace and max eigenvalue | `test johansen` |
 | **Diagnostics** | Normality, identifiability, ARCH-LM, Ljung-Box, heteroskedasticity | `test normality`, ... |
 | **Model Comparison** | Granger causality, LR test, LM test | `test granger`, `test lr`, `test lm` |
 
-**13 top-level commands, ~141 subcommands.** Action-first CLI: commands organized by action (`estimate`, `irf`, `forecast`, `did`, ...) rather than by model type.
+**13 top-level commands, ~164 subcommands.** Action-first CLI: commands organized by action (`estimate`, `irf`, `forecast`, `did`, ...) rather than by model type.
 
 ## Quick Start
 

@@ -17,7 +17,9 @@
 # Test commands: adf, kpss, pp, za, np, johansen, normality, identifiability,
 #                heteroskedasticity, arch_lm, ljung_box, var (lagselect, stability),
 #                granger, pvar (hansen_j, mmsc, lagselect, stability), lr, lm,
-#                andrews, bai-perron, panic, cips, moon-perron, factor-break
+#                andrews, bai-perron, panic, cips, moon-perron, factor-break,
+#                fourier-adf, fourier-kpss, dfgls, lm-unitroot, adf-2break,
+#                gregory-hansen, vif
 
 function register_test_commands!()
     test_adf = LeafCommand("adf", _test_adf;
@@ -339,6 +341,95 @@ function register_test_commands!()
         ],
         description="Factor break test (Breitung-Eickmeier / Chen-Dolado-Gonzalo / Han-Inoue)")
 
+    # ── Advanced Unit Root Tests ──
+
+    test_fourier_adf = LeafCommand("fourier-adf", _test_fourier_adf;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("column"; short="c", type=Int, default=1, description="Column index to test (1-based)"),
+            Option("regression"; type=String, default="constant", description="constant|trend"),
+            Option("fmax"; type=Int, default=3, description="Maximum Fourier frequency"),
+            Option("lags"; type=String, default="aic", description="Lag order (aic|bic|N)"),
+            Option("max-lags"; type=Int, default=nothing, description="Max lags (default: auto)"),
+            Option("trim"; type=Float64, default=0.15, description="Trimming proportion"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="Fourier ADF unit root test (Enders & Lee 2012)")
+
+    test_fourier_kpss = LeafCommand("fourier-kpss", _test_fourier_kpss;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("column"; short="c", type=Int, default=1, description="Column index to test (1-based)"),
+            Option("regression"; type=String, default="constant", description="constant|trend"),
+            Option("fmax"; type=Int, default=3, description="Maximum Fourier frequency"),
+            Option("bandwidth"; type=Int, default=nothing, description="Bandwidth (default: auto)"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="Fourier KPSS stationarity test (Becker et al. 2006)")
+
+    test_dfgls = LeafCommand("dfgls", _test_dfgls;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("column"; short="c", type=Int, default=1, description="Column index to test (1-based)"),
+            Option("regression"; type=String, default="constant", description="constant|trend"),
+            Option("lags"; type=String, default="aic", description="Lag order (aic|bic|N)"),
+            Option("max-lags"; type=Int, default=nothing, description="Max lags (default: auto)"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="DF-GLS unit root test (Elliott, Rothenberg & Stock 1996)")
+
+    test_lm_unitroot = LeafCommand("lm-unitroot", _test_lm_unitroot;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("column"; short="c", type=Int, default=1, description="Column index to test (1-based)"),
+            Option("breaks"; type=Int, default=0, description="Number of structural breaks (0|1|2)"),
+            Option("regression"; type=String, default="level", description="level|trend"),
+            Option("lags"; type=String, default="aic", description="Lag order (aic|bic|N)"),
+            Option("max-lags"; type=Int, default=nothing, description="Max lags (default: auto)"),
+            Option("trim"; type=Float64, default=0.15, description="Trimming proportion"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="LM unit root test with structural breaks (Lee & Strazicich 2003/2013)")
+
+    test_adf_2break = LeafCommand("adf-2break", _test_adf_2break;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("column"; short="c", type=Int, default=1, description="Column index to test (1-based)"),
+            Option("model"; type=String, default="level", description="level|trend|regime"),
+            Option("lags"; type=String, default="aic", description="Lag order (aic|bic|N)"),
+            Option("max-lags"; type=Int, default=nothing, description="Max lags (default: auto)"),
+            Option("trim"; type=Float64, default=0.10, description="Trimming proportion"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="ADF unit root test with two structural breaks (Narayan & Popp 2010)")
+
+    test_gregory_hansen = LeafCommand("gregory-hansen", _test_gregory_hansen;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("model"; type=String, default="C", description="C|C/T|C/S (level shift/trend/regime)"),
+            Option("lags"; type=String, default="aic", description="Lag order (aic|bic|N)"),
+            Option("max-lags"; type=Int, default=nothing, description="Max lags (default: auto)"),
+            Option("trim"; type=Float64, default=0.15, description="Trimming proportion"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="Gregory-Hansen cointegration test with structural break (1996)")
+
+    test_vif = LeafCommand("vif", _test_vif;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("dep"; type=String, default="", description="Dependent variable name (default: first numeric column)"),
+            Option("cov-type"; type=String, default="hc1", description="Covariance estimator (ols|hc0|hc1|hc2|hc3)"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="Variance Inflation Factor (multicollinearity diagnostic)")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "adf"                => test_adf,
         "kpss"               => test_kpss,
@@ -362,6 +453,13 @@ function register_test_commands!()
         "cips"               => test_cips,
         "moon-perron"        => test_moon_perron,
         "factor-break"       => test_factor_break,
+        "fourier-adf"        => test_fourier_adf,
+        "fourier-kpss"       => test_fourier_kpss,
+        "dfgls"              => test_dfgls,
+        "lm-unitroot"        => test_lm_unitroot,
+        "adf-2break"         => test_adf_2break,
+        "gregory-hansen"     => test_gregory_hansen,
+        "vif"                => test_vif,
     )
     return NodeCommand("test", subcmds, "Statistical tests (unit root, cointegration, diagnostics)")
 end
@@ -1273,4 +1371,277 @@ function _test_factor_break(; data::String, factors::Int=2,
     interpret_test_result(result.pvalue,
         "Reject H0: factor structure instability detected at index $(result.break_date)",
         "Cannot reject H0: factor structure appears stable")
+end
+
+# ── Fourier ADF Test ──────────────────────────────────
+
+function _test_fourier_adf(; data::String, column::Int=1,
+                             regression::String="constant", fmax::Int=3,
+                             lags::String="aic", max_lags=nothing,
+                             trim::Float64=0.15,
+                             format::String="table", output::String="")
+    y, vname = load_univariate_series(data, column)
+
+    lags_arg = tryparse(Int, lags) !== nothing ? parse(Int, lags) : Symbol(lags)
+    reg_sym = Symbol(regression)
+
+    println("Fourier ADF Test: variable=$vname, observations=$(length(y)), regression=$regression, fmax=$fmax")
+    println()
+
+    kw = Dict{Symbol,Any}(:regression => reg_sym, :fmax => fmax, :trim => trim)
+    !isnothing(max_lags) && (kw[:max_lags] = max_lags)
+    result = fourier_adf_test(y; lags=lags_arg, kw...)
+
+    pairs = Pair{String,Any}[
+        "Test statistic" => round(result.statistic; digits=4),
+        "p-value" => round(result.pvalue; digits=4),
+        "Optimal frequency" => result.frequency,
+        "F-statistic (Fourier)" => round(result.f_statistic; digits=4),
+        "F p-value" => round(result.f_pvalue; digits=4),
+        "Lags" => result.lags,
+        "Observations" => result.nobs,
+    ]
+
+    output_kv(pairs; format=format, output=output, title="Fourier ADF Test: $vname")
+
+    interpret_test_result(result.pvalue,
+        "Reject H0 (unit root) at 5% -- series appears stationary (with smooth breaks)",
+        "Cannot reject H0 (unit root) at 5% -- series appears non-stationary")
+
+    if result.f_pvalue < 0.05
+        println()
+        printstyled("Fourier terms are jointly significant (F=$(round(result.f_statistic; digits=4)), p=$(round(result.f_pvalue; digits=4)))\n"; color=:green)
+    end
+end
+
+# ── Fourier KPSS Test ────────────────────────────────
+
+function _test_fourier_kpss(; data::String, column::Int=1,
+                              regression::String="constant", fmax::Int=3,
+                              bandwidth=nothing,
+                              format::String="table", output::String="")
+    y, vname = load_univariate_series(data, column)
+
+    reg_sym = Symbol(regression)
+
+    println("Fourier KPSS Test: variable=$vname, observations=$(length(y)), regression=$regression, fmax=$fmax")
+    println()
+
+    kw = Dict{Symbol,Any}(:regression => reg_sym, :fmax => fmax)
+    !isnothing(bandwidth) && (kw[:bandwidth] = bandwidth)
+    result = fourier_kpss_test(y; kw...)
+
+    pairs = Pair{String,Any}[
+        "Test statistic" => round(result.statistic; digits=4),
+        "p-value" => round(result.pvalue; digits=4),
+        "Optimal frequency" => result.frequency,
+        "F-statistic (Fourier)" => round(result.f_statistic; digits=4),
+        "F p-value" => round(result.f_pvalue; digits=4),
+        "Bandwidth" => result.bandwidth,
+        "Observations" => result.nobs,
+    ]
+
+    output_kv(pairs; format=format, output=output, title="Fourier KPSS Test: $vname")
+
+    # KPSS: reversed interpretation (H0 = stationarity)
+    println()
+    if result.pvalue < 0.05
+        printstyled("-> Reject H0 (stationarity) at 5% -- series appears non-stationary\n"; color=:yellow)
+    else
+        printstyled("-> Cannot reject H0 (stationarity) -- series appears stationary (with smooth breaks)\n"; color=:green)
+    end
+end
+
+# ── DF-GLS Test ──────────────────────────────────────
+
+function _test_dfgls(; data::String, column::Int=1,
+                      regression::String="constant",
+                      lags::String="aic", max_lags=nothing,
+                      format::String="table", output::String="")
+    y, vname = load_univariate_series(data, column)
+
+    lags_arg = tryparse(Int, lags) !== nothing ? parse(Int, lags) : Symbol(lags)
+    reg_sym = Symbol(regression)
+
+    println("DF-GLS Test: variable=$vname, observations=$(length(y)), regression=$regression")
+    println()
+
+    kw = Dict{Symbol,Any}(:regression => reg_sym)
+    !isnothing(max_lags) && (kw[:max_lags] = max_lags)
+    result = dfgls_test(y; lags=lags_arg, kw...)
+
+    pairs = Pair{String,Any}[
+        "DF-GLS tau statistic" => round(result.tau_statistic; digits=4),
+        "PT statistic" => round(result.pt_statistic; digits=4),
+        "p-value" => round(result.pvalue; digits=4),
+        "Lags" => result.lags,
+        "Observations" => result.nobs,
+    ]
+
+    # Add M-GLS statistics if available
+    for (k, v) in result.mgls_statistics
+        push!(pairs, "M-GLS $k" => round(v; digits=4))
+    end
+
+    output_kv(pairs; format=format, output=output, title="DF-GLS Test: $vname")
+
+    interpret_test_result(result.pvalue,
+        "Reject H0 (unit root) at 5% -- series appears stationary",
+        "Cannot reject H0 (unit root) at 5% -- series appears non-stationary")
+end
+
+# ── LM Unit Root Test ───────────────────────────────
+
+function _test_lm_unitroot(; data::String, column::Int=1,
+                             breaks::Int=0, regression::String="level",
+                             lags::String="aic", max_lags=nothing,
+                             trim::Float64=0.15,
+                             format::String="table", output::String="")
+    y, vname = load_univariate_series(data, column)
+
+    lags_arg = tryparse(Int, lags) !== nothing ? parse(Int, lags) : Symbol(lags)
+    reg_sym = Symbol(regression)
+
+    println("LM Unit Root Test: variable=$vname, observations=$(length(y)), breaks=$breaks, regression=$regression")
+    println()
+
+    kw = Dict{Symbol,Any}(:breaks => breaks, :regression => reg_sym, :trim => trim)
+    !isnothing(max_lags) && (kw[:max_lags] = max_lags)
+    result = lm_unitroot_test(y; lags=lags_arg, kw...)
+
+    pairs = Pair{String,Any}[
+        "LM statistic" => round(result.statistic; digits=4),
+        "p-value" => round(result.pvalue; digits=4),
+        "Breaks" => result.breaks,
+        "Lags" => result.lags,
+        "Observations" => result.nobs,
+    ]
+
+    if !isnothing(result.break_indices)
+        push!(pairs, "Break indices" => join(result.break_indices, ", "))
+        push!(pairs, "Break fractions" => join(round.(result.break_fractions; digits=4), ", "))
+    end
+
+    output_kv(pairs; format=format, output=output, title="LM Unit Root Test: $vname")
+
+    interpret_test_result(result.pvalue,
+        "Reject H0 (unit root) at 5% -- series appears stationary",
+        "Cannot reject H0 (unit root) at 5% -- series appears non-stationary")
+end
+
+# ── ADF 2-Break Test ────────────────────────────────
+
+function _test_adf_2break(; data::String, column::Int=1,
+                            model::String="level",
+                            lags::String="aic", max_lags=nothing,
+                            trim::Float64=0.10,
+                            format::String="table", output::String="")
+    y, vname = load_univariate_series(data, column)
+
+    lags_arg = tryparse(Int, lags) !== nothing ? parse(Int, lags) : Symbol(lags)
+    model_sym = Symbol(model)
+
+    println("ADF 2-Break Test: variable=$vname, observations=$(length(y)), model=$model")
+    println()
+
+    kw = Dict{Symbol,Any}(:model => model_sym, :trim => trim)
+    !isnothing(max_lags) && (kw[:max_lags] = max_lags)
+    result = adf_2break_test(y; lags=lags_arg, kw...)
+
+    pairs = Pair{String,Any}[
+        "Test statistic" => round(result.statistic; digits=4),
+        "p-value" => round(result.pvalue; digits=4),
+        "Break 1 index" => result.break_index1,
+        "Break 1 fraction" => round(result.break_fraction1; digits=4),
+        "Break 2 index" => result.break_index2,
+        "Break 2 fraction" => round(result.break_fraction2; digits=4),
+        "Lags" => result.lags,
+        "Observations" => result.nobs,
+    ]
+
+    output_kv(pairs; format=format, output=output, title="ADF 2-Break Test: $vname")
+
+    interpret_test_result(result.pvalue,
+        "Reject H0 (unit root) at 5% -- series appears stationary (with two breaks)",
+        "Cannot reject H0 (unit root) at 5% -- series appears non-stationary")
+
+    println()
+    println("Estimated structural breaks at observations $(result.break_index1) and $(result.break_index2)")
+end
+
+# ── Gregory-Hansen Cointegration Test ───────────────
+
+function _test_gregory_hansen(; data::String, model::String="C",
+                                lags::String="aic", max_lags=nothing,
+                                trim::Float64=0.15,
+                                format::String="table", output::String="")
+    Y, varnames = load_multivariate_data(data)
+
+    lags_arg = tryparse(Int, lags) !== nothing ? parse(Int, lags) : Symbol(lags)
+    model_sym = Symbol(model)
+
+    println("Gregory-Hansen Test: $(length(varnames)) variables, model=$model")
+    println()
+
+    kw = Dict{Symbol,Any}(:model => model_sym, :trim => trim)
+    !isnothing(max_lags) && (kw[:max_lags] = max_lags)
+    result = gregory_hansen_test(Y; lags=lags_arg, kw...)
+
+    pairs = Pair{String,Any}[
+        "ADF* statistic" => round(result.adf_statistic; digits=4),
+        "ADF* p-value" => round(result.adf_pvalue; digits=4),
+        "ADF* break index" => result.adf_break_index,
+        "Zt* statistic" => round(result.zt_statistic; digits=4),
+        "Zt* p-value" => round(result.zt_pvalue; digits=4),
+        "Zt* break index" => result.zt_break_index,
+        "Za* statistic" => round(result.za_statistic; digits=4),
+        "Za* p-value" => round(result.za_pvalue; digits=4),
+        "Za* break index" => result.za_break_index,
+        "Model" => result.model,
+        "Observations" => result.nobs,
+    ]
+
+    output_kv(pairs; format=format, output=output, title="Gregory-Hansen Test")
+
+    # Use ADF* p-value for interpretation
+    interpret_test_result(result.adf_pvalue,
+        "Reject H0 (no cointegration): cointegration with structural break detected",
+        "Cannot reject H0: no cointegration with structural break")
+
+    println()
+    println("Estimated break at observation $(result.adf_break_index) (ADF* criterion)")
+end
+
+# ── VIF (Variance Inflation Factor) ─────────────────
+
+function _test_vif(; data::String, dep::String="",
+                    cov_type::String="hc1",
+                    format::String="table", output::String="")
+    y, X, xcols = _load_reg_data(data, dep)
+
+    println("Variance Inflation Factors: $(length(xcols)) regressors, cov_type=$cov_type")
+    println()
+
+    model = estimate_reg(y, X; cov_type=Symbol(cov_type), varnames=xcols)
+    vif_vals = vif(model)
+
+    vif_df = DataFrame(
+        Variable = xcols,
+        VIF = round.(vif_vals; digits=4),
+        Tolerance = round.(1.0 ./ vif_vals; digits=4),
+    )
+
+    output_result(vif_df; format=Symbol(format), output=output,
+                  title="Variance Inflation Factors")
+
+    println()
+    max_vif = maximum(vif_vals)
+    if max_vif > 10.0
+        printstyled("Warning: VIF > 10 detected -- severe multicollinearity\n"; color=:red)
+    elseif max_vif > 5.0
+        printstyled("Moderate multicollinearity detected (VIF > 5)\n"; color=:yellow)
+    else
+        printstyled("No significant multicollinearity (all VIF < 5)\n"; color=:green)
+    end
+    println("  Mean VIF: $(round(sum(vif_vals) / length(vif_vals); digits=4))")
 end
