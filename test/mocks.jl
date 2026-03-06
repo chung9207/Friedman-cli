@@ -2231,4 +2231,198 @@ export PANICResult, PesaranCIPSResult, MoonPerronResult, FactorBreakResult
 export panic_test, pesaran_cips_test, moon_perron_test, factor_break_test
 export panel_unit_root_summary
 
+# ─── Cross-Sectional Regression Types & Functions ──────────────────
+
+struct RegModel{T<:Real}
+    y::Vector{T}; X::Matrix{T}; beta::Vector{T}; var_beta::Matrix{T}
+    residuals::Vector{T}; fitted::Vector{T}; ssr::T; tss::T; r2::T; adj_r2::T
+    f_stat::T; f_pvalue::T; loglik::T; aic::T; bic::T
+    nobs::Int; rank::Int; dof_resid::Int; cov_type::Symbol
+    weights::Union{Vector{T},Nothing}; varnames::Vector{String}
+    clusters::Union{Vector{Int},Nothing}; method::Symbol
+    Z::Union{Matrix{T},Nothing}; endogenous::Union{Vector{Int},Nothing}
+    first_stage_f::Union{T,Nothing}; sargan_stat::Union{T,Nothing}; sargan_pval::Union{T,Nothing}
+end
+
+struct LogitModel{T<:Real}
+    y::Vector{T}; X::Matrix{T}; beta::Vector{T}; var_beta::Matrix{T}
+    residuals::Vector{T}; fitted::Vector{T}; loglik::T; loglik_null::T; pseudo_r2::T
+    aic::T; bic::T; nobs::Int; varnames::Vector{String}
+    converged::Bool; iterations::Int; cov_type::Symbol
+end
+
+struct ProbitModel{T<:Real}
+    y::Vector{T}; X::Matrix{T}; beta::Vector{T}; var_beta::Matrix{T}
+    residuals::Vector{T}; fitted::Vector{T}; loglik::T; loglik_null::T; pseudo_r2::T
+    aic::T; bic::T; nobs::Int; varnames::Vector{String}
+    converged::Bool; iterations::Int; cov_type::Symbol
+end
+
+struct MarginalEffects{T<:Real}
+    effects::Vector{T}; se::Vector{T}; z_stat::Vector{T}; p_values::Vector{T}
+    ci_lower::Vector{T}; ci_upper::Vector{T}; varnames::Vector{String}
+    type::Symbol; conf_level::T
+end
+
+# StatsAPI dispatches for RegModel
+coef(m::RegModel) = m.beta
+vcov(m::RegModel) = m.var_beta
+residuals(m::RegModel) = m.residuals
+predict(m::RegModel) = m.fitted
+stderror(m::RegModel) = [sqrt(m.var_beta[i,i]) for i in 1:size(m.var_beta, 1)]
+nobs(m::RegModel) = m.nobs
+loglikelihood(m::RegModel) = m.loglik
+aic(m::RegModel) = m.aic
+bic(m::RegModel) = m.bic
+r2(m::RegModel) = m.r2
+confint(m::RegModel; level=0.95) = hcat(m.beta .- 1.96 .* stderror(m), m.beta .+ 1.96 .* stderror(m))
+
+# StatsAPI dispatches for LogitModel
+coef(m::LogitModel) = m.beta
+vcov(m::LogitModel) = m.var_beta
+residuals(m::LogitModel) = m.residuals
+predict(m::LogitModel) = m.fitted
+stderror(m::LogitModel) = [sqrt(m.var_beta[i,i]) for i in 1:size(m.var_beta, 1)]
+nobs(m::LogitModel) = m.nobs
+loglikelihood(m::LogitModel) = m.loglik
+aic(m::LogitModel) = m.aic
+bic(m::LogitModel) = m.bic
+r2(m::LogitModel) = m.pseudo_r2
+confint(m::LogitModel; level=0.95) = hcat(m.beta .- 1.96 .* stderror(m), m.beta .+ 1.96 .* stderror(m))
+
+# StatsAPI dispatches for ProbitModel
+coef(m::ProbitModel) = m.beta
+vcov(m::ProbitModel) = m.var_beta
+residuals(m::ProbitModel) = m.residuals
+predict(m::ProbitModel) = m.fitted
+stderror(m::ProbitModel) = [sqrt(m.var_beta[i,i]) for i in 1:size(m.var_beta, 1)]
+nobs(m::ProbitModel) = m.nobs
+loglikelihood(m::ProbitModel) = m.loglik
+aic(m::ProbitModel) = m.aic
+bic(m::ProbitModel) = m.bic
+r2(m::ProbitModel) = m.pseudo_r2
+confint(m::ProbitModel; level=0.95) = hcat(m.beta .- 1.96 .* stderror(m), m.beta .+ 1.96 .* stderror(m))
+
+# Mock functions
+
+function estimate_reg(y::AbstractVector{T}, X::AbstractMatrix{T};
+                      cov_type=:hc1, weights=nothing, varnames=nothing,
+                      clusters=nothing) where T
+    n, k = size(X)
+    beta = ones(T, k) * T(0.5)
+    var_beta = Matrix{T}(I(k)) * T(0.01)
+    fitted_vals = X * beta
+    resids = y .- fitted_vals
+    ssr = sum(resids .^ 2)
+    tss = sum((y .- mean(y)) .^ 2)
+    r2_val = one(T) - ssr / tss
+    adj_r2_val = one(T) - (one(T) - r2_val) * (n - 1) / (n - k)
+    f_val = T(25.0)
+    f_p = T(0.001)
+    ll = T(-100.0)
+    aic_val = T(210.0)
+    bic_val = T(220.0)
+    vnames = varnames === nothing ? ["x$i" for i in 1:k] : varnames
+    RegModel{T}(y, X, beta, var_beta, resids, fitted_vals, ssr, tss,
+                r2_val, adj_r2_val, f_val, f_p, ll, aic_val, bic_val,
+                n, k, n - k, cov_type, weights, vnames, clusters, :ols,
+                nothing, nothing, nothing, nothing, nothing)
+end
+
+function estimate_iv(y::AbstractVector{T}, X::AbstractMatrix{T}, Z::AbstractMatrix{T};
+                     endogenous=Int[], cov_type=:hc1, varnames=nothing) where T
+    n, k = size(X)
+    beta = ones(T, k) * T(0.5)
+    var_beta = Matrix{T}(I(k)) * T(0.01)
+    fitted_vals = X * beta
+    resids = y .- fitted_vals
+    ssr = sum(resids .^ 2)
+    tss = sum((y .- mean(y)) .^ 2)
+    r2_val = one(T) - ssr / tss
+    adj_r2_val = one(T) - (one(T) - r2_val) * (n - 1) / (n - k)
+    f_val = T(20.0)
+    f_p = T(0.002)
+    ll = T(-105.0)
+    aic_val = T(220.0)
+    bic_val = T(230.0)
+    vnames = varnames === nothing ? ["x$i" for i in 1:k] : varnames
+    first_f = T(15.0)
+    sargan_s = T(2.5)
+    sargan_p = T(0.30)
+    RegModel{T}(y, X, beta, var_beta, resids, fitted_vals, ssr, tss,
+                r2_val, adj_r2_val, f_val, f_p, ll, aic_val, bic_val,
+                n, k, n - k, cov_type, nothing, vnames, nothing, :iv,
+                Z, endogenous, first_f, sargan_s, sargan_p)
+end
+
+function _build_logit_probit(::Type{M}, y::AbstractVector{T}, X::AbstractMatrix{T};
+                             cov_type=:ols, varnames=nothing, clusters=nothing,
+                             maxiter=100, tol=1e-8) where {T, M}
+    n, k = size(X)
+    beta = ones(T, k) * T(0.3)
+    var_beta = Matrix{T}(I(k)) * T(0.02)
+    fitted_vals = ones(T, n) * T(0.5)
+    resids = y .- fitted_vals
+    ll = T(-80.0)
+    ll_null = T(-100.0)
+    pseudo = one(T) - ll / ll_null
+    aic_val = T(170.0)
+    bic_val = T(180.0)
+    vnames = varnames === nothing ? ["x$i" for i in 1:k] : varnames
+    M{T}(y, X, beta, var_beta, resids, fitted_vals, ll, ll_null, pseudo,
+          aic_val, bic_val, n, vnames, true, 5, cov_type)
+end
+
+function estimate_logit(y::AbstractVector{T}, X::AbstractMatrix{T};
+                        cov_type=:ols, varnames=nothing, clusters=nothing,
+                        maxiter=100, tol=1e-8) where T
+    _build_logit_probit(LogitModel, y, X; cov_type=cov_type, varnames=varnames,
+                        clusters=clusters, maxiter=maxiter, tol=tol)
+end
+
+function estimate_probit(y::AbstractVector{T}, X::AbstractMatrix{T};
+                         cov_type=:ols, varnames=nothing, clusters=nothing,
+                         maxiter=100, tol=1e-8) where T
+    _build_logit_probit(ProbitModel, y, X; cov_type=cov_type, varnames=varnames,
+                        clusters=clusters, maxiter=maxiter, tol=tol)
+end
+
+function marginal_effects(m::Union{LogitModel{T},ProbitModel{T}};
+                          type=:ame, at=nothing, conf_level=0.95) where T
+    k = length(m.beta)
+    effects = ones(T, k) * T(0.1)
+    se = ones(T, k) * T(0.02)
+    z = effects ./ se
+    pvals = ones(T, k) * T(0.001)
+    z_crit = T(1.96)
+    ci_lo = effects .- z_crit .* se
+    ci_hi = effects .+ z_crit .* se
+    MarginalEffects{T}(effects, se, z, pvals, ci_lo, ci_hi, m.varnames, type, conf_level)
+end
+
+function odds_ratio(m::LogitModel{T}; conf_level=0.95) where T
+    or = exp.(m.beta)
+    se = stderror(m)
+    z_crit = T(1.96)
+    ci_lo = exp.(m.beta .- z_crit .* se)
+    ci_hi = exp.(m.beta .+ z_crit .* se)
+    (odds_ratio=or, ci_lower=ci_lo, ci_upper=ci_hi, varnames=m.varnames)
+end
+
+function vif(m::RegModel{T}) where T
+    k = length(m.beta)
+    fill(T(2.5), k)
+end
+
+function classification_table(m::Union{LogitModel,ProbitModel}; threshold=0.5)
+    Dict("accuracy" => 0.85, "precision" => 0.80, "recall" => 0.75,
+         "f1" => 0.77, "true_positive" => 30, "true_negative" => 55,
+         "false_positive" => 8, "false_negative" => 10, "threshold" => threshold)
+end
+
+export RegModel, LogitModel, ProbitModel, MarginalEffects
+export estimate_reg, estimate_iv, estimate_logit, estimate_probit
+export marginal_effects, odds_ratio, vif, classification_table
+export vcov, confint, r2
+
 end # module
