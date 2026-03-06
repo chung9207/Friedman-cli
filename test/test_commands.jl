@@ -22,7 +22,7 @@ using Test
 using CSV, DataFrames, JSON3, PrettyTables, TOML
 using Dates
 using LinearAlgebra: eigvals, diag, I, svd, diagm
-using Statistics: mean, median, var
+using Statistics: mean, median, var, quantile
 using Random
 
 # ─── Setup: Mock module + source includes ──────────────────────
@@ -565,9 +565,10 @@ end  # Shared utilities
         node = register_estimate_commands!()
         @test node isa NodeCommand
         @test node.name == "estimate"
-        @test length(node.subcmds) == 18
+        @test length(node.subcmds) == 20
         for cmd in ["var", "bvar", "lp", "arima", "gmm", "smm", "static", "dynamic", "gdfm",
-                     "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml", "vecm", "pvar"]
+                     "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml", "vecm", "pvar",
+                     "favar", "sdfm"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -1300,10 +1301,11 @@ end  # Estimate handlers
         node = register_test_commands!()
         @test node isa NodeCommand
         @test node.name == "test"
-        @test length(node.subcmds) == 16
+        @test length(node.subcmds) == 22
         for cmd in ["adf", "kpss", "pp", "za", "np", "johansen",
                      "normality", "identifiability", "heteroskedasticity",
-                     "arch_lm", "ljung_box", "var", "granger", "pvar", "lr", "lm"]
+                     "arch_lm", "ljung_box", "var", "granger", "pvar", "lr", "lm",
+                     "andrews", "bai-perron", "panic", "cips", "moon-perron", "factor-break"]
             @test haskey(node.subcmds, cmd)
         end
         # VAR is a nested NodeCommand with lagselect and stability
@@ -1658,8 +1660,8 @@ end  # Test handlers
         node = register_irf_commands!()
         @test node isa NodeCommand
         @test node.name == "irf"
-        @test length(node.subcmds) == 5
-        for cmd in ["var", "bvar", "lp", "vecm", "pvar"]
+        @test length(node.subcmds) == 7
+        for cmd in ["var", "bvar", "lp", "vecm", "pvar", "favar", "sdfm"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -1968,8 +1970,8 @@ end  # IRF handlers
         node = register_fevd_commands!()
         @test node isa NodeCommand
         @test node.name == "fevd"
-        @test length(node.subcmds) == 5
-        for cmd in ["var", "bvar", "lp", "vecm", "pvar"]
+        @test length(node.subcmds) == 7
+        for cmd in ["var", "bvar", "lp", "vecm", "pvar", "favar", "sdfm"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -2070,8 +2072,8 @@ end  # FEVD handlers
         node = register_hd_commands!()
         @test node isa NodeCommand
         @test node.name == "hd"
-        @test length(node.subcmds) == 4
-        for cmd in ["var", "bvar", "lp", "vecm"]
+        @test length(node.subcmds) == 5
+        for cmd in ["var", "bvar", "lp", "vecm", "favar"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -2170,9 +2172,9 @@ end  # HD handlers
         node = register_forecast_commands!()
         @test node isa NodeCommand
         @test node.name == "forecast"
-        @test length(node.subcmds) == 13
+        @test length(node.subcmds) == 14
         for cmd in ["var", "bvar", "lp", "arima", "static", "dynamic", "gdfm",
-                     "arch", "garch", "egarch", "gjr_garch", "sv", "vecm"]
+                     "arch", "garch", "egarch", "gjr_garch", "sv", "vecm", "favar"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -2502,38 +2504,38 @@ end  # Forecast handlers
 
     @testset "register_estimate_commands! includes vecm" begin
         node = register_estimate_commands!()
-        @test length(node.subcmds) == 18
+        @test length(node.subcmds) == 20
         @test haskey(node.subcmds, "vecm")
         @test node.subcmds["vecm"] isa LeafCommand
     end
 
     @testset "register_irf_commands! includes vecm" begin
         node = register_irf_commands!()
-        @test length(node.subcmds) == 5
+        @test length(node.subcmds) == 7
         @test haskey(node.subcmds, "vecm")
     end
 
     @testset "register_fevd_commands! includes vecm" begin
         node = register_fevd_commands!()
-        @test length(node.subcmds) == 5
+        @test length(node.subcmds) == 7
         @test haskey(node.subcmds, "vecm")
     end
 
     @testset "register_hd_commands! includes vecm" begin
         node = register_hd_commands!()
-        @test length(node.subcmds) == 4
+        @test length(node.subcmds) == 5
         @test haskey(node.subcmds, "vecm")
     end
 
     @testset "register_forecast_commands! includes vecm" begin
         node = register_forecast_commands!()
-        @test length(node.subcmds) == 13
+        @test length(node.subcmds) == 14
         @test haskey(node.subcmds, "vecm")
     end
 
     @testset "register_test_commands! includes granger" begin
         node = register_test_commands!()
-        @test length(node.subcmds) == 16
+        @test length(node.subcmds) == 22
         @test haskey(node.subcmds, "granger")
         @test node.subcmds["granger"] isa LeafCommand
     end
@@ -2870,9 +2872,9 @@ end  # VECM handlers
         node = register_predict_commands!()
         @test node isa NodeCommand
         @test node.name == "predict"
-        @test length(node.subcmds) == 12
+        @test length(node.subcmds) == 13
         for cmd in ["var", "bvar", "arima", "vecm", "static", "dynamic", "gdfm",
-                     "arch", "garch", "egarch", "gjr_garch", "sv"]
+                     "arch", "garch", "egarch", "gjr_garch", "sv", "favar"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -3181,9 +3183,9 @@ end  # Predict handlers
         node = register_residuals_commands!()
         @test node isa NodeCommand
         @test node.name == "residuals"
-        @test length(node.subcmds) == 12
+        @test length(node.subcmds) == 13
         for cmd in ["var", "bvar", "arima", "vecm", "static", "dynamic", "gdfm",
-                     "arch", "garch", "egarch", "gjr_garch", "sv"]
+                     "arch", "garch", "egarch", "gjr_garch", "sv", "favar"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -3808,21 +3810,21 @@ end  # Filter handlers
         node = register_estimate_commands!()
         @test haskey(node.subcmds, "pvar")
         @test node.subcmds["pvar"] isa LeafCommand
-        @test length(node.subcmds) == 18
+        @test length(node.subcmds) == 20
     end
 
     @testset "register_irf_commands! includes pvar" begin
         node = register_irf_commands!()
         @test haskey(node.subcmds, "pvar")
         @test node.subcmds["pvar"] isa LeafCommand
-        @test length(node.subcmds) == 5
+        @test length(node.subcmds) == 7
     end
 
     @testset "register_fevd_commands! includes pvar" begin
         node = register_fevd_commands!()
         @test haskey(node.subcmds, "pvar")
         @test node.subcmds["pvar"] isa LeafCommand
-        @test length(node.subcmds) == 5
+        @test length(node.subcmds) == 7
     end
 
     @testset "register_test_commands! includes pvar, lr, lm" begin
@@ -3838,7 +3840,7 @@ end  # Filter handlers
         @test node.subcmds["lr"] isa LeafCommand
         @test haskey(node.subcmds, "lm")
         @test node.subcmds["lm"] isa LeafCommand
-        @test length(node.subcmds) == 16
+        @test length(node.subcmds) == 22
     end
 
     @testset "_parse_varlist" begin
@@ -5674,7 +5676,8 @@ end
         @test haskey(node.subcmds, "estimate")
         @test haskey(node.subcmds, "perfect-foresight")
         @test haskey(node.subcmds, "steady-state")
-        @test length(node.subcmds) == 7
+        @test haskey(node.subcmds, "bayes")
+        @test length(node.subcmds) == 8
     end
 end
 
@@ -5924,6 +5927,322 @@ end
         @test haskey(test_node.subcmds, "honest")
         @test length(test_node.subcmds) == 4
     end
+end
+
+# ═══════════════════════════════════════════════════════════════
+# FAVAR / SDFM handler tests
+# ═══════════════════════════════════════════════════════════════
+
+@testset "FAVAR & SDFM handlers" begin
+
+    @testset "_estimate_favar" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _estimate_favar(; data=csv, factors=2, lags=1, key_vars="1,2",
+                                  method="two_step", draws=5000, format="table")
+            end
+            @test occursin("FAVAR", out)
+        end
+    end
+
+    @testset "_estimate_sdfm" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _estimate_sdfm(; data=csv, factors=2, id="cholesky",
+                                 var_lags=1, horizon=20, format="table")
+            end
+            @test occursin("Structural DFM", out)
+        end
+    end
+
+    @testset "_irf_favar" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _irf_favar(; data=csv, factors=2, lags=1, key_vars="1,2",
+                             horizons=10, id="cholesky", format="table")
+            end
+            @test occursin("FAVAR IRF", out)
+        end
+    end
+
+    @testset "_irf_sdfm" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _irf_sdfm(; data=csv, factors=2, horizons=10, format="table")
+            end
+            @test occursin("Structural DFM IRF", out)
+        end
+    end
+
+    @testset "_fevd_favar" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _fevd_favar(; data=csv, factors=2, lags=1, key_vars="1,2",
+                              horizons=10, format="table")
+            end
+            @test occursin("FAVAR FEVD", out)
+        end
+    end
+
+    @testset "_fevd_sdfm" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _fevd_sdfm(; data=csv, factors=2, horizons=10, format="table")
+            end
+            @test occursin("SDFM FEVD", out)
+        end
+    end
+
+    @testset "_hd_favar" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _hd_favar(; data=csv, factors=2, lags=1, key_vars="1,2",
+                            horizons=10, format="table")
+            end
+            @test occursin("FAVAR", out)
+        end
+    end
+
+    @testset "_forecast_favar" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _forecast_favar(; data=csv, factors=2, lags=1, key_vars="1,2",
+                                  horizons=5, format="table")
+            end
+            @test occursin("FAVAR Forecast", out)
+        end
+    end
+
+    @testset "_predict_favar" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _predict_favar(; data=csv, factors=2, lags=1, key_vars="1,2",
+                                 format="table")
+            end
+            @test occursin("FAVAR", out)
+        end
+    end
+
+    @testset "_residuals_favar" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _residuals_favar(; data=csv, factors=2, lags=1, key_vars="1,2",
+                                   format="table")
+            end
+            @test occursin("FAVAR", out)
+        end
+    end
+
+end
+
+# ═══════════════════════════════════════════════════════════════
+# Structural break test handlers
+# ═══════════════════════════════════════════════════════════════
+
+@testset "Structural break test handlers" begin
+
+    @testset "_test_andrews" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _test_andrews(; data=csv, response=1, test="supwald",
+                                trimming=0.15, format="table")
+            end
+            @test occursin("Andrews", out)
+        end
+    end
+
+    @testset "_test_bai_perron" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _test_bai_perron(; data=csv, response=1, max_breaks=5,
+                                   trimming=0.15, criterion="bic", format="table")
+            end
+            @test occursin("Bai-Perron", out)
+        end
+    end
+
+end
+
+# ═══════════════════════════════════════════════════════════════
+# Panel unit root test handlers
+# ═══════════════════════════════════════════════════════════════
+
+@testset "Panel unit root test handlers" begin
+
+    @testset "_test_panic" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _test_panic(; data=csv, factors="2", method="pooled",
+                              id_col="", time_col="", format="table")
+            end
+            @test occursin("PANIC", out)
+        end
+    end
+
+    @testset "_test_cips" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _test_cips(; data=csv, lags="2", deterministic="constant",
+                             id_col="", time_col="", format="table")
+            end
+            @test occursin("CIPS", out)
+        end
+    end
+
+    @testset "_test_moon_perron" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _test_moon_perron(; data=csv, factors="2",
+                                    id_col="", time_col="", format="table")
+            end
+            @test occursin("Moon-Perron", out)
+        end
+    end
+
+    @testset "_test_factor_break" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _test_factor_break(; data=csv, factors=2, method="breitung_eickmeier",
+                                     id_col="", time_col="", format="table")
+            end
+            @test occursin("Factor Break", out)
+        end
+    end
+
+end
+
+# ═══════════════════════════════════════════════════════════════
+# Bayesian DSGE handler tests
+# ═══════════════════════════════════════════════════════════════
+
+@testset "Bayesian DSGE handlers" begin
+
+    @testset "_dsge_bayes" begin
+        mktempdir() do dir
+            # Model TOML
+            model_path = joinpath(dir, "model.toml")
+            write(model_path, """
+            [model]
+            parameters = { rho = 0.9, sigma = 0.01 }
+            endogenous = ["Y", "C"]
+            exogenous = ["e"]
+            [[model.equations]]
+            expr = "Y[t] = rho * Y[t-1] + sigma * e[t]"
+            [[model.equations]]
+            expr = "C[t] = Y[t]"
+            [solver]
+            method = "gensys"
+            """)
+
+            # Data CSV
+            csv = _make_csv(dir; T=50, n=2)
+
+            # Priors TOML
+            priors_path = joinpath(dir, "priors.toml")
+            write(priors_path, """
+            [priors]
+            [priors.rho]
+            dist = "beta"
+            a = 0.5
+            b = 0.2
+            [priors.sigma]
+            dist = "inv_gamma"
+            a = 2.0
+            b = 0.1
+            """)
+
+            out = _capture() do
+                _dsge_bayes(; model=model_path, data=csv,
+                              params="rho,sigma", priors=priors_path,
+                              sampler="smc", n_smc=100, n_particles=50,
+                              n_draws=100, burnin=10, ess_target=0.5,
+                              observables="", solver="gensys", order=1,
+                              delayed_acceptance=false,
+                              output="", format="table")
+            end
+            @test occursin("Bayesian DSGE", out)
+            @test occursin("Log marginal likelihood", out)
+        end
+    end
+
+    @testset "_dsge_bayes — missing data" begin
+        mktempdir() do dir
+            model_path = joinpath(dir, "model.toml")
+            write(model_path, """
+            [model]
+            parameters = { rho = 0.9 }
+            endogenous = ["Y"]
+            exogenous = ["e"]
+            [[model.equations]]
+            expr = "Y[t] = rho * Y[t-1] + e[t]"
+            """)
+            @test_throws ErrorException _dsge_bayes(;
+                model=model_path, data="", params="rho",
+                priors="priors.toml", sampler="smc",
+                n_smc=100, n_particles=50, n_draws=100, burnin=10,
+                ess_target=0.5, observables="", solver="gensys", order=1,
+                delayed_acceptance=false, output="", format="table")
+        end
+    end
+
+    @testset "_dsge_bayes — missing params" begin
+        mktempdir() do dir
+            model_path = joinpath(dir, "model.toml")
+            write(model_path, """
+            [model]
+            parameters = { rho = 0.9 }
+            endogenous = ["Y"]
+            exogenous = ["e"]
+            [[model.equations]]
+            expr = "Y[t] = e[t]"
+            """)
+            csv = _make_csv(dir; T=50, n=1)
+            @test_throws ErrorException _dsge_bayes(;
+                model=model_path, data=csv, params="",
+                priors="priors.toml", sampler="smc",
+                n_smc=100, n_particles=50, n_draws=100, burnin=10,
+                ess_target=0.5, observables="", solver="gensys", order=1,
+                delayed_acceptance=false, output="", format="table")
+        end
+    end
+
+    @testset "_dsge_bayes — missing priors" begin
+        mktempdir() do dir
+            model_path = joinpath(dir, "model.toml")
+            write(model_path, """
+            [model]
+            parameters = { rho = 0.9 }
+            endogenous = ["Y"]
+            exogenous = ["e"]
+            [[model.equations]]
+            expr = "Y[t] = e[t]"
+            """)
+            csv = _make_csv(dir; T=50, n=1)
+            @test_throws ErrorException _dsge_bayes(;
+                model=model_path, data=csv, params="rho",
+                priors="", sampler="smc",
+                n_smc=100, n_particles=50, n_draws=100, burnin=10,
+                ess_target=0.5, observables="", solver="gensys", order=1,
+                delayed_acceptance=false, output="", format="table")
+        end
+    end
+
 end
 
 end  # Command Handlers
