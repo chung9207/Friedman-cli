@@ -29,6 +29,7 @@ function _did_estimate(; data::String, outcome::String, treatment::String,
         leads::Int=0, horizon::Int=5, covariates::String="",
         control_group::String="never_treated", cluster::String="unit",
         conf_level::Float64=0.95, n_boot::Int=200,
+        base_period::String="varying",
         output::String="", format::String="table",
         plot::Bool=false, plot_save::String="")
 
@@ -44,7 +45,8 @@ function _did_estimate(; data::String, outcome::String, treatment::String,
     result = estimate_did(pd, outcome, treatment;
         method=Symbol(method), leads=leads, horizon=horizon,
         covariates=covs, control_group=Symbol(control_group),
-        cluster=Symbol(cluster), conf_level=conf_level, n_boot=n_boot)
+        cluster=Symbol(cluster), conf_level=conf_level, n_boot=n_boot,
+        base_period=Symbol(base_period))
 
     att_df = DataFrame(
         Event_Time = result.event_times,
@@ -123,9 +125,15 @@ end
 
 function _did_lp_did(; data::String, outcome::String, treatment::String,
         id_col::String="", time_col::String="",
-        leads::Int=3, horizon::Int=5, lags::Int=4,
+        horizon::Int=5, pre_window::Int=3, post_window::Int=0,
+        ylags::Int=0, dylags::Int=0,
         covariates::String="", cluster::String="unit",
         conf_level::Float64=0.95,
+        pmd::String="", nonabsorbing::String="",
+        reweight::Bool=false, nocomp::Bool=false,
+        notyet::Bool=false, nevertreated::Bool=false,
+        firsttreat::Bool=false, oneoff::Bool=false,
+        only_pooled::Bool=false, only_event::Bool=false,
         output::String="", format::String="table",
         plot::Bool=false, plot_save::String="")
 
@@ -138,26 +146,61 @@ function _did_lp_did(; data::String, outcome::String, treatment::String,
 
     covs = isempty(covariates) ? String[] : String.(split(covariates, ","))
 
+    # Parse pmd: empty→nothing, "ccs"→:ccs, "ipw"→:ipw, integer string→Int
+    pmd_val::Union{Nothing,Symbol,Int} = if isempty(pmd)
+        nothing
+    elseif pmd in ("ccs", "ipw")
+        Symbol(pmd)
+    else
+        parse(Int, pmd)
+    end
+
+    # Parse nonabsorbing: empty→nothing, else→parse Int
+    nonabs_val = isempty(nonabsorbing) ? nothing : parse(Int, nonabsorbing)
+
+    pw = post_window == 0 ? horizon : post_window
+
     result = estimate_lp_did(pd, outcome, treatment, horizon;
-        leads=leads, lags=lags, covariates=covs,
-        cluster=Symbol(cluster), conf_level=conf_level)
+        pre_window=pre_window, post_window=pw,
+        ylags=ylags, dylags=dylags,
+        covariates=covs, nonabsorbing=nonabs_val,
+        notyet=notyet, nevertreated=nevertreated,
+        firsttreat=firsttreat, oneoff=oneoff,
+        pmd=pmd_val, reweight=reweight, nocomp=nocomp,
+        cluster=Symbol(cluster), conf_level=conf_level,
+        only_pooled=only_pooled, only_event=only_event)
 
     coef_df = DataFrame(
         Event_Time = result.event_times,
         Coefficient = round.(result.coefficients; digits=6),
-        SE = round.(result.se; digits=6),
+        SE = round.(result.se_vec; digits=6),
         CI_Lower = round.(result.ci_lower; digits=6),
-        CI_Upper = round.(result.ci_upper; digits=6)
+        CI_Upper = round.(result.ci_upper; digits=6),
+        N_obs = result.nobs_h
     )
     fmt = Symbol(lowercase(format))
     output_result(coef_df; format=fmt, output=output,
-        title="LP-DiD (Dube et al. 2023) — $(result.outcome_var)")
+        title="LP-DiD (Dube et al. 2023) — $(result.outcome_name)")
 
     println()
-    printstyled("  Clean controls: "; bold=true)
-    println(result.clean_controls ? "yes (not-yet-treated)" : "no")
+    printstyled("  Specification: "; bold=true)
+    println(result.spec_type)
     printstyled("  N: "; bold=true)
-    println("$(result.n_obs) obs, $(result.n_groups) groups")
+    println("$(result.T_obs) obs, $(result.n_groups) groups")
+    printstyled("  Window: "; bold=true)
+    println("pre=$(result.pre_window), post=$(result.post_window)")
+
+    if !isnothing(result.pooled_post_result)
+        pp = result.pooled_post_result
+        println()
+        printstyled("  Pooled post-treatment: "; bold=true)
+        println("coef=$(round(pp.coef; digits=6))  SE=$(round(pp.se; digits=6))  CI=[$(round(pp.ci_lower; digits=6)), $(round(pp.ci_upper; digits=6))]")
+    end
+    if !isnothing(result.pooled_pre_result)
+        pp = result.pooled_pre_result
+        printstyled("  Pooled pre-treatment:  "; bold=true)
+        println("coef=$(round(pp.coef; digits=6))  SE=$(round(pp.se; digits=6))  CI=[$(round(pp.ci_lower; digits=6)), $(round(pp.ci_upper; digits=6))]")
+    end
 
     _maybe_plot(result; plot=plot, plot_save=plot_save)
 end
@@ -324,6 +367,7 @@ function register_did_commands!()
             Option("cluster"; type=String, default="unit", description="unit|time|twoway"),
             Option("conf-level"; type=Float64, default=0.95, description="Confidence level"),
             Option("n-boot"; type=Int, default=200, description="Bootstrap replications (dcdh only)"),
+            Option("base-period"; type=String, default="varying", description="varying|universal (Callaway-Sant'Anna only)"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
@@ -356,18 +400,32 @@ function register_did_commands!()
             Option("outcome"; type=String, default="", description="Outcome variable column name (required)"),
             Option("treatment"; type=String, default="", description="Treatment indicator column name (required)"),
             _DID_PANEL_OPTIONS...,
-            Option("leads"; type=Int, default=3, description="Pre-treatment leads"),
             Option("horizon"; type=Int, default=5, description="Post-treatment horizon"),
-            Option("lags"; short="p", type=Int, default=4, description="Control lags"),
+            Option("pre-window"; type=Int, default=3, description="Pre-treatment window"),
+            Option("post-window"; type=Int, default=0, description="Post-treatment window (0 = use horizon)"),
+            Option("ylags"; type=Int, default=0, description="Outcome lags"),
+            Option("dylags"; type=Int, default=0, description="Differenced outcome lags"),
             Option("covariates"; type=String, default="", description="Comma-separated covariate column names"),
             Option("cluster"; type=String, default="unit", description="unit|time|twoway"),
             Option("conf-level"; type=Float64, default=0.95, description="Confidence level"),
+            Option("pmd"; type=String, default="", description="Pre-treatment matching: ccs|ipw|<integer>"),
+            Option("nonabsorbing"; type=String, default="", description="Non-absorbing treatment (integer periods)"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
             Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
         ],
-        flags=[Flag("plot"; description="Open interactive plot in browser")],
-        description="LP-DiD with clean controls (Dube et al. 2023)")
+        flags=[
+            Flag("plot"; description="Open interactive plot in browser"),
+            Flag("reweight"; description="Reweight observations"),
+            Flag("nocomp"; description="No composition adjustment"),
+            Flag("notyet"; description="Use not-yet-treated as controls"),
+            Flag("nevertreated"; description="Use never-treated as controls"),
+            Flag("firsttreat"; description="Use first-treatment timing"),
+            Flag("oneoff"; description="One-off treatment specification"),
+            Flag("only-pooled"; description="Only report pooled estimates"),
+            Flag("only-event"; description="Only report event-time estimates"),
+        ],
+        description="LP-DiD estimation (Dube et al. 2023)")
 
     did_test_bacon = LeafCommand("bacon", _did_test_bacon;
         args=[Argument("data"; description="Path to panel CSV data file")],
