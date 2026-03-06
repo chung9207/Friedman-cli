@@ -21,7 +21,7 @@ function register_dsge_commands!()
         args=[Argument("model"; description="Path to DSGE model file (.toml or .jl)")],
         options=[
             Option("method"; type=String, default="gensys", description="Solution method: gensys|klein|perturbation|projection|pfi"),
-            Option("order"; type=Int, default=1, description="Perturbation order (1 or 2)"),
+            Option("order"; type=Int, default=1, description="Perturbation order (1, 2, or 3)"),
             Option("degree"; type=Int, default=5, description="Polynomial degree (projection/pfi)"),
             Option("grid"; type=String, default="auto", description="Grid type: auto|chebyshev|smolyak"),
             Option("constraints"; type=String, default="", description="Path to OccBin constraints TOML"),
@@ -37,7 +37,7 @@ function register_dsge_commands!()
         args=[Argument("model"; description="Path to DSGE model file (.toml or .jl)")],
         options=[
             Option("method"; type=String, default="gensys", description="Solution method: gensys|klein|perturbation|projection|pfi"),
-            Option("order"; type=Int, default=1, description="Perturbation order (1 or 2)"),
+            Option("order"; type=Int, default=1, description="Perturbation order (1, 2, or 3)"),
             Option("horizon"; short="h", type=Int, default=40, description="IRF horizon"),
             Option("shock-size"; type=Float64, default=1.0, description="Shock size (std devs)"),
             Option("n-sim"; type=Int, default=0, description="Simulation-based IRF draws (0=analytical)"),
@@ -53,7 +53,7 @@ function register_dsge_commands!()
         args=[Argument("model"; description="Path to DSGE model file (.toml or .jl)")],
         options=[
             Option("method"; type=String, default="gensys", description="Solution method: gensys|klein|perturbation|projection|pfi"),
-            Option("order"; type=Int, default=1, description="Perturbation order (1 or 2)"),
+            Option("order"; type=Int, default=1, description="Perturbation order (1, 2, or 3)"),
             Option("horizon"; short="h", type=Int, default=40, description="FEVD horizon"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
@@ -66,7 +66,7 @@ function register_dsge_commands!()
         args=[Argument("model"; description="Path to DSGE model file (.toml or .jl)")],
         options=[
             Option("method"; type=String, default="gensys", description="Solution method: gensys|klein|perturbation|projection|pfi"),
-            Option("order"; type=Int, default=1, description="Perturbation order (1 or 2)"),
+            Option("order"; type=Int, default=1, description="Perturbation order (1, 2, or 3)"),
             Option("periods"; type=Int, default=200, description="Simulation periods (after burn-in)"),
             Option("burn"; type=Int, default=100, description="Burn-in periods to discard"),
             Option("seed"; type=Int, default=0, description="Random seed (0=no seed)"),
@@ -119,16 +119,40 @@ function register_dsge_commands!()
         ],
         description="Compute the steady state of a DSGE model")
 
+    dsge_bayes = LeafCommand("bayes", _dsge_bayes;
+        args=[Argument("model"; description="Path to DSGE model file (.toml or .jl)")],
+        options=[
+            Option("data"; short="d", type=String, default="", description="Path to CSV data file"),
+            Option("params"; type=String, default="", description="Comma-separated parameter names"),
+            Option("priors"; type=String, default="", description="Path to priors TOML file"),
+            Option("sampler"; type=String, default="smc", description="smc|smc2|mh"),
+            Option("n-smc"; type=Int, default=5000, description="SMC particles"),
+            Option("n-particles"; type=Int, default=500, description="Particle filter particles (smc2)"),
+            Option("n-draws"; type=Int, default=10000, description="Total posterior draws (mh)"),
+            Option("burnin"; type=Int, default=5000, description="Burn-in draws (mh)"),
+            Option("ess-target"; type=Float64, default=0.5, description="ESS target for resampling"),
+            Option("observables"; type=String, default="", description="Observable variable names (comma-separated)"),
+            Option("solver"; type=String, default="gensys", description="gensys|klein|perturbation"),
+            Option("order"; type=Int, default=1, description="Perturbation order (1, 2, or 3)"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        flags=[
+            Flag("delayed-acceptance"; description="Use delayed acceptance for MH (Christen & Fox 2005)"),
+        ],
+        description="Bayesian DSGE estimation (SMC / SMC² / Metropolis-Hastings)")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "solve"              => dsge_solve,
         "irf"                => dsge_irf,
         "fevd"               => dsge_fevd,
         "simulate"           => dsge_simulate,
         "estimate"           => dsge_estimate,
+        "bayes"              => dsge_bayes,
         "perfect-foresight"  => dsge_pf,
         "steady-state"       => dsge_ss,
     )
-    return NodeCommand("dsge", subcmds, "DSGE models: solve, IRF, FEVD, simulate, estimate, OccBin, perfect foresight")
+    return NodeCommand("dsge", subcmds, "DSGE models: solve, IRF, FEVD, simulate, estimate, Bayesian, OccBin, perfect foresight")
 end
 
 # ── Implemented Handlers ─────────────────────────────────────
@@ -407,4 +431,69 @@ function _dsge_perfect_foresight(; model::String, shocks::String="",
 
     output_result(path_df; format=Symbol(format), output=output,
                   title="Perfect Foresight Path (T=$n_periods, converged=$(pf.converged))")
+end
+
+# ── Bayesian DSGE ─────────────────────────────────────
+
+function _dsge_bayes(; model::String, data::String="", params::String="",
+                      priors::String="", sampler::String="smc",
+                      n_smc::Int=5000, n_particles::Int=500,
+                      n_draws::Int=10000, burnin::Int=5000,
+                      ess_target::Float64=0.5, observables::String="",
+                      solver::String="gensys", order::Int=1,
+                      delayed_acceptance::Bool=false,
+                      output::String="", format::String="table")
+    isempty(data) && error("--data is required")
+    isempty(params) && error("--params is required (comma-separated parameter names)")
+    isempty(priors) && error("--priors is required (path to priors TOML)")
+
+    spec = _load_dsge_model(model)
+
+    df = load_data(data)
+    Y = df_to_matrix(df)
+    varnames = variable_names(df)
+
+    param_names = [strip(p) for p in split(params, ",")]
+    theta0 = ones(Float64, length(param_names)) * 0.5
+
+    priors_config = load_config(priors)
+    priors_dict = get_dsge_priors(priors_config)
+
+    obs_syms = isempty(observables) ? Symbol[] : Symbol.(strip.(split(observables, ",")))
+
+    solver_kwargs = order > 1 ? (order=order,) : NamedTuple()
+
+    println("Bayesian DSGE Estimation:")
+    println("  Sampler: $sampler")
+    println("  Parameters: $(join(param_names, ", "))")
+    println("  Data: $(size(Y, 1)) obs × $(size(Y, 2)) vars")
+    println("  Solver: $solver" * (order > 1 ? ", order=$order" : ""))
+    println()
+
+    result = estimate_dsge_bayes(spec, Y, theta0;
+        priors=priors_dict, method=Symbol(sampler),
+        observables=obs_syms,
+        n_smc=n_smc, n_particles=n_particles,
+        n_draws=n_draws, burnin=burnin, ess_target=ess_target,
+        solver=Symbol(solver), solver_kwargs=solver_kwargs,
+        delayed_acceptance=delayed_acceptance)
+
+    # Posterior summary table
+    draws = result.theta_draws
+    np = size(draws, 2)
+    est_df = DataFrame(
+        parameter = result.param_names,
+        mean = [round(mean(draws[:, i]); digits=6) for i in 1:np],
+        std = [round(sqrt(var(draws[:, i])); digits=6) for i in 1:np],
+        q05 = [round(quantile(draws[:, i], 0.05); digits=6) for i in 1:np],
+        median = [round(median(draws[:, i]); digits=6) for i in 1:np],
+        q95 = [round(quantile(draws[:, i], 0.95); digits=6) for i in 1:np],
+    )
+    output_result(est_df; format=Symbol(format), output=output,
+                  title="Bayesian DSGE Posterior ($sampler)")
+
+    println()
+    printstyled("  Log marginal likelihood: $(round(result.log_marginal_likelihood; digits=4))\n"; color=:cyan)
+    printstyled("  Acceptance rate: $(round(result.acceptance_rate; digits=4))\n"; color=:cyan)
+    printstyled("  Method: $(result.method)\n"; color=:cyan)
 end
