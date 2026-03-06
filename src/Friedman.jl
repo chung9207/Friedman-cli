@@ -100,6 +100,25 @@ function main(args::Vector{String}=ARGS)
     end
 end
 
-export main, build_app
+"""
+    julia_main()::Cint
+
+Entry point for PackageCompiler standalone executable.
+"""
+function julia_main()::Cint
+    try
+        main(ARGS)
+        return 0
+    catch e
+        if e isa SystemExit
+            return e.code
+        end
+        printstyled(stderr, "Error: "; bold=true, color=:red)
+        println(stderr, sprint(showerror, e))
+        return 1
+    end
+end
+
+export main, build_app, julia_main
 
 end # module Friedman

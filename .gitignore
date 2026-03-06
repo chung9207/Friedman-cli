@@ -7,8 +7,12 @@ CLAUDE.md
 install.sh
 uninstall.sh
 build_sysimage.jl
+build_app.jl
 precompile_exec.jl
+precompile_app.jl
 friedman.so
+build/
+build_env/
 bin/friedman-wrapper
 data.csv
 .friedmanlog.bson

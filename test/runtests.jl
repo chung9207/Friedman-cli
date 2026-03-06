@@ -572,17 +572,24 @@ using Test
             @test contains(e.message, "friedman top")
         end
 
-        # ParseError from leaf includes command context
+        # Empty args on leaf with required argument shows help (not ParseError)
         cmd_req = LeafCommand("check", handler;
             args=[Argument("data"; required=true, description="Data")],
             description="Check")
-        try
-            dispatch_leaf(cmd_req, String[]; prog="friedman check")
-            @test false  # should not reach here
-        catch e
-            @test e isa ParseError
-            @test contains(e.message, "friedman check")
+        helpout = let (tmppath, tmpio) = mktemp()
+            try
+                redirect_stdout(tmpio) do
+                    dispatch_leaf(cmd_req, String[]; prog="friedman check")
+                end
+                close(tmpio)
+                read(tmppath, String)
+            finally
+                try; close(tmpio); catch; end
+                try; rm(tmppath); catch; end
+            end
         end
+        @test contains(helpout, "check")
+        @test contains(helpout, "<data>")
     end
 
     # ──────────────────────────────────────────────────────────────

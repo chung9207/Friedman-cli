@@ -85,8 +85,13 @@ end
 Parse arguments for a LeafCommand and call its handler.
 """
 function dispatch_leaf(leaf::LeafCommand, args::Vector{String}; prog::String=leaf.name)
-    # Handle --help
+    # Handle --help or no arguments when required args exist
     if _wants_help(args)
+        print_help(stdout, leaf; prog=prog)
+        return
+    end
+
+    if isempty(args) && any(a -> a.required, leaf.args)
         print_help(stdout, leaf; prog=prog)
         return
     end
