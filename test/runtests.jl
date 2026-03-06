@@ -381,11 +381,11 @@ using Test
         @test contains(help_text, "friedman var")
 
         # Entry help includes version number
-        entry = Entry("friedman", node; version=v"0.3.2")
+        entry = Entry("friedman", node; version=v"0.3.3")
         buf = IOBuffer()
         print_help(buf, entry)
         help_text = String(take!(buf))
-        @test contains(help_text, "0.3.2")
+        @test contains(help_text, "0.3.3")
 
         # Leaf with optional argument shows [arg] not <arg>
         leaf_opt_arg = LeafCommand("test", handler;
@@ -500,9 +500,9 @@ using Test
         @test called_with[][:data] == "test.csv"
 
         # dispatch() with ["--version"] prints version
-        entry = Entry("friedman", outer_node; version=v"0.3.2")
+        entry = Entry("friedman", outer_node; version=v"0.3.3")
         version_output = strip(capture_stdout(() -> dispatch(entry, ["--version"])))
-        @test contains(version_output, "0.3.2")
+        @test contains(version_output, "0.3.3")
 
         # dispatch() with [] shows help (no error)
         help_output = capture_stdout(() -> dispatch(entry, String[]))
@@ -550,7 +550,7 @@ using Test
 
         # -V short flag triggers version
         v_output = strip(capture_stdout(() -> dispatch(entry, ["-V"])))
-        @test contains(v_output, "0.3.2")
+        @test contains(v_output, "0.3.3")
     end
 
     @testset "DispatchError on unknown command" begin
@@ -821,7 +821,7 @@ using Test
         @test estimate_node.name == "estimate"
         @test length(estimate_node.subcmds) == 17
 
-        # All 17 are LeafCommands
+        # All 17 are LeafCommands (this test uses a manually-built node; real counts checked in v0.3.2+ structure tests)
         for key in ["var", "bvar", "lp", "arima", "gmm", "static", "dynamic", "gdfm",
                      "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml", "vecm", "pvar"]
             @test haskey(estimate_node.subcmds, key)
@@ -1156,7 +1156,7 @@ using Test
 
         # Structure tests
         @test test_node.name == "test"
-        @test length(test_node.subcmds) == 16  # 11 leaves + var NodeCommand + granger + pvar NodeCommand + lr + lm
+        @test length(test_node.subcmds) == 16  # manually-built node; real counts checked in structural break test section
 
         # var subcmd is a NodeCommand with 2 children
         @test test_node.subcmds["var"] isa NodeCommand
@@ -1475,7 +1475,7 @@ using Test
                 "irf" => irf_node, "fevd" => fevd_node, "hd" => hd_node,
                 "forecast" => NodeCommand("forecast", Dict{String,Union{NodeCommand,LeafCommand}}(), "Forecast")),
             "Friedman CLI")
-        entry = Entry("friedman", root; version=v"0.3.2")
+        entry = Entry("friedman", root; version=v"0.3.3")
 
         # Top level HAS irf, fevd, hd (action-first)
         @test haskey(root.subcmds, "irf")
@@ -2005,7 +2005,7 @@ using Test
 
         # Structure tests
         @test predict_node.name == "predict"
-        @test length(predict_node.subcmds) == 12
+        @test length(predict_node.subcmds) == 12  # manually-built node; real counts checked in v0.3.2+ structure tests
         for key in ["var", "bvar", "arima", "vecm", "static", "dynamic", "gdfm",
                      "arch", "garch", "egarch", "gjr_garch", "sv"]
             @test haskey(predict_node.subcmds, key)
@@ -2211,7 +2211,7 @@ using Test
 
         # Structure tests
         @test residuals_node.name == "residuals"
-        @test length(residuals_node.subcmds) == 12
+        @test length(residuals_node.subcmds) == 12  # manually-built node; real counts checked in v0.3.2+ structure tests
         for key in ["var", "bvar", "arima", "vecm", "static", "dynamic", "gdfm",
                      "arch", "garch", "egarch", "gjr_garch", "sv"]
             @test haskey(residuals_node.subcmds, key)
@@ -3234,14 +3234,14 @@ end
     @test "burn" in opt_names
     @test "config" in opt_names
 
-    # Verify estimate now has 20 subcommands (17 original + smm + favar + sdfm)
-    @test length(est_node.subcmds) == 20
+    # Verify estimate now has 24 subcommands (20 original + reg + iv + logit + probit)
+    @test length(est_node.subcmds) == 24
     @test haskey(est_node.subcmds, "smm")
     @test haskey(est_node.subcmds, "favar")
     @test haskey(est_node.subcmds, "sdfm")
     for key in ["var", "bvar", "lp", "arima", "gmm", "static", "dynamic", "gdfm",
                  "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml",
-                 "vecm", "pvar", "smm", "favar", "sdfm"]
+                 "vecm", "pvar", "smm", "favar", "sdfm", "reg", "iv", "logit", "probit"]
         @test haskey(est_node.subcmds, key)
         @test est_node.subcmds[key] isa LeafCommand
     end
@@ -3320,7 +3320,8 @@ end
     opt_names = [o.name for o in lp_cmd.options]
     @test "outcome" in opt_names
     @test "treatment" in opt_names
-    @test "leads" in opt_names
+    @test "pre-window" in opt_names
+    @test "post-window" in opt_names
 
     bacon_cmd = test_node.subcmds["bacon"]
     opt_names = [o.name for o in bacon_cmd.options]
@@ -3404,18 +3405,18 @@ end
     fc_favar_flags = [f.name for f in fc_favar.flags]
     @test "panel-forecast" in fc_favar_flags
 
-    # Predict: 13 subcommands (12 original + favar)
+    # Predict: 16 subcommands (12 original + favar + reg + logit + probit)
     pred_node = register_predict_commands!()
-    @test length(pred_node.subcmds) == 13
+    @test length(pred_node.subcmds) == 16
     @test haskey(pred_node.subcmds, "favar")
     @test pred_node.subcmds["favar"] isa LeafCommand
 
     pred_favar_opts = [o.name for o in pred_node.subcmds["favar"].options]
     @test "key-vars" in pred_favar_opts
 
-    # Residuals: 13 subcommands (12 original + favar)
+    # Residuals: 16 subcommands (12 original + favar + reg + logit + probit)
     res_node = register_residuals_commands!()
-    @test length(res_node.subcmds) == 13
+    @test length(res_node.subcmds) == 16
     @test haskey(res_node.subcmds, "favar")
     @test res_node.subcmds["favar"] isa LeafCommand
 
@@ -3426,8 +3427,8 @@ end
 @testset "Structural break test command structure" begin
     test_node = register_test_commands!()
 
-    # Test node now has 22 subcommands (16 original + 6 new: andrews, bai-perron, panic, cips, moon-perron, factor-break)
-    @test length(test_node.subcmds) == 22
+    # Test node now has 29 subcommands (22 previous + 7 new: fourier-adf, fourier-kpss, dfgls, lm-unitroot, adf-2break, gregory-hansen, vif)
+    @test length(test_node.subcmds) == 29
 
     # Andrews structural break test
     @test haskey(test_node.subcmds, "andrews")

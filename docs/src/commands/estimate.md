@@ -1,6 +1,6 @@
 # estimate
 
-Estimate econometric models. 20 subcommands covering VAR, BVAR, VECM, Panel VAR, FAVAR, Structural DFM, local projections, ARIMA, GMM, SMM, factor models, volatility models, and non-Gaussian SVAR identification.
+Estimate econometric models. 24 subcommands covering VAR, BVAR, VECM, Panel VAR, FAVAR, Structural DFM, cross-sectional regression (OLS/WLS/IV/Logit/Probit), local projections, ARIMA, GMM, SMM, factor models, volatility models, and non-Gaussian SVAR identification.
 
 ## estimate var
 
@@ -412,3 +412,86 @@ friedman estimate pvar data.csv --id-col=country --time-col=year --transformatio
 | `--output` | `-o` | String | | Export file path |
 
 **Output:** Coefficient matrix with standard errors and p-values.
+
+## estimate reg
+
+OLS/WLS regression. If `--dep` is omitted, the first numeric column is used as the dependent variable and all remaining numeric columns are regressors.
+
+```bash
+friedman estimate reg data.csv --dep=wage --cov-type=hc1
+friedman estimate reg data.csv --dep=wage --weights=pop_weight --cov-type=hc3
+friedman estimate reg data.csv --dep=wage --clusters=state --cov-type=cluster
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name |
+| `--cov-type` | | String | `hc1` | `ols`, `hc0`, `hc1`, `hc2`, `hc3`, `cluster` |
+| `--weights` | | String | | Weight variable column name (for WLS) |
+| `--clusters` | | String | | Cluster variable column name |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Coefficient table (beta, SE, t-stat, p-value, CI) + fit statistics (R², Adj R², F-stat, AIC, BIC).
+
+## estimate iv
+
+Instrumental variables (2SLS) regression. Endogenous regressors and instruments are comma-separated column names from the same data file.
+
+```bash
+friedman estimate iv data.csv --dep=wage --endogenous=educ --instruments=father_educ,mother_educ
+friedman estimate iv data.csv --dep=log_wage --endogenous=educ,exper --instruments=z1,z2,z3 --cov-type=hc1
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name |
+| `--endogenous` | | String | (required) | Comma-separated endogenous regressor column names |
+| `--instruments` | | String | (required) | Comma-separated instrument column names |
+| `--cov-type` | | String | `hc1` | `ols`, `hc0`, `hc1`, `hc2`, `hc3` |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Coefficient table + IV diagnostics (first-stage F-statistic, Sargan overidentification test).
+
+## estimate logit
+
+Logit (logistic regression) for binary choice models.
+
+```bash
+friedman estimate logit data.csv --dep=employed --cov-type=hc1
+friedman estimate logit data.csv --dep=default --clusters=state --maxiter=200
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name (binary 0/1) |
+| `--cov-type` | | String | `hc1` | `ols`, `hc0`, `hc1`, `hc2`, `hc3`, `cluster` |
+| `--clusters` | | String | | Cluster variable column name |
+| `--maxiter` | | Int | 100 | Maximum IRLS iterations |
+| `--tol` | | Float64 | 1e-8 | Convergence tolerance |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Coefficient table + fit statistics (pseudo R², log-likelihood, AIC, BIC, convergence).
+
+## estimate probit
+
+Probit regression for binary choice models.
+
+```bash
+friedman estimate probit data.csv --dep=employed --cov-type=hc1
+friedman estimate probit data.csv --dep=default --clusters=state
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name (binary 0/1) |
+| `--cov-type` | | String | `hc1` | `ols`, `hc0`, `hc1`, `hc2`, `hc3`, `cluster` |
+| `--clusters` | | String | | Cluster variable column name |
+| `--maxiter` | | Int | 100 | Maximum IRLS iterations |
+| `--tol` | | Float64 | 1e-8 | Convergence tolerance |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Coefficient table + fit statistics (pseudo R², log-likelihood, AIC, BIC, convergence).

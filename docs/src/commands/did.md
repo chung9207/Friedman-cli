@@ -42,6 +42,7 @@ friedman did estimate panel.csv --outcome=y --treatment=treat --method=cs \
 | `--control-group` | | String | `never_treated` | `never_treated` or `not_yet_treated` |
 | `--cluster` | | String | `unit` | `unit`, `time`, or `twoway` |
 | `--conf-level` | | Float64 | 0.95 | Confidence level |
+| `--base-period` | | String | `varying` | `varying` or `universal` (CS method only) |
 | `--n-boot` | | Int | 200 | Bootstrap replications (dCdH only) |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
@@ -90,15 +91,45 @@ friedman did event-study panel.csv --outcome=y --treatment=treat --lags=6 --clus
 
 ## did lp-did
 
-LP-DiD with clean controls (Dube, Girardi, Jorda & Taylor 2023). Uses not-yet-treated units as the control group to avoid forbidden comparisons.
+LP-DiD estimator (Dube, Girardi, Jorda & Taylor 2025). Supports clean comparison sets (CCS), propensity score reweighting (PMD/IPW), non-absorbing treatments, and multiple control group strategies.
 
 ```bash
-friedman did lp-did panel.csv --outcome=y --treatment=treat --leads=3 --horizon=5
+friedman did lp-did panel.csv --outcome=y --treatment=treat --horizon=5
+friedman did lp-did panel.csv --outcome=y --treatment=treat --horizon=5 --reweight --pmd=ipw
+friedman did lp-did panel.csv --outcome=y --treatment=treat --horizon=5 --notyet --only-pooled
+friedman did lp-did panel.csv --outcome=y --treatment=treat --horizon=5 --pre-window=3 --post-window=5
 ```
 
-Options are identical to `did event-study`.
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--outcome` | | String | (required) | Outcome variable column name |
+| `--treatment` | | String | (required) | Treatment indicator column name |
+| `--id-col` | | String | (1st col) | Panel unit ID column |
+| `--time-col` | | String | (2nd col) | Time column |
+| `--horizon` | | Int | 5 | Post-treatment horizon |
+| `--pre-window` | | Int | 3 | Pre-treatment window |
+| `--post-window` | | Int | (horizon) | Post-treatment window |
+| `--ylags` | | Int | 0 | Outcome lags as controls |
+| `--dylags` | | Int | 0 | Differenced outcome lags as controls |
+| `--covariates` | | String | | Comma-separated covariate column names |
+| `--cluster` | | String | `unit` | `unit`, `time`, or `twoway` |
+| `--pmd` | | String | | PMD reweighting method (e.g., `ipw`) |
+| `--reweight` | | Flag | | Enable propensity score reweighting |
+| `--nocomp` | | Flag | | No composition correction |
+| `--nonabsorbing` | | String | | Non-absorbing treatment column |
+| `--notyet` | | Flag | | Use not-yet-treated as controls |
+| `--nevertreated` | | Flag | | Use never-treated as controls |
+| `--firsttreat` | | Flag | | Use first-treatment timing |
+| `--oneoff` | | Flag | | One-off treatment |
+| `--only-pooled` | | Flag | | Output pooled pre/post effects only |
+| `--only-event` | | Flag | | Output event-time coefficients only |
+| `--conf-level` | | Float64 | 0.95 | Confidence level |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
 
-**Output:** Coefficient table with clean-controls indicator + panel summary.
+**Output:** Event-time coefficient table + optional pooled pre/post effects.
 
 ## did test bacon
 

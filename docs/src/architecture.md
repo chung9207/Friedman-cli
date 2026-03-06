@@ -97,18 +97,18 @@ src/
   config.jl               # TOML loader for priors, identification, GMM, non-Gaussian
   commands/
     shared.jl             # ID_METHOD_MAP, shared estimation/output helpers
-    estimate.jl           # 20 estimation subcommands
-    test.jl               # 22+ test subcommands (+ nested var 2, pvar 4)
+    estimate.jl           # 24 estimation subcommands
+    test.jl               # 29+ test subcommands (+ nested var 2, pvar 4)
     irf.jl                # 7 IRF subcommands
     fevd.jl               # 7 FEVD subcommands
     hd.jl                 # 5 HD subcommands
     forecast.jl           # 14 forecast subcommands
-    predict.jl            # 13 predict subcommands
-    residuals.jl          # 13 residuals subcommands
+    predict.jl            # 16 predict subcommands
+    residuals.jl          # 16 residuals subcommands
     filter.jl             # 5 filter subcommands
     data.jl               # 9 data subcommands
     nowcast.jl            # 5 nowcast subcommands
-    dsge.jl               # 8 DSGE subcommands
+    dsge.jl               # 7 DSGE subcommands + bayes node (7 sub-leaves)
     did.jl                # 7 DID subcommands (3 estimation + 4 test)
 ```
 
@@ -139,8 +139,8 @@ src/
 | | Version |
 |---|---------|
 | Julia | `>= 1.12` |
-| MacroEconometricModels | `0.3.3` |
+| MacroEconometricModels | `0.3.4` |
 
 ## Totals
 
-13 top-level commands, ~141 subcommands across 19 source files.
+13 top-level commands, ~164 subcommands across 19 source files.

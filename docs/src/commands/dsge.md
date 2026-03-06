@@ -1,6 +1,6 @@
 # dsge
 
-DSGE modeling from the terminal. 8 subcommands: `solve`, `irf`, `fevd`, `simulate`, `estimate`, `bayes`, `perfect-foresight`, `steady-state`.
+DSGE modeling from the terminal. 7 direct subcommands (`solve`, `irf`, `fevd`, `simulate`, `estimate`, `perfect-foresight`, `steady-state`) plus a `bayes` node with 7 sub-leaves for the full Bayesian DSGE workflow.
 
 Friedman supports DSGE models specified as TOML files or Julia scripts. See [Configuration](../configuration.md#dsge-model) for TOML format details.
 
@@ -220,34 +220,117 @@ friedman dsge steady-state rbc.toml --constraints=occbin.toml
 
 ## dsge bayes
 
-Bayesian DSGE estimation via Sequential Monte Carlo (SMC), SMC-squared, or Metropolis-Hastings. Requires data, parameter names, and a priors TOML file.
+Bayesian DSGE workflow. `bayes` is a **nested command group** with 7 sub-leaves: `estimate`, `irf`, `fevd`, `simulate`, `summary`, `compare`, `predictive`. All share common options for model specification, data, parameters, and priors.
 
-```bash
-friedman dsge bayes rbc.toml --data=macro.csv --params=alpha,beta --priors=priors.toml
-friedman dsge bayes rbc.toml --data=macro.csv --params=alpha,beta --priors=priors.toml --sampler=mh --n-draws=20000 --burnin=10000
-friedman dsge bayes rbc.toml --data=macro.csv --params=alpha,beta --priors=priors.toml --sampler=smc2 --n-particles=1000
-friedman dsge bayes rbc.toml --data=macro.csv --params=alpha,beta --priors=priors.toml --solver=perturbation --order=3
-```
+### Common Options (all dsge bayes sub-commands)
 
 | Option | Short | Type | Default | Description |
 |--------|-------|------|---------|-------------|
 | `--data` | `-d` | String | (required) | Path to CSV data file |
 | `--params` | | String | (required) | Comma-separated parameter names to estimate |
 | `--priors` | | String | (required) | Path to priors TOML file |
-| `--sampler` | | String | `smc` | `smc`, `smc2`, `mh` |
-| `--n-smc` | | Int | 5000 | SMC particles |
-| `--n-particles` | | Int | 500 | Particle filter particles (smc2 only) |
-| `--n-draws` | | Int | 10000 | Total posterior draws (mh only) |
-| `--burnin` | | Int | 5000 | Burn-in draws (mh only) |
-| `--ess-target` | | Float64 | 0.5 | ESS target for resampling |
-| `--observables` | | String | | Observable variable names (comma-separated) |
+| `--method` | | String | `smc` | `smc`, `rwmh`, `csmc`, `smc2`, `importance` |
+| `--n-draws` | | Int | 10000 | Posterior draws |
+| `--burnin` | | Int | 5000 | Burn-in draws |
+| `--n-particles` | | Int | 500 | Particle filter particles (smc2) |
 | `--solver` | | String | `gensys` | `gensys`, `klein`, `perturbation` |
-| `--order` | | Int | 1 | Perturbation order (1, 2, or 3) |
-| `--delayed-acceptance` | | Flag | | Use delayed acceptance for MH (Christen & Fox 2005) |
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 | `--output` | `-o` | String | | Export file path |
 
-**Output:** Posterior summary table (mean, std, 5th/50th/95th percentiles per parameter) + log marginal likelihood and acceptance rate.
+### dsge bayes estimate
+
+Bayesian DSGE posterior estimation.
+
+```bash
+friedman dsge bayes estimate rbc.toml --data=macro.csv --params=alpha,beta --priors=priors.toml
+friedman dsge bayes estimate rbc.toml --data=macro.csv --params=alpha,beta --priors=priors.toml --method=rwmh --n-draws=20000
+```
+
+**Output:** Posterior summary table (mean, median, std, CI per parameter) + log marginal likelihood.
+
+### dsge bayes irf
+
+Bayesian DSGE impulse responses with posterior uncertainty.
+
+```bash
+friedman dsge bayes irf rbc.toml --data=macro.csv --params=alpha,beta --priors=priors.toml --horizon=40 --n-draws=200
+```
+
+| Additional Option | Type | Default | Description |
+|-------------------|------|---------|-------------|
+| `--horizon` | Int | 40 | IRF horizon |
+| `--plot` | Flag | | Open interactive plot |
+| `--plot-save` | String | | Save plot to HTML |
+
+### dsge bayes fevd
+
+Bayesian DSGE forecast error variance decomposition.
+
+```bash
+friedman dsge bayes fevd rbc.toml --data=macro.csv --params=alpha,beta --priors=priors.toml --horizon=40
+```
+
+| Additional Option | Type | Default | Description |
+|-------------------|------|---------|-------------|
+| `--horizon` | Int | 40 | FEVD horizon |
+| `--plot` | Flag | | Open interactive plot |
+| `--plot-save` | String | | Save plot to HTML |
+
+### dsge bayes simulate
+
+Simulate from the posterior of a Bayesian DSGE.
+
+```bash
+friedman dsge bayes simulate rbc.toml --data=macro.csv --params=alpha,beta --priors=priors.toml --periods=200
+```
+
+| Additional Option | Type | Default | Description |
+|-------------------|------|---------|-------------|
+| `--periods` | Int | 100 | Simulation periods |
+| `--plot` | Flag | | Open interactive plot |
+| `--plot-save` | String | | Save plot to HTML |
+
+### dsge bayes summary
+
+Detailed posterior summary statistics.
+
+```bash
+friedman dsge bayes summary rbc.toml --data=macro.csv --params=alpha,beta --priors=priors.toml
+```
+
+**Output:** Posterior table (mean, median, std, 68%/90% CI).
+
+### dsge bayes compare
+
+Compare two Bayesian DSGE models via Bayes factors and marginal likelihoods.
+
+```bash
+friedman dsge bayes compare model1.toml --data=macro.csv --params=rho,sigma --priors=priors.toml \
+    --model2=model2.toml --params2=rho2,sigma2 --priors2=priors2.toml
+```
+
+| Additional Option | Type | Default | Description |
+|-------------------|------|---------|-------------|
+| `--model2` | String | (required) | Path to second model file |
+| `--params2` | String | (required) | Parameters for second model |
+| `--priors2` | String | (required) | Priors TOML for second model |
+
+**Output:** Bayes factor, marginal likelihoods for both models, posterior odds.
+
+### dsge bayes predictive
+
+Posterior predictive checks.
+
+```bash
+friedman dsge bayes predictive rbc.toml --data=macro.csv --params=alpha,beta --priors=priors.toml --n-sim=100
+```
+
+| Additional Option | Type | Default | Description |
+|-------------------|------|---------|-------------|
+| `--n-sim` | Int | 100 | Predictive simulations |
+| `--periods` | Int | 100 | Simulation periods |
+
+**Output:** Predictive summary (mean, std) vs observed data moments.
 
 ### Priors TOML Format
 
