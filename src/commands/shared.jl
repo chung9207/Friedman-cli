@@ -787,3 +787,72 @@ function _load_panel_for_did(data::String, id_col::String, time_col::String)
     println()
     return pd
 end
+
+# ── Regression Helpers ────────────────────────────────────
+
+const _REG_COMMON_OPTIONS = [
+    Option("dep"; type=String, default="", description="Dependent variable column name (default: first numeric column)"),
+    Option("cov-type"; type=String, default="hc1", description="ols|hc0|hc1|hc2|hc3|cluster"),
+    Option("clusters"; type=String, default="", description="Cluster variable column name"),
+    Option("output"; short="o", type=String, default="", description="Export results to file"),
+    Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+]
+
+"""
+    _load_reg_data(data, dep; weights_col="", clusters_col="") → (y, X, varnames)
+
+Load CSV, split into dependent variable y and regressor matrix X.
+If dep is empty, uses first numeric column as y.
+"""
+function _load_reg_data(data::String, dep::String; weights_col::String="", clusters_col::String="")
+    df = load_data(data)
+    numcols = variable_names(df)
+
+    dep_col = isempty(dep) ? numcols[1] : dep
+    !isempty(dep) && !(dep_col in numcols) && error("dependent variable '$dep_col' not found in numeric columns: $numcols")
+
+    exclude = Set([dep_col])
+    !isempty(weights_col) && push!(exclude, weights_col)
+    !isempty(clusters_col) && push!(exclude, clusters_col)
+    xcols = filter(c -> !(c in exclude), numcols)
+    isempty(xcols) && error("no regressor columns remaining after excluding dep='$dep_col'")
+
+    y = Vector{Float64}(df[!, dep_col])
+    X = Matrix{Float64}(df[!, xcols])
+    return y, X, xcols
+end
+
+"""Load cluster assignments from a CSV column, or return nothing."""
+function _load_clusters(data::String, clusters_col::String)
+    isempty(clusters_col) && return nothing
+    df = load_data(data)
+    clusters_col in names(df) || error("cluster column '$clusters_col' not found")
+    return Vector{Int}(df[!, clusters_col])
+end
+
+"""Load observation weights from a CSV column, or return nothing."""
+function _load_weights(data::String, weights_col::String)
+    isempty(weights_col) && return nothing
+    df = load_data(data)
+    weights_col in names(df) || error("weights column '$weights_col' not found")
+    return Vector{Float64}(df[!, weights_col])
+end
+
+"""Build coefficient table DataFrame from a regression model."""
+function _reg_coef_table(model, varnames::Vector{String})
+    b = coef(model)
+    se = stderror(model)
+    t = b ./ se
+    p = [2.0 * (1.0 - _normal_cdf(abs(ti))) for ti in t]
+    ci = confint(model)
+    labels = length(b) == length(varnames) + 1 ? ["_cons"; varnames] : varnames
+    DataFrame(
+        Variable = labels,
+        Coefficient = round.(b; digits=6),
+        Std_Error = round.(se; digits=6),
+        t_stat = round.(t; digits=4),
+        p_value = round.(p; digits=4),
+        CI_Lower = round.(ci[:, 1]; digits=6),
+        CI_Upper = round.(ci[:, 2]; digits=6),
+    )
+end
