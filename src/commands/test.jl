@@ -15,7 +15,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 # Test commands: adf, kpss, pp, za, np, johansen, normality, identifiability,
-#                heteroskedasticity, arch_lm, ljung_box, var (lagselect, stability)
+#                heteroskedasticity, arch_lm, ljung_box, var (lagselect, stability),
+#                granger, pvar (hansen_j, mmsc, lagselect, stability), lr, lm,
+#                andrews, bai-perron, panic, cips, moon-perron, factor-break
 
 function register_test_commands!()
     test_adf = LeafCommand("adf", _test_adf;
@@ -259,6 +261,84 @@ function register_test_commands!()
         ],
         description="Lagrange Multiplier test (restricted vs unrestricted model)")
 
+    # ── Structural Break Tests ──
+
+    test_andrews = LeafCommand("andrews", _test_andrews;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("response"; type=Int, default=1, description="Response variable column index (1-based)"),
+            Option("test"; type=String, default="supwald", description="supwald|suplr|suplm|expwald|explr|explm|meanwald|meanlr|meanlm"),
+            Option("trimming"; type=Float64, default=0.15, description="Trimming proportion"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
+        ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
+        description="Andrews (1993) structural break test")
+
+    test_bai_perron = LeafCommand("bai-perron", _test_bai_perron;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("response"; type=Int, default=1, description="Response variable column index (1-based)"),
+            Option("max-breaks"; type=Int, default=5, description="Maximum number of breaks"),
+            Option("trimming"; type=Float64, default=0.15, description="Trimming proportion"),
+            Option("criterion"; type=String, default="bic", description="bic|lwz"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
+        ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
+        description="Bai-Perron (1998) multiple structural break test")
+
+    # ── Panel Unit Root Tests ──
+
+    test_panic = LeafCommand("panic", _test_panic;
+        args=[Argument("data"; description="Path to CSV data file (rows=T, cols=N)")],
+        options=[
+            Option("factors"; type=String, default="auto", description="Number of factors (auto|N)"),
+            Option("method"; type=String, default="pooled", description="pooled|individual"),
+            Option("id-col"; type=String, default="", description="Panel unit ID column (optional)"),
+            Option("time-col"; type=String, default="", description="Time column (optional)"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="PANIC panel unit root test (Bai & Ng 2004)")
+
+    test_cips = LeafCommand("cips", _test_cips;
+        args=[Argument("data"; description="Path to CSV data file (rows=T, cols=N)")],
+        options=[
+            Option("lags"; type=String, default="auto", description="Lag order (auto|N)"),
+            Option("deterministic"; type=String, default="constant", description="constant|trend"),
+            Option("id-col"; type=String, default="", description="Panel unit ID column (optional)"),
+            Option("time-col"; type=String, default="", description="Time column (optional)"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="Pesaran CIPS panel unit root test (2007)")
+
+    test_moon_perron = LeafCommand("moon-perron", _test_moon_perron;
+        args=[Argument("data"; description="Path to CSV data file (rows=T, cols=N)")],
+        options=[
+            Option("factors"; type=String, default="auto", description="Number of factors (auto|N)"),
+            Option("id-col"; type=String, default="", description="Panel unit ID column (optional)"),
+            Option("time-col"; type=String, default="", description="Time column (optional)"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="Moon-Perron panel unit root test (2004)")
+
+    test_factor_break = LeafCommand("factor-break", _test_factor_break;
+        args=[Argument("data"; description="Path to CSV data file (rows=T, cols=N)")],
+        options=[
+            Option("factors"; type=Int, default=2, description="Number of factors"),
+            Option("method"; type=String, default="breitung_eickmeier", description="breitung_eickmeier|chen_dolado_gonzalo|han_inoue"),
+            Option("id-col"; type=String, default="", description="Panel unit ID column (optional)"),
+            Option("time-col"; type=String, default="", description="Time column (optional)"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+        ],
+        description="Factor break test (Breitung-Eickmeier / Chen-Dolado-Gonzalo / Han-Inoue)")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "adf"                => test_adf,
         "kpss"               => test_kpss,
@@ -276,6 +356,12 @@ function register_test_commands!()
         "pvar"               => pvar_node,
         "lr"                 => test_lr,
         "lm"                 => test_lm,
+        "andrews"            => test_andrews,
+        "bai-perron"         => test_bai_perron,
+        "panic"              => test_panic,
+        "cips"               => test_cips,
+        "moon-perron"        => test_moon_perron,
+        "factor-break"       => test_factor_break,
     )
     return NodeCommand("test", subcmds, "Statistical tests (unit root, cointegration, diagnostics)")
 end
@@ -1008,4 +1094,183 @@ function _test_lm(; data1::String, data2::String, lags1=nothing, lags2=nothing,
     interpret_test_result(result.pvalue,
         "Reject H0: restrictions are not supported at 5%",
         "Cannot reject H0: restrictions appear valid")
+end
+
+# ── Andrews Structural Break Test ─────────────────────
+
+function _test_andrews(; data::String, response::Int=1,
+                        test::String="supwald", trimming::Float64=0.15,
+                        format::String="table", output::String="",
+                        plot::Bool=false, plot_save::String="")
+    Y, varnames = load_multivariate_data(data)
+    n = size(Y, 1)
+
+    y = Y[:, response]
+    X = hcat(ones(n), Y[:, setdiff(1:size(Y, 2), response)])
+
+    println("Andrews Structural Break Test: $(varnames[response]), test=$test, trimming=$trimming")
+    println()
+
+    result = andrews_test(y, X; test=Symbol(test), trimming=trimming)
+
+    _maybe_plot(result; plot=plot, plot_save=plot_save)
+
+    pairs = Pair{String,Any}[
+        "Test type" => result.test_type,
+        "Statistic" => round(result.statistic; digits=4),
+        "p-value" => round(result.pvalue; digits=4),
+        "Break date (index)" => result.break_index,
+        "Break fraction" => round(result.break_fraction; digits=4),
+        "Observations" => result.nobs,
+    ]
+    output_kv(pairs; format=format, output=output, title="Andrews Break Test")
+
+    interpret_test_result(result.pvalue,
+        "Reject H0: structural break detected at index $(result.break_index)",
+        "Cannot reject H0: no structural break detected")
+end
+
+# ── Bai-Perron Multiple Break Test ────────────────────
+
+function _test_bai_perron(; data::String, response::Int=1,
+                           max_breaks::Int=5, trimming::Float64=0.15,
+                           criterion::String="bic",
+                           format::String="table", output::String="",
+                           plot::Bool=false, plot_save::String="")
+    Y, varnames = load_multivariate_data(data)
+    n = size(Y, 1)
+
+    y = Y[:, response]
+    X = hcat(ones(n), Y[:, setdiff(1:size(Y, 2), response)])
+
+    println("Bai-Perron Multiple Break Test: $(varnames[response]), max_breaks=$max_breaks, criterion=$criterion")
+    println()
+
+    result = bai_perron_test(y, X; max_breaks=max_breaks, trimming=trimming,
+                             criterion=Symbol(criterion))
+
+    _maybe_plot(result; plot=plot, plot_save=plot_save)
+
+    pairs = Pair{String,Any}[
+        "Number of breaks" => result.n_breaks,
+        "Break dates" => join(result.break_dates, ", "),
+        "Trimming" => result.trimming,
+        "Observations" => result.nobs,
+    ]
+    output_kv(pairs; format=format, output=output, title="Bai-Perron Test")
+
+    if !isempty(result.regime_coefs)
+        for (i, coefs) in enumerate(result.regime_coefs)
+            println("  Regime $i: $(join(round.(coefs; digits=4), ", "))")
+        end
+    end
+end
+
+# ── Panel Unit Root Tests ─────────────────────────────
+
+function _test_panic(; data::String, factors::String="auto",
+                      method::String="pooled", id_col::String="", time_col::String="",
+                      format::String="table", output::String="")
+    dat, is_panel = _load_panel_or_matrix(data; id_col=id_col, time_col=time_col)
+
+    r_arg = factors == "auto" ? :auto : parse(Int, factors)
+
+    println("PANIC Panel Unit Root Test: factors=$(factors), method=$method")
+    println()
+
+    result = panic_test(dat; r=r_arg, method=Symbol(method))
+
+    pairs = Pair{String,Any}[
+        "Pooled statistic" => round(result.pooled_statistic; digits=4),
+        "Pooled p-value" => round(result.pooled_pvalue; digits=4),
+        "Number of factors" => result.n_factors,
+        "Units" => result.n_units,
+        "Observations" => result.nobs,
+    ]
+    output_kv(pairs; format=format, output=output, title="PANIC Test (Bai-Ng)")
+
+    interpret_test_result(result.pooled_pvalue,
+        "Reject H0: panel has unit roots (after removing common factors)",
+        "Cannot reject H0: panel is stationary (after removing common factors)")
+end
+
+function _test_cips(; data::String, lags::String="auto",
+                     deterministic::String="constant",
+                     id_col::String="", time_col::String="",
+                     format::String="table", output::String="")
+    dat, is_panel = _load_panel_or_matrix(data; id_col=id_col, time_col=time_col)
+
+    lags_arg = lags == "auto" ? :auto : parse(Int, lags)
+
+    println("Pesaran CIPS Panel Unit Root Test: lags=$lags, deterministic=$deterministic")
+    println()
+
+    result = pesaran_cips_test(dat; lags=lags_arg, deterministic=Symbol(deterministic))
+
+    pairs = Pair{String,Any}[
+        "CIPS statistic" => round(result.cips; digits=4),
+        "p-value" => round(result.pvalue; digits=4),
+        "Lags" => result.lags,
+        "Deterministic" => result.deterministic,
+        "Units" => result.n_units,
+        "Observations" => result.nobs,
+    ]
+    output_kv(pairs; format=format, output=output, title="Pesaran CIPS Test")
+
+    interpret_test_result(result.pvalue,
+        "Reject H0: panel has unit roots",
+        "Cannot reject H0: panel is stationary")
+end
+
+function _test_moon_perron(; data::String, factors::String="auto",
+                            id_col::String="", time_col::String="",
+                            format::String="table", output::String="")
+    dat, is_panel = _load_panel_or_matrix(data; id_col=id_col, time_col=time_col)
+
+    r_arg = factors == "auto" ? :auto : parse(Int, factors)
+
+    println("Moon-Perron Panel Unit Root Test: factors=$factors")
+    println()
+
+    result = moon_perron_test(dat; r=r_arg)
+
+    pairs = Pair{String,Any}[
+        "t_a* statistic" => round(result.t_a_statistic; digits=4),
+        "t_b* statistic" => round(result.t_b_statistic; digits=4),
+        "p-value (t_a*)" => round(result.pvalue_a; digits=4),
+        "p-value (t_b*)" => round(result.pvalue_b; digits=4),
+        "Factors" => result.n_factors,
+        "Units" => result.n_units,
+    ]
+    output_kv(pairs; format=format, output=output, title="Moon-Perron Test")
+
+    interpret_test_result(min(result.pvalue_a, result.pvalue_b),
+        "Reject H0: panel has unit roots",
+        "Cannot reject H0: panel is stationary")
+end
+
+function _test_factor_break(; data::String, factors::Int=2,
+                              method::String="breitung_eickmeier",
+                              id_col::String="", time_col::String="",
+                              format::String="table", output::String="")
+    dat, is_panel = _load_panel_or_matrix(data; id_col=id_col, time_col=time_col)
+
+    println("Factor Break Test: factors=$factors, method=$method")
+    println()
+
+    result = factor_break_test(dat, factors; method=Symbol(method))
+
+    pairs = Pair{String,Any}[
+        "Statistic" => round(result.statistic; digits=4),
+        "p-value" => round(result.pvalue; digits=4),
+        "Break date (index)" => result.break_date,
+        "Method" => result.method,
+        "Factors" => result.r,
+        "Units" => result.n_units,
+    ]
+    output_kv(pairs; format=format, output=output, title="Factor Break Test")
+
+    interpret_test_result(result.pvalue,
+        "Reject H0: factor structure instability detected at index $(result.break_date)",
+        "Cannot reject H0: factor structure appears stable")
 end
