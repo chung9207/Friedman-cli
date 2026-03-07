@@ -223,7 +223,11 @@ end
 Launch the interactive REPL with a `friedman>` prompt.
 """
 function start_repl()
-    _init_completion_provider()
+    try
+        _init_completion_provider()
+    catch
+        # REPL stdlib not available (e.g. compiled sysimage); tab completion disabled
+    end
 
     app = build_app()
     s = SESSION
@@ -349,16 +353,19 @@ end
 # FriedmanCompletionProvider is defined at runtime when REPL is loaded
 # to avoid requiring REPL as a compile-time dependency
 function _init_completion_provider()
-    @eval begin
-        using REPL
-        using REPL.LineEdit
+    REPLmod = Base.require(Base.PkgId(Base.UUID("3fa0cd96-eef1-5676-8a61-b3b8758bbdc5"), "REPL"))
+    LineEditmod = getfield(REPLmod, :LineEdit)
+    CompletionProvider = getfield(LineEditmod, :CompletionProvider)
 
-        struct FriedmanCompletionProvider <: LineEdit.CompletionProvider
+    @eval begin
+        const _LineEdit = $LineEditmod
+
+        struct FriedmanCompletionProvider <: $CompletionProvider
             app::Entry
         end
 
-        function LineEdit.complete_line(c::FriedmanCompletionProvider, state)
-            partial = String(LineEdit.buffer(state))
+        function $_LineEdit.complete_line(c::FriedmanCompletionProvider, state)
+            partial = String($_LineEdit.buffer(state))
             completions = complete_command(c.app, partial)
             tokens = _split_repl_line(partial)
             last_token = isempty(tokens) ? "" : tokens[end]
