@@ -8,8 +8,6 @@
 
 # REPL / interactive session mode
 
-using REPL
-using REPL.LineEdit
 
 """
     Session
@@ -225,6 +223,8 @@ end
 Launch the interactive REPL with a `friedman>` prompt.
 """
 function start_repl()
+    _init_completion_provider()
+
     app = build_app()
     s = SESSION
     session_clear!(s)
@@ -346,16 +346,25 @@ function _complete_leaf_options(leaf::LeafCommand, prefix::String)
     return sort([o for o in all_opts if startswith(o, prefix)])
 end
 
-struct FriedmanCompletionProvider <: LineEdit.CompletionProvider
-    app::Entry
-end
+# FriedmanCompletionProvider is defined at runtime when REPL is loaded
+# to avoid requiring REPL as a compile-time dependency
+function _init_completion_provider()
+    @eval begin
+        using REPL
+        using REPL.LineEdit
 
-function LineEdit.complete_line(c::FriedmanCompletionProvider, state)
-    partial = String(LineEdit.buffer(state))
-    completions = complete_command(c.app, partial)
-    tokens = _split_repl_line(partial)
-    last_token = isempty(tokens) ? "" : tokens[end]
-    return completions, last_token, !isempty(completions)
+        struct FriedmanCompletionProvider <: LineEdit.CompletionProvider
+            app::Entry
+        end
+
+        function LineEdit.complete_line(c::FriedmanCompletionProvider, state)
+            partial = String(LineEdit.buffer(state))
+            completions = complete_command(c.app, partial)
+            tokens = _split_repl_line(partial)
+            last_token = isempty(tokens) ? "" : tokens[end]
+            return completions, last_token, !isempty(completions)
+        end
+    end
 end
 
 const SESSION = Session()

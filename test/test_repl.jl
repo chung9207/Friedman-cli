@@ -4,8 +4,6 @@ using CSV, DataFrames
 # Set up minimal Friedman context for testing repl.jl
 module Friedman
     using CSV, DataFrames
-    using REPL
-    using REPL.LineEdit
     # Minimal stubs matching io.jl functions
     function load_data(path::String)
         isfile(path) || error("file not found: $path")
