@@ -103,11 +103,18 @@ end
 
 # ── VAR HD ───────────────────────────────────────────────
 
-function _hd_var(; data::String, lags=nothing, id::String="cholesky",
+function _hd_var(; data::String="", lags=nothing, id::String="cholesky",
                   config::String="",
                   output::String="", format::String="table",
-                  plot::Bool=false, plot_save::String="")
-    model, Y, varnames, p = _load_and_estimate_var(data, lags)
+                  plot::Bool=false, plot_save::String="",
+                  model=nothing)
+    if isnothing(model)
+        model, Y, varnames, p = _load_and_estimate_var(data, lags)
+    else
+        varnames = model.varnames
+        p = model.p
+        Y = model.Y
+    end
     n = size(Y, 2)
 
     println("Computing Historical Decomposition: VAR($p), id=$id")
@@ -195,12 +202,21 @@ end
 
 # ── BVAR HD ──────────────────────────────────────────────
 
-function _hd_bvar(; data::String, lags::Int=4, id::String="cholesky",
+function _hd_bvar(; data::String="", lags::Int=4, id::String="cholesky",
                    draws::Int=2000, sampler::String="direct",
                    config::String="",
                    output::String="", format::String="table",
-                   plot::Bool=false, plot_save::String="")
-    post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
+                   plot::Bool=false, plot_save::String="",
+                   model=nothing)
+    if isnothing(model)
+        post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
+    else
+        post = model
+        varnames = post.varnames
+        p = post.p
+        n = length(varnames)
+        Y = post.data
+    end
     method = get(ID_METHOD_MAP, id, :cholesky)
 
     println("Computing Bayesian Historical Decomposition: BVAR($p), id=$id")
@@ -226,28 +242,36 @@ end
 
 # ── LP HD ────────────────────────────────────────────────
 
-function _hd_lp(; data::String, lags::Int=4, var_lags=nothing,
+function _hd_lp(; data::String="", lags::Int=4, var_lags=nothing,
                  id::String="cholesky", vcov::String="newey_west", config::String="",
                  output::String="", format::String="table",
-                 plot::Bool=false, plot_save::String="")
-    Y, varnames = load_multivariate_data(data)
-    T_obs, n = size(Y)
-    vp = isnothing(var_lags) ? lags : var_lags
-    hd_horizon = T_obs - vp
-    # structural_lp needs enough observations: cap LP horizon to avoid assertion error
-    lp_horizon = min(hd_horizon, T_obs ÷ 2 - lags - 1)
-    lp_horizon < 1 && error("Not enough observations for LP historical decomposition (T=$T_obs, lags=$lags)")
+                 plot::Bool=false, plot_save::String="",
+                 model=nothing)
+    if isnothing(model)
+        Y, varnames = load_multivariate_data(data)
+        T_obs, n = size(Y)
+        vp = isnothing(var_lags) ? lags : var_lags
+        hd_horizon = T_obs - vp
+        # structural_lp needs enough observations: cap LP horizon to avoid assertion error
+        lp_horizon = min(hd_horizon, T_obs ÷ 2 - lags - 1)
+        lp_horizon < 1 && error("Not enough observations for LP historical decomposition (T=$T_obs, lags=$lags)")
 
-    method = get(ID_METHOD_MAP, id, :cholesky)
-    check_func, narrative_check = _build_check_func(config)
-    kwargs = Dict{Symbol,Any}(
-        :method => method, :lags => lags, :var_lags => vp,
-        :cov_type => Symbol(vcov),
-    )
-    if !isnothing(check_func);      kwargs[:check_func] = check_func; end
-    if !isnothing(narrative_check);  kwargs[:narrative_check] = narrative_check; end
+        method = get(ID_METHOD_MAP, id, :cholesky)
+        check_func, narrative_check = _build_check_func(config)
+        kwargs = Dict{Symbol,Any}(
+            :method => method, :lags => lags, :var_lags => vp,
+            :cov_type => Symbol(vcov),
+        )
+        if !isnothing(check_func);      kwargs[:check_func] = check_func; end
+        if !isnothing(narrative_check);  kwargs[:narrative_check] = narrative_check; end
 
-    slp = structural_lp(Y, lp_horizon; kwargs...)
+        slp = structural_lp(Y, lp_horizon; kwargs...)
+    else
+        slp = model
+        varnames = slp.varnames
+        vp = isnothing(var_lags) ? lags : var_lags
+        hd_horizon = slp.horizon
+    end
 
     println("Computing LP Historical Decomposition: id=$id")
     println()
@@ -271,13 +295,22 @@ end
 
 # ── VECM HD ─────────────────────────────────────────────
 
-function _hd_vecm(; data::String, lags::Int=2, rank::String="auto",
+function _hd_vecm(; data::String="", lags::Int=2, rank::String="auto",
                    deterministic::String="constant",
                    id::String="cholesky", config::String="",
                    output::String="", format::String="table",
-                   plot::Bool=false, plot_save::String="")
-    vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
-    var_model = to_var(vecm)
+                   plot::Bool=false, plot_save::String="",
+                   model=nothing)
+    if isnothing(model)
+        vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
+        var_model = to_var(vecm)
+    else
+        vecm = model
+        var_model = to_var(vecm)
+        varnames = vecm.varnames
+        p = vecm.p
+        Y = vecm.Y
+    end
     n = size(Y, 2)
     r = cointegrating_rank(vecm)
 
@@ -307,12 +340,18 @@ end
 
 # ── FAVAR HD ──────────────────────────────────────────────
 
-function _hd_favar(; data::String, factors=nothing, lags::Int=2,
+function _hd_favar(; data::String="", factors=nothing, lags::Int=2,
                     key_vars::String="", horizons::Int=20,
                     id::String="cholesky", config::String="",
                     output::String="", format::String="table",
-                    plot::Bool=false, plot_save::String="")
-    favar, Y, varnames = _load_and_estimate_favar(data, factors, lags, key_vars, "two_step", 5000)
+                    plot::Bool=false, plot_save::String="",
+                    model=nothing)
+    if isnothing(model)
+        favar, Y, varnames = _load_and_estimate_favar(data, factors, lags, key_vars, "two_step", 5000)
+    else
+        favar = model
+        varnames = favar.varnames
+    end
     kwargs = _build_identification_kwargs(id, config)
 
     println("FAVAR Historical Decomposition: horizon=$horizons, id=$id")

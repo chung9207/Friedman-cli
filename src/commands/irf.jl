@@ -167,15 +167,21 @@ end
 
 # ── VAR IRF ──────────────────────────────────────────────
 
-function _irf_var(; data::String, lags=nothing, shock::Int=1, horizons::Int=20,
+function _irf_var(; data::String="", lags=nothing, shock::Int=1, horizons::Int=20,
                    id::String="cholesky", ci::String="bootstrap", replications::Int=1000,
                    config::String="",
                    output::String="", format::String="table",
                    plot::Bool=false, plot_save::String="",
                    cumulative::Bool=false, identified_set::Bool=false,
-                   stationary_only::Bool=false)
-    model, Y, varnames, p = _load_and_estimate_var(data, lags)
-    n = size(Y, 2)
+                   stationary_only::Bool=false,
+                   model=nothing)
+    if isnothing(model)
+        model, Y, varnames, p = _load_and_estimate_var(data, lags)
+    else
+        varnames = model.varnames
+        p = model.p
+    end
+    n = length(varnames)
 
     println("Computing IRFs: VAR($p), shock=$shock, horizons=$horizons, id=$id, ci=$ci")
     println()
@@ -326,13 +332,21 @@ end
 
 # ── BVAR IRF ─────────────────────────────────────────────
 
-function _irf_bvar(; data::String, lags::Int=4, shock::Int=1, horizons::Int=20,
+function _irf_bvar(; data::String="", lags::Int=4, shock::Int=1, horizons::Int=20,
                     id::String="cholesky", draws::Int=2000, sampler::String="direct",
                     config::String="",
                     output::String="", format::String="table",
                     plot::Bool=false, plot_save::String="",
-                    cumulative::Bool=false)
-    post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
+                    cumulative::Bool=false,
+                    model=nothing)
+    if isnothing(model)
+        post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
+    else
+        post = model
+        varnames = post.varnames
+        p = post.p
+        n = length(varnames)
+    end
     method = get(ID_METHOD_MAP, id, :cholesky)
 
     println("Computing Bayesian IRFs: BVAR($p), shock=$shock, horizons=$horizons, id=$id")
@@ -394,14 +408,15 @@ end
 
 # ── LP IRF ───────────────────────────────────────────────
 
-function _irf_lp(; data::String, shock::Int=1, shocks::String="",
+function _irf_lp(; data::String="", shock::Int=1, shocks::String="",
                   horizons::Int=20, lags::Int=4, var_lags=nothing,
                   id::String="cholesky", ci::String="none",
                   replications::Int=200, conf_level::Float64=0.95,
                   vcov::String="newey_west", config::String="",
                   output::String="", format::String="table",
                   plot::Bool=false, plot_save::String="",
-                  cumulative::Bool=false)
+                  cumulative::Bool=false,
+                  model=nothing)
     # Multi-shock mode
     if !isempty(shocks)
         shock_indices = parse.(Int, split(shocks, ","))
@@ -409,10 +424,15 @@ function _irf_lp(; data::String, shock::Int=1, shocks::String="",
         shock_indices = [shock]
     end
 
-    slp, Y, varnames = _load_and_structural_lp(data, horizons, lags, var_lags,
-        id, vcov, config; ci_type=Symbol(ci), reps=replications, conf_level=conf_level)
-
-    n = size(Y, 2)
+    if isnothing(model)
+        slp, Y, varnames = _load_and_structural_lp(data, horizons, lags, var_lags,
+            id, vcov, config; ci_type=Symbol(ci), reps=replications, conf_level=conf_level)
+        n = size(Y, 2)
+    else
+        slp = model
+        varnames = slp.varnames
+        n = length(varnames)
+    end
     irf_result = slp.irf
 
     if cumulative
@@ -454,16 +474,24 @@ end
 
 # ── VECM IRF ────────────────────────────────────────────
 
-function _irf_vecm(; data::String, lags::Int=2, rank::String="auto",
+function _irf_vecm(; data::String="", lags::Int=2, rank::String="auto",
                     deterministic::String="constant",
                     shock::Int=1, horizons::Int=20,
                     id::String="cholesky", ci::String="bootstrap", replications::Int=1000,
                     config::String="",
                     output::String="", format::String="table",
-                    plot::Bool=false, plot_save::String="")
-    vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
-    var_model = to_var(vecm)
-    n = size(Y, 2)
+                    plot::Bool=false, plot_save::String="",
+                    model=nothing)
+    if isnothing(model)
+        vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
+        var_model = to_var(vecm)
+    else
+        vecm = model
+        var_model = to_var(vecm)
+        varnames = vecm.varnames
+        p = vecm.p
+    end
+    n = length(varnames)
     r = cointegrating_rank(vecm)
 
     println("Computing VECM IRFs: rank=$r, VAR($p), shock=$shock, horizons=$horizons, id=$id, ci=$ci")
@@ -502,17 +530,22 @@ end
 
 # ── Panel VAR IRF ──────────────────────────────────────────
 
-function _irf_pvar(; data::String, id_col::String="", time_col::String="",
+function _irf_pvar(; data::String="", id_col::String="", time_col::String="",
                     lags::Int=1, horizons::Int=10,
                     irf_type::String="oirf", boot_draws::Int=500,
                     confidence::Float64=0.95,
                     output::String="", format::String="table",
-                    plot::Bool=false, plot_save::String="")
-    isempty(id_col) && error("Panel VAR IRF requires --id-col")
-    isempty(time_col) && error("Panel VAR IRF requires --time-col")
+                    plot::Bool=false, plot_save::String="",
+                    model=nothing)
     validate_method(irf_type, ["oirf", "girf"], "IRF type")
 
-    model, panel, varnames = _load_and_estimate_pvar(data, id_col, time_col, lags)
+    if isnothing(model)
+        isempty(id_col) && error("Panel VAR IRF requires --id-col")
+        isempty(time_col) && error("Panel VAR IRF requires --time-col")
+        model, panel, varnames = _load_and_estimate_pvar(data, id_col, time_col, lags)
+    else
+        varnames = model.varnames
+    end
     n = length(varnames)
 
     println("Computing Panel VAR IRFs: type=$irf_type, horizons=$horizons, bootstrap=$boot_draws")
@@ -551,13 +584,19 @@ end
 
 # ── FAVAR IRF ──────────────────────────────────────────
 
-function _irf_favar(; data::String, factors=nothing, lags::Int=2,
+function _irf_favar(; data::String="", factors=nothing, lags::Int=2,
                      key_vars::String="", horizons::Int=20,
                      id::String="cholesky", config::String="",
                      panel_irf::Bool=false,
                      output::String="", format::String="table",
-                     plot::Bool=false, plot_save::String="")
-    favar, Y, varnames = _load_and_estimate_favar(data, factors, lags, key_vars, "two_step", 5000)
+                     plot::Bool=false, plot_save::String="",
+                     model=nothing)
+    if isnothing(model)
+        favar, Y, varnames = _load_and_estimate_favar(data, factors, lags, key_vars, "two_step", 5000)
+    else
+        favar = model
+        varnames = favar.varnames
+    end
     n = size(favar.Y, 2)
 
     id_kwargs = _build_identification_kwargs(id, config)
@@ -591,15 +630,19 @@ end
 
 # ── Structural DFM IRF ────────────────────────────────
 
-function _irf_sdfm(; data::String, factors=nothing, id::String="cholesky",
+function _irf_sdfm(; data::String="", factors=nothing, id::String="cholesky",
                     var_lags::Int=1, horizons::Int=40,
                     config::String="",
                     output::String="", format::String="table",
-                    plot::Bool=false, plot_save::String="")
-    Y, varnames = load_multivariate_data(data)
-    q = factors === nothing ? ic_criteria_gdfm(Y, min(10, size(Y, 2) - 1)).q_opt : factors
-
-    sdfm = estimate_structural_dfm(Y, q; identification=Symbol(id), p=var_lags, H=horizons)
+                    plot::Bool=false, plot_save::String="",
+                    model=nothing)
+    if isnothing(model)
+        Y, varnames = load_multivariate_data(data)
+        q = factors === nothing ? ic_criteria_gdfm(Y, min(10, size(Y, 2) - 1)).q_opt : factors
+        sdfm = estimate_structural_dfm(Y, q; identification=Symbol(id), p=var_lags, H=horizons)
+    else
+        sdfm = model
+    end
 
     println("Structural DFM IRF: $q factors, id=$id, horizon=$horizons")
     println()

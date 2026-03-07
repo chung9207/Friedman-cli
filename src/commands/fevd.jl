@@ -137,12 +137,18 @@ end
 
 # ── VAR FEVD ─────────────────────────────────────────────
 
-function _fevd_var(; data::String, lags=nothing, horizons::Int=20,
+function _fevd_var(; data::String="", lags=nothing, horizons::Int=20,
                     id::String="cholesky", config::String="",
                     output::String="", format::String="table",
-                    plot::Bool=false, plot_save::String="")
-    model, Y, varnames, p = _load_and_estimate_var(data, lags)
-    n = size(Y, 2)
+                    plot::Bool=false, plot_save::String="",
+                    model=nothing)
+    if isnothing(model)
+        model, Y, varnames, p = _load_and_estimate_var(data, lags)
+    else
+        varnames = model.varnames
+        p = model.p
+    end
+    n = length(varnames)
 
     println("Computing FEVD: VAR($p), horizons=$horizons, id=$id")
     println()
@@ -234,12 +240,20 @@ end
 
 # ── BVAR FEVD ────────────────────────────────────────────
 
-function _fevd_bvar(; data::String, lags::Int=4, horizons::Int=20,
+function _fevd_bvar(; data::String="", lags::Int=4, horizons::Int=20,
                      id::String="cholesky", draws::Int=2000, sampler::String="direct",
                      config::String="",
                      output::String="", format::String="table",
-                     plot::Bool=false, plot_save::String="")
-    post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
+                     plot::Bool=false, plot_save::String="",
+                     model=nothing)
+    if isnothing(model)
+        post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
+    else
+        post = model
+        varnames = post.varnames
+        p = post.p
+        n = length(varnames)
+    end
 
     println("Computing Bayesian FEVD: BVAR($p), horizons=$horizons, id=$id")
     println("  Sampler: $sampler, Draws: $draws")
@@ -258,13 +272,20 @@ end
 
 # ── LP FEVD ──────────────────────────────────────────────
 
-function _fevd_lp(; data::String, horizons::Int=20, lags::Int=4, var_lags=nothing,
+function _fevd_lp(; data::String="", horizons::Int=20, lags::Int=4, var_lags=nothing,
                    id::String="cholesky", vcov::String="newey_west", config::String="",
                    output::String="", format::String="table",
-                   plot::Bool=false, plot_save::String="")
-    slp, Y, varnames = _load_and_structural_lp(data, horizons, lags, var_lags,
-        id, vcov, config)
-    n = size(Y, 2)
+                   plot::Bool=false, plot_save::String="",
+                   model=nothing)
+    if isnothing(model)
+        slp, Y, varnames = _load_and_structural_lp(data, horizons, lags, var_lags,
+            id, vcov, config)
+        n = size(Y, 2)
+    else
+        slp = model
+        varnames = slp.varnames
+        n = length(varnames)
+    end
 
     println("Computing LP FEVD: horizons=$horizons, id=$id")
     println()
@@ -279,14 +300,22 @@ end
 
 # ── VECM FEVD ───────────────────────────────────────────
 
-function _fevd_vecm(; data::String, lags::Int=2, rank::String="auto",
+function _fevd_vecm(; data::String="", lags::Int=2, rank::String="auto",
                      deterministic::String="constant", horizons::Int=20,
                      id::String="cholesky", config::String="",
                      output::String="", format::String="table",
-                     plot::Bool=false, plot_save::String="")
-    vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
-    var_model = to_var(vecm)
-    n = size(Y, 2)
+                     plot::Bool=false, plot_save::String="",
+                     model=nothing)
+    if isnothing(model)
+        vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
+        var_model = to_var(vecm)
+    else
+        vecm = model
+        var_model = to_var(vecm)
+        varnames = vecm.varnames
+        p = vecm.p
+    end
+    n = length(varnames)
     r = cointegrating_rank(vecm)
 
     println("Computing VECM FEVD: rank=$r, VAR($p), horizons=$horizons, id=$id")
@@ -305,14 +334,18 @@ end
 
 # ── Panel VAR FEVD ─────────────────────────────────────────
 
-function _fevd_pvar(; data::String, id_col::String="", time_col::String="",
+function _fevd_pvar(; data::String="", id_col::String="", time_col::String="",
                      lags::Int=1, horizons::Int=10,
                      output::String="", format::String="table",
-                     plot::Bool=false, plot_save::String="")
-    isempty(id_col) && error("Panel VAR FEVD requires --id-col")
-    isempty(time_col) && error("Panel VAR FEVD requires --time-col")
-
-    model, panel, varnames = _load_and_estimate_pvar(data, id_col, time_col, lags)
+                     plot::Bool=false, plot_save::String="",
+                     model=nothing)
+    if isnothing(model)
+        isempty(id_col) && error("Panel VAR FEVD requires --id-col")
+        isempty(time_col) && error("Panel VAR FEVD requires --time-col")
+        model, panel, varnames = _load_and_estimate_pvar(data, id_col, time_col, lags)
+    else
+        varnames = model.varnames
+    end
     n = length(varnames)
 
     println("Computing Panel VAR FEVD: horizons=$horizons")
@@ -329,12 +362,18 @@ end
 
 # ── FAVAR FEVD ─────────────────────────────────────────
 
-function _fevd_favar(; data::String, factors=nothing, lags::Int=2,
+function _fevd_favar(; data::String="", factors=nothing, lags::Int=2,
                       key_vars::String="", horizons::Int=20,
                       id::String="cholesky", config::String="",
                       output::String="", format::String="table",
-                      plot::Bool=false, plot_save::String="")
-    favar, Y, varnames = _load_and_estimate_favar(data, factors, lags, key_vars, "two_step", 5000)
+                      plot::Bool=false, plot_save::String="",
+                      model=nothing)
+    if isnothing(model)
+        favar, Y, varnames = _load_and_estimate_favar(data, factors, lags, key_vars, "two_step", 5000)
+    else
+        favar = model
+        varnames = favar.varnames
+    end
     id_kwargs = _build_identification_kwargs(id, config)
 
     println("FAVAR FEVD: horizon=$horizons, id=$id")
@@ -361,14 +400,18 @@ end
 
 # ── Structural DFM FEVD ──────────────────────────────
 
-function _fevd_sdfm(; data::String, factors=nothing, id::String="cholesky",
+function _fevd_sdfm(; data::String="", factors=nothing, id::String="cholesky",
                      var_lags::Int=1, horizons::Int=20,
                      output::String="", format::String="table",
-                     plot::Bool=false, plot_save::String="")
-    Y, varnames = load_multivariate_data(data)
-    q = factors === nothing ? ic_criteria_gdfm(Y, min(10, size(Y, 2) - 1)).q_opt : factors
-
-    sdfm = estimate_structural_dfm(Y, q; identification=Symbol(id), p=var_lags, H=horizons)
+                     plot::Bool=false, plot_save::String="",
+                     model=nothing)
+    if isnothing(model)
+        Y, varnames = load_multivariate_data(data)
+        q = factors === nothing ? ic_criteria_gdfm(Y, min(10, size(Y, 2) - 1)).q_opt : factors
+        sdfm = estimate_structural_dfm(Y, q; identification=Symbol(id), p=var_lags, H=horizons)
+    else
+        sdfm = model
+    end
 
     println("SDFM FEVD: $q factors, horizon=$horizons")
     println()
