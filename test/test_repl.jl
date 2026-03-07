@@ -49,7 +49,13 @@ module Friedman
     struct NodeCommand; end
     struct Entry; name::String; root::Any; version::VersionNumber; end
     const FRIEDMAN_VERSION = v"0.3.4"
-    function dispatch(app, args) end
+    function dispatch(app, args)
+        # Return a mock result for estimate commands
+        if !isempty(args) && args[1] == "estimate" && length(args) >= 2
+            return "mock_$(args[2])_model"
+        end
+        return nothing
+    end
     function build_app() Entry("friedman", nothing, v"0.3.4") end
 
     include(joinpath(@__DIR__, "..", "src", "repl.jl"))
@@ -332,5 +338,20 @@ end
         @test hasmethod(Friedman.repl_dispatch, Tuple{Friedman.Session, Friedman.Entry, Vector{String}})
         @test hasmethod(Friedman.start_repl, Tuple{})
         @test hasmethod(Friedman._split_repl_line, Tuple{String})
+    end
+
+    @testset "REPL result capture" begin
+        s = Friedman.Session()
+        s.data_path = "/tmp/test.csv"  # pretend data is loaded
+        app = Friedman.build_app()
+
+        # Simulate estimate var dispatch
+        Friedman.repl_dispatch(s, app, ["estimate", "var", "data.csv"])
+        @test Friedman.session_get_result(s, :var) == "mock_var_model"
+        @test s.last_model == :var
+
+        # Non-estimate command should not cache
+        Friedman.repl_dispatch(s, app, ["irf", "var", "data.csv"])
+        @test s.last_model == :var  # unchanged
     end
 end

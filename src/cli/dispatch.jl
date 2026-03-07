@@ -51,7 +51,7 @@ function dispatch(entry::Entry, args::Vector{String}=ARGS)
         return
     end
 
-    dispatch_node(entry.root, args; prog=entry.name)
+    return dispatch_node(entry.root, args; prog=entry.name)
 end
 
 """
@@ -73,11 +73,10 @@ function dispatch_node(node::NodeCommand, args::Vector{String}; prog::String=nod
         subcmd = node.subcmds[subcmd_name]
         subprog = prog * " " * subcmd_name
         if subcmd isa NodeCommand
-            dispatch_node(subcmd, rest; prog=subprog)
+            return dispatch_node(subcmd, rest; prog=subprog)
         else
-            dispatch_leaf(subcmd, rest; prog=subprog)
+            return dispatch_leaf(subcmd, rest; prog=subprog)
         end
-        return
     end
 
     # First arg isn't a subcommand — show help if requested, otherwise error
@@ -109,7 +108,7 @@ function dispatch_leaf(leaf::LeafCommand, args::Vector{String}; prog::String=lea
     try
         parsed = tokenize(args)
         bound = bind_args(parsed, leaf)
-        leaf.handler(; bound...)
+        return leaf.handler(; bound...)
     catch e
         if e isa ParseError
             throw(ParseError("$prog: $(e.message)"))

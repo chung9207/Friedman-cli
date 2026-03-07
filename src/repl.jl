@@ -189,8 +189,16 @@ function repl_dispatch(s::Session, app::Entry, args::Vector{String})
     # Inject session data if needed
     args = inject_session_data(s, args)
 
-    # Dispatch through existing engine
-    dispatch(app, args)
+    # Dispatch and capture result
+    result = dispatch(app, args)
+
+    # Cache estimation results
+    if is_estimate_command(args) && !isnothing(result)
+        model_type = detect_model_type(args)
+        if model_type != :none
+            session_store_result!(s, model_type, result)
+        end
+    end
 end
 
 """
