@@ -199,9 +199,15 @@ end
 
 # ── VAR Residuals ───────────────────────────────────────
 
-function _residuals_var(; data::String, lags=nothing,
-                          output::String="", format::String="table")
-    model, Y, varnames, p = _load_and_estimate_var(data, lags)
+function _residuals_var(; data::String="", lags=nothing,
+                          output::String="", format::String="table",
+                          model=nothing)
+    if isnothing(model)
+        model, Y, varnames, p = _load_and_estimate_var(data, lags)
+    else
+        varnames = model.varnames
+        p = model.p
+    end
     n = size(Y, 2)
 
     println("Computing VAR($p) residuals: $(length(varnames)) variables")
@@ -222,10 +228,18 @@ end
 
 # ── BVAR Residuals ──────────────────────────────────────
 
-function _residuals_bvar(; data::String, lags::Int=4, draws::Int=2000,
+function _residuals_bvar(; data::String="", lags::Int=4, draws::Int=2000,
                            sampler::String="direct", config::String="",
-                           output::String="", format::String="table")
-    post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
+                           output::String="", format::String="table",
+                           model=nothing)
+    if isnothing(model)
+        post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
+    else
+        post = model
+        varnames = post.varnames
+        p = post.p
+        Y = post.Y
+    end
 
     println("Computing BVAR($p) residuals (posterior mean)")
     println("  Sampler: $sampler, Draws: $draws")
@@ -247,26 +261,29 @@ end
 
 # ── ARIMA Residuals ─────────────────────────────────────
 
-function _residuals_arima(; data::String, column::Int=1, p=nothing, d::Int=0, q::Int=0,
+function _residuals_arima(; data::String="", column::Int=1, p=nothing, d::Int=0, q::Int=0,
                             method::String="css_mle", auto::Bool=false,
-                            output::String="", format::String="table")
-    y, vname = load_univariate_series(data, column)
-    method_sym = Symbol(method)
-    safe_method = method_sym == :css_mle ? :mle : method_sym
+                            output::String="", format::String="table",
+                            model=nothing)
+    if isnothing(model)
+        y, vname = load_univariate_series(data, column)
+        method_sym = Symbol(method)
+        safe_method = method_sym == :css_mle ? :mle : method_sym
 
-    model = if isnothing(p) || auto
-        println("Auto ARIMA residuals: variable=$vname, observations=$(length(y))")
-        println()
-        m = auto_arima(y; method=safe_method)
-        label = _model_label(ar_order(m), diff_order(m), ma_order(m))
-        printstyled("Selected model: $label\n"; bold=true)
-        println()
-        m
-    else
-        label = _model_label(p, d, q)
-        println("$label residuals: variable=$vname")
-        println()
-        _estimate_arima_model(y, p, d, q; method=method_sym)
+        model = if isnothing(p) || auto
+            println("Auto ARIMA residuals: variable=$vname, observations=$(length(y))")
+            println()
+            m = auto_arima(y; method=safe_method)
+            label = _model_label(ar_order(m), diff_order(m), ma_order(m))
+            printstyled("Selected model: $label\n"; bold=true)
+            println()
+            m
+        else
+            label = _model_label(p, d, q)
+            println("$label residuals: variable=$vname")
+            println()
+            _estimate_arima_model(y, p, d, q; method=method_sym)
+        end
     end
 
     resid = residuals(model)
@@ -287,10 +304,17 @@ end
 
 # ── VECM Residuals ─────────────────────────────────────
 
-function _residuals_vecm(; data::String, lags::Int=2, rank::String="auto",
+function _residuals_vecm(; data::String="", lags::Int=2, rank::String="auto",
                            deterministic::String="constant",
-                           output::String="", format::String="table")
-    vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
+                           output::String="", format::String="table",
+                           model=nothing)
+    if isnothing(model)
+        vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
+    else
+        vecm = model
+        varnames = vecm.varnames
+        p = vecm.p
+    end
     n = size(Y, 2)
     r = cointegrating_rank(vecm)
 
@@ -313,18 +337,24 @@ end
 
 # ── Static Factor Residuals ───────────────────────────
 
-function _residuals_static(; data::String, nfactors=nothing,
-                             output::String="", format::String="table")
-    X, varnames = load_multivariate_data(data)
+function _residuals_static(; data::String="", nfactors=nothing,
+                             output::String="", format::String="table",
+                             model=nothing)
+    if isnothing(model)
+        X, varnames = load_multivariate_data(data)
 
-    r = if isnothing(nfactors)
-        ic = ic_criteria(X, min(20, size(X, 2)))
-        ic.r_IC1
+        r = if isnothing(nfactors)
+            ic = ic_criteria(X, min(20, size(X, 2)))
+            ic.r_IC1
+        else
+            nfactors
+        end
+
+        fm = estimate_factors(X, r)
     else
-        nfactors
+        fm = model
+        varnames = fm.varnames
     end
-
-    fm = estimate_factors(X, r)
     resid = residuals(fm)
     T = size(resid, 1)
 
@@ -343,19 +373,25 @@ end
 
 # ── Dynamic Factor Residuals ──────────────────────────
 
-function _residuals_dynamic(; data::String, nfactors=nothing, factor_lags::Int=1,
+function _residuals_dynamic(; data::String="", nfactors=nothing, factor_lags::Int=1,
                               method::String="twostep",
-                              output::String="", format::String="table")
-    X, varnames = load_multivariate_data(data)
+                              output::String="", format::String="table",
+                              model=nothing)
+    if isnothing(model)
+        X, varnames = load_multivariate_data(data)
 
-    r = if isnothing(nfactors)
-        ic = ic_criteria(X, min(10, size(X, 2)))
-        ic.r_IC1
+        r = if isnothing(nfactors)
+            ic = ic_criteria(X, min(10, size(X, 2)))
+            ic.r_IC1
+        else
+            nfactors
+        end
+
+        fm = estimate_dynamic_factors(X, r, factor_lags; method=Symbol(method))
     else
-        nfactors
+        fm = model
+        varnames = fm.varnames
     end
-
-    fm = estimate_dynamic_factors(X, r, factor_lags; method=Symbol(method))
     resid = residuals(fm)
     T = size(resid, 1)
 
@@ -374,18 +410,24 @@ end
 
 # ── GDFM Residuals ────────────────────────────────────
 
-function _residuals_gdfm(; data::String, nfactors=nothing, dynamic_rank=nothing,
-                           output::String="", format::String="table")
-    X, varnames = load_multivariate_data(data)
+function _residuals_gdfm(; data::String="", nfactors=nothing, dynamic_rank=nothing,
+                           output::String="", format::String="table",
+                           model=nothing)
+    if isnothing(model)
+        X, varnames = load_multivariate_data(data)
 
-    q = if isnothing(dynamic_rank)
-        ic = ic_criteria_gdfm(X, min(5, size(X, 2)))
-        ic.q_ratio
+        q = if isnothing(dynamic_rank)
+            ic = ic_criteria_gdfm(X, min(5, size(X, 2)))
+            ic.q_ratio
+        else
+            dynamic_rank
+        end
+
+        gm = estimate_gdfm(X, q)
     else
-        dynamic_rank
+        gm = model
+        varnames = gm.varnames
     end
-
-    gm = estimate_gdfm(X, q)
     resid = residuals(gm)
     T = size(resid, 1)
 
@@ -404,10 +446,15 @@ end
 
 # ── ARCH Residuals ────────────────────────────────────
 
-function _residuals_arch(; data::String, column::Int=1, q::Int=1,
-                           output::String="", format::String="table")
-    y, vname = load_univariate_series(data, column)
-    model = estimate_arch(y, q)
+function _residuals_arch(; data::String="", column::Int=1, q::Int=1,
+                           output::String="", format::String="table",
+                           model=nothing)
+    if isnothing(model)
+        y, vname = load_univariate_series(data, column)
+        model = estimate_arch(y, q)
+    else
+        vname = "series"
+    end
     resid = residuals(model)
 
     println("ARCH($q) standardized residuals: variable=$vname")
@@ -420,10 +467,15 @@ end
 
 # ── GARCH Residuals ───────────────────────────────────
 
-function _residuals_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
-                            output::String="", format::String="table")
-    y, vname = load_univariate_series(data, column)
-    model = estimate_garch(y, p, q)
+function _residuals_garch(; data::String="", column::Int=1, p::Int=1, q::Int=1,
+                            output::String="", format::String="table",
+                            model=nothing)
+    if isnothing(model)
+        y, vname = load_univariate_series(data, column)
+        model = estimate_garch(y, p, q)
+    else
+        vname = "series"
+    end
     resid = residuals(model)
 
     println("GARCH($p,$q) standardized residuals: variable=$vname")
@@ -436,10 +488,15 @@ end
 
 # ── EGARCH Residuals ──────────────────────────────────
 
-function _residuals_egarch(; data::String, column::Int=1, p::Int=1, q::Int=1,
-                             output::String="", format::String="table")
-    y, vname = load_univariate_series(data, column)
-    model = estimate_egarch(y, p, q)
+function _residuals_egarch(; data::String="", column::Int=1, p::Int=1, q::Int=1,
+                             output::String="", format::String="table",
+                             model=nothing)
+    if isnothing(model)
+        y, vname = load_univariate_series(data, column)
+        model = estimate_egarch(y, p, q)
+    else
+        vname = "series"
+    end
     resid = residuals(model)
 
     println("EGARCH($p,$q) standardized residuals: variable=$vname")
@@ -452,10 +509,15 @@ end
 
 # ── GJR-GARCH Residuals ──────────────────────────────
 
-function _residuals_gjr_garch(; data::String, column::Int=1, p::Int=1, q::Int=1,
-                                output::String="", format::String="table")
-    y, vname = load_univariate_series(data, column)
-    model = estimate_gjr_garch(y, p, q)
+function _residuals_gjr_garch(; data::String="", column::Int=1, p::Int=1, q::Int=1,
+                                output::String="", format::String="table",
+                                model=nothing)
+    if isnothing(model)
+        y, vname = load_univariate_series(data, column)
+        model = estimate_gjr_garch(y, p, q)
+    else
+        vname = "series"
+    end
     resid = residuals(model)
 
     println("GJR-GARCH($p,$q) standardized residuals: variable=$vname")
@@ -468,10 +530,15 @@ end
 
 # ── SV Residuals ──────────────────────────────────────
 
-function _residuals_sv(; data::String, column::Int=1, draws::Int=5000,
-                         output::String="", format::String="table")
-    y, vname = load_univariate_series(data, column)
-    model = estimate_sv(y; n_samples=draws)
+function _residuals_sv(; data::String="", column::Int=1, draws::Int=5000,
+                         output::String="", format::String="table",
+                         model=nothing)
+    if isnothing(model)
+        y, vname = load_univariate_series(data, column)
+        model = estimate_sv(y; n_samples=draws)
+    else
+        vname = "series"
+    end
     resid = residuals(model)
 
     println("SV standardized residuals: variable=$vname, draws=$draws")
@@ -484,10 +551,16 @@ end
 
 # ── FAVAR Residuals ───────────────────────────────────────
 
-function _residuals_favar(; data::String, factors=nothing, lags::Int=2,
+function _residuals_favar(; data::String="", factors=nothing, lags::Int=2,
                            key_vars::String="",
-                           output::String="", format::String="table")
-    favar, Y, varnames = _load_and_estimate_favar(data, factors, lags, key_vars, "two_step", 5000)
+                           output::String="", format::String="table",
+                           model=nothing)
+    if isnothing(model)
+        favar, Y, varnames = _load_and_estimate_favar(data, factors, lags, key_vars, "two_step", 5000)
+    else
+        favar = model
+        varnames = favar.varnames
+    end
     var_model = to_var(favar)
 
     println("FAVAR Residuals")
@@ -508,18 +581,23 @@ end
 
 # ── Regression Residuals ──────────────────────────────────
 
-function _residuals_reg(; data::String, dep::String="", cov_type::String="hc1",
+function _residuals_reg(; data::String="", dep::String="", cov_type::String="hc1",
                          weights::String="", clusters::String="",
-                         output::String="", format::String="table")
-    y, X, xcols = _load_reg_data(data, dep; weights_col=weights, clusters_col=clusters)
-    w = _load_weights(data, weights)
-    cl = _load_clusters(data, clusters)
-    model = estimate_reg(y, X; cov_type=Symbol(cov_type), weights=w, varnames=xcols, clusters=cl)
-
-    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
-    wls_tag = isnothing(w) ? "OLS" : "WLS"
+                         output::String="", format::String="table",
+                         model=nothing)
+    if isnothing(model)
+        y, X, xcols = _load_reg_data(data, dep; weights_col=weights, clusters_col=clusters)
+        w = _load_weights(data, weights)
+        cl = _load_clusters(data, clusters)
+        model = estimate_reg(y, X; cov_type=Symbol(cov_type), weights=w, varnames=xcols, clusters=cl)
+        dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+        wls_tag = isnothing(w) ? "OLS" : "WLS"
+    else
+        xcols = model.varnames
+        dep_name = "y"
+        wls_tag = "OLS"
+    end
     println("$wls_tag Residuals: $dep_name ~ $(join(xcols, " + "))")
-    println("  Observations: $(length(y))")
     println()
 
     resid = residuals(model)
@@ -529,16 +607,20 @@ end
 
 # ── Logit Residuals ───────────────────────────────────────
 
-function _residuals_logit(; data::String, dep::String="", cov_type::String="hc1",
+function _residuals_logit(; data::String="", dep::String="", cov_type::String="hc1",
                            clusters::String="",
-                           output::String="", format::String="table")
-    y, X, xcols = _load_reg_data(data, dep; clusters_col=clusters)
-    cl = _load_clusters(data, clusters)
-    model = estimate_logit(y, X; cov_type=Symbol(cov_type), varnames=xcols, clusters=cl)
-
-    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+                           output::String="", format::String="table",
+                           model=nothing)
+    if isnothing(model)
+        y, X, xcols = _load_reg_data(data, dep; clusters_col=clusters)
+        cl = _load_clusters(data, clusters)
+        model = estimate_logit(y, X; cov_type=Symbol(cov_type), varnames=xcols, clusters=cl)
+        dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+    else
+        xcols = model.varnames
+        dep_name = "y"
+    end
     println("Logit Residuals: $dep_name ~ $(join(xcols, " + "))")
-    println("  Observations: $(length(y))")
     println()
 
     resid = residuals(model)
@@ -548,16 +630,20 @@ end
 
 # ── Probit Residuals ──────────────────────────────────────
 
-function _residuals_probit(; data::String, dep::String="", cov_type::String="hc1",
+function _residuals_probit(; data::String="", dep::String="", cov_type::String="hc1",
                             clusters::String="",
-                            output::String="", format::String="table")
-    y, X, xcols = _load_reg_data(data, dep; clusters_col=clusters)
-    cl = _load_clusters(data, clusters)
-    model = estimate_probit(y, X; cov_type=Symbol(cov_type), varnames=xcols, clusters=cl)
-
-    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+                            output::String="", format::String="table",
+                            model=nothing)
+    if isnothing(model)
+        y, X, xcols = _load_reg_data(data, dep; clusters_col=clusters)
+        cl = _load_clusters(data, clusters)
+        model = estimate_probit(y, X; cov_type=Symbol(cov_type), varnames=xcols, clusters=cl)
+        dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+    else
+        xcols = model.varnames
+        dep_name = "y"
+    end
     println("Probit Residuals: $dep_name ~ $(join(xcols, " + "))")
-    println("  Observations: $(length(y))")
     println()
 
     resid = residuals(model)
