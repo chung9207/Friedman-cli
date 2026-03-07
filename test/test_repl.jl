@@ -4,6 +4,8 @@ using CSV, DataFrames
 # Set up minimal Friedman context for testing repl.jl
 module Friedman
     using CSV, DataFrames
+    using REPL
+    using REPL.LineEdit
     # Minimal stubs matching io.jl functions
     function load_data(path::String)
         isfile(path) || error("file not found: $path")
@@ -39,15 +41,15 @@ module Friedman
         end
     end
 
-    # Minimal stubs for REPL loop compilation
+    # CLI type stubs matching real types from cli/types.jl
     struct ParseError <: Exception; message::String; end
     struct DispatchError <: Exception; message::String; end
-    struct Argument; end
-    struct Option; end
-    struct Flag; end
-    struct LeafCommand; end
-    struct NodeCommand; end
-    struct Entry; name::String; root::Any; version::VersionNumber; end
+    struct Argument; name::String; required::Bool; end
+    struct Option; name::String; short::String; type::Type; default::Any; description::String; end
+    struct Flag; name::String; short::String; description::String; end
+    struct LeafCommand; name::String; handler::Function; args::Vector{Argument}; options::Vector{Option}; flags::Vector{Flag}; description::String; end
+    struct NodeCommand; name::String; subcmds::Dict{String,Union{NodeCommand,LeafCommand}}; description::String; end
+    struct Entry; name::String; root::NodeCommand; version::VersionNumber; end
     const FRIEDMAN_VERSION = v"0.3.4"
     _last_injected_model = nothing
     function dispatch(app, args; extra_kwargs...)
@@ -61,7 +63,29 @@ module Friedman
         end
         return nothing
     end
-    function build_app() Entry("friedman", nothing, v"0.3.4") end
+    function build_app()
+        noop = (;kwargs...) -> nothing
+        var_leaf = LeafCommand("var", noop, Argument[],
+            [Option("lags", "p", Int, 4, "Lag order"), Option("format", "f", String, "table", "Output format")],
+            [Flag("plot", "", "Show plot")], "Estimate VAR")
+        bvar_leaf = LeafCommand("bvar", noop, Argument[], Option[], Flag[], "Estimate BVAR")
+        vecm_leaf = LeafCommand("vecm", noop, Argument[], Option[], Flag[], "Estimate VECM")
+
+        estimate_node = NodeCommand("estimate", Dict{String,Union{NodeCommand,LeafCommand}}(
+            "var" => var_leaf, "bvar" => bvar_leaf, "vecm" => vecm_leaf
+        ), "Estimation commands")
+
+        irf_var_leaf = LeafCommand("var", noop, Argument[], Option[], Flag[], "VAR IRF")
+        irf_node = NodeCommand("irf", Dict{String,Union{NodeCommand,LeafCommand}}(
+            "var" => irf_var_leaf
+        ), "IRF commands")
+
+        root = NodeCommand("friedman", Dict{String,Union{NodeCommand,LeafCommand}}(
+            "estimate" => estimate_node, "irf" => irf_node
+        ), "Main")
+
+        Entry("friedman", root, v"0.3.4")
+    end
 
     include(joinpath(@__DIR__, "..", "src", "repl.jl"))
 end
@@ -387,5 +411,38 @@ end
         Friedman._last_injected_model = nothing
         Friedman.repl_dispatch(s, app, ["irf", "var", "data.csv"])
         @test Friedman._last_injected_model == "mock_var_model"
+    end
+end
+
+@testset "Tab completion" begin
+    app = Friedman.build_app()
+
+    @testset "top-level completions" begin
+        completions = Friedman.complete_command(app, "est")
+        @test "estimate" in completions
+        @test !("irf" in completions)
+    end
+
+    @testset "subcommand completions" begin
+        completions = Friedman.complete_command(app, "estimate v")
+        @test "var" in completions
+        @test "vecm" in completions
+        @test !("bvar" in completions)
+    end
+
+    @testset "option completions" begin
+        completions = Friedman.complete_command(app, "estimate var --la")
+        @test "--lags" in completions
+    end
+
+    @testset "empty input returns all top-level" begin
+        completions = Friedman.complete_command(app, "")
+        @test "estimate" in completions
+        @test "irf" in completions
+    end
+
+    @testset "unknown command returns empty" begin
+        completions = Friedman.complete_command(app, "nonexistent sub")
+        @test isempty(completions)
     end
 end

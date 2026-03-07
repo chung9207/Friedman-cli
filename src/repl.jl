@@ -8,6 +8,9 @@
 
 # REPL / interactive session mode
 
+using REPL
+using REPL.LineEdit
+
 """
     Session
 
@@ -230,6 +233,10 @@ function start_repl()
     println("Type commands as you would on the command line. Type 'exit' to quit.")
     println()
 
+    _repl_readline_loop(app, s)
+end
+
+function _repl_readline_loop(app::Entry, s::Session)
     while true
         try
             printstyled("friedman> "; color=:blue, bold=true)
@@ -294,6 +301,61 @@ function _split_repl_line(line::String)
         end
     end
     return tokens
+end
+
+"""
+    complete_command(app, partial_line) → Vector{String}
+
+Return completion candidates for the current partial input line.
+"""
+function complete_command(app::Entry, partial::String)
+    tokens = _split_repl_line(partial)
+    isempty(tokens) && return sort(collect(keys(app.root.subcmds)))
+
+    node = app.root
+    for (i, tok) in enumerate(tokens[1:end-1])
+        if node isa NodeCommand && haskey(node.subcmds, tok)
+            sub = node.subcmds[tok]
+            if sub isa NodeCommand
+                node = sub
+            else
+                return _complete_leaf_options(sub, tokens[end])
+            end
+        else
+            return String[]
+        end
+    end
+
+    prefix = tokens[end]
+
+    if node isa NodeCommand
+        if startswith(prefix, "-")
+            return String[]
+        end
+        return sort([k for k in keys(node.subcmds) if startswith(k, prefix)])
+    end
+
+    return String[]
+end
+
+function _complete_leaf_options(leaf::LeafCommand, prefix::String)
+    startswith(prefix, "-") || return String[]
+    options = ["--" * o.name for o in leaf.options]
+    flags = ["--" * f.name for f in leaf.flags]
+    all_opts = vcat(options, flags)
+    return sort([o for o in all_opts if startswith(o, prefix)])
+end
+
+struct FriedmanCompletionProvider <: LineEdit.CompletionProvider
+    app::Entry
+end
+
+function LineEdit.complete_line(c::FriedmanCompletionProvider, state)
+    partial = String(LineEdit.buffer(state))
+    completions = complete_command(c.app, partial)
+    tokens = _split_repl_line(partial)
+    last_token = isempty(tokens) ? "" : tokens[end]
+    return completions, last_token, !isempty(completions)
 end
 
 const SESSION = Session()
