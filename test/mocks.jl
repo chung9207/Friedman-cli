@@ -2644,4 +2644,18 @@ end
 export BayesianDSGESimulation
 export posterior_summary, bayes_factor, prior_posterior_table, posterior_predictive
 
+# ─── GPL Notice Functions ────────────────────────────────────
+
+function warranty()
+    println("THERE IS NO WARRANTY FOR THE PROGRAM (mock)")
+    nothing
+end
+
+function conditions()
+    println("You may convey verbatim copies of the Program (mock)")
+    nothing
+end
+
+export warranty, conditions
+
 end # module
