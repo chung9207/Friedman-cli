@@ -193,6 +193,20 @@ function historical_decomposition(sol::DSGESolution{T}, data::AbstractMatrix,
         randn(T_obs, n_shocks), T_obs, varnames, shock_names, :dsge_linear)
 end
 
+struct BayesianHistoricalDecomposition{T<:Real}
+    quantiles::Array{T,4}
+    point_estimate::Array{T,3}
+    initial_quantiles::Array{T,3}
+    initial_point_estimate::Matrix{T}
+    shocks_point_estimate::Matrix{T}
+    actual::Matrix{T}
+    T_eff::Int
+    variables::Vector{String}
+    shock_names::Vector{String}
+    quantile_levels::Vector{T}
+    method::Symbol
+end
+
 function historical_decomposition(bd::BayesianDSGE{T}, data::AbstractMatrix,
         observables::Vector{Symbol}; mode_only::Bool=false, n_draws::Int=200,
         quantiles::Vector{<:Real}=T[0.16, 0.5, 0.84],
@@ -212,7 +226,8 @@ end
 contribution(hd::HistoricalDecomposition, var::Int, shock::Int) = hd.contributions[:, var, shock]
 contribution(hd::BayesianHistoricalDecomposition, var::Int, shock::Int) = hd.point_estimate[:, var, shock]
 total_shock_contribution(hd::HistoricalDecomposition, var::Int) = dropdims(sum(hd.contributions[:, var, :]; dims=2); dims=2)
-verify_decomposition(hd::AbstractHistoricalDecomposition) = true
+verify_decomposition(hd::HistoricalDecomposition) = true
+verify_decomposition(hd::BayesianHistoricalDecomposition) = true
 
 function dsge_particle_smoother(args...; kwargs...)
     # placeholder — not directly called by CLI
@@ -1137,33 +1152,19 @@ function _dsge_bayes_hd(; model::String, data::String="", params::String="",
                          horizon::Int=40,
                          output::String="", format::String="table",
                          plot::Bool=false, plot_save::String="")
-    isempty(data) && error("--data is required")
     isempty(observables) && error("--observables is required (comma-separated variable names)")
-    isempty(params) && error("--params is required (comma-separated parameter names)")
-    isempty(priors) && error("--priors is required (path to priors TOML)")
 
-    spec = _load_dsge_model(model)
+    bd = _dsge_bayes_run_estimation(; model, data, params, priors, sampler,
+        n_smc, n_particles, n_draws, burnin, ess_target, observables,
+        solver, order, delayed_acceptance)
+
     df = load_data(data)
     Y = df_to_matrix(df)
     obs_syms = Symbol[Symbol(strip(s)) for s in split(observables, ",")]
     q_levels = [parse(Float64, strip(s)) for s in split(quantiles, ",")]
 
-    theta0 = zeros(length(split(params, ",")))
-    param_names = [strip(s) for s in split(params, ",")]
-    prior_config = load_config(priors)
-    prior_dists = get_dsge_priors(prior_config)
-
-    println("Bayesian DSGE Historical Decomposition")
-    println("  Model: $model, Sampler: $sampler, Draws: $(mode_only ? "mode only" : n_smc)")
-    println("  Observables: $observables")
+    println("Historical Decomposition from Bayesian DSGE posterior")
     println()
-
-    bd = estimate_dsge_bayes(spec, Y, theta0;
-        priors=prior_dists, method=Symbol(sampler),
-        observables=obs_syms,
-        n_smc=n_smc, n_particles=n_particles,
-        n_draws=n_draws, burnin=burnin, ess_target=ess_target,
-        solver=Symbol(solver), delayed_acceptance=delayed_acceptance)
 
     hd = historical_decomposition(bd, Y, obs_syms;
         mode_only=mode_only, n_draws=n_hd_draws, quantiles=q_levels)
