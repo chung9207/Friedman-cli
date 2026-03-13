@@ -2741,4 +2741,181 @@ export KalmanSmootherResult, BayesianDSGEHistoricalDecomposition
 export dsge_smoother, dsge_particle_smoother
 export total_shock_contribution
 
+# ─── Spectral Analysis Types & Functions (v0.4.0) ────────────
+
+struct ACFResult{T<:AbstractFloat}
+    acf::Vector{T}
+    pacf::Vector{T}
+    lags::Int
+    conf_level::T
+    ci_band::T
+    varname::String
+    nobs::Int
+end
+
+struct SpectralDensityResult{T<:AbstractFloat}
+    frequencies::Vector{T}
+    spectrum::Vector{T}
+    log_spectrum::Vector{T}
+    bandwidth::T
+    kernel::Symbol
+    nobs::Int
+    varname::String
+end
+
+struct CrossSpectrumResult{T<:AbstractFloat}
+    frequencies::Vector{T}
+    cross_spectrum::Vector{Complex{T}}
+    coherence::Vector{T}
+    phase::Vector{T}
+    gain::Vector{T}
+    var1::String
+    var2::String
+    nobs::Int
+end
+
+struct TransferFunctionResult{T<:AbstractFloat}
+    frequencies::Vector{T}
+    gain::Vector{T}
+    phase::Vector{T}
+    coherence::Vector{T}
+    var_input::String
+    var_output::String
+    nobs::Int
+end
+
+struct FisherTestResult{T<:AbstractFloat}
+    statistic::T
+    pvalue::T
+    dominant_frequency::T
+    periodogram_values::Vector{T}
+    frequencies::Vector{T}
+    nobs::Int
+end
+
+struct BartlettWhiteNoiseResult{T<:AbstractFloat}
+    statistic::T
+    pvalue::T
+    lags_tested::Int
+    individual_stats::Vector{T}
+    individual_pvalues::Vector{T}
+    nobs::Int
+end
+
+struct BoxPierceResult{T<:AbstractFloat}
+    statistic::T
+    pvalue::T
+    df::Int
+    lags::Int
+    ljung_box::Bool
+    nobs::Int
+end
+
+struct DurbinWatsonResult{T<:AbstractFloat}
+    statistic::T
+    decision::Symbol
+    lower_bound::T
+    upper_bound::T
+    nobs::Int
+end
+
+function acf(y::AbstractVector{T}; lags::Int=20, conf_level::Real=0.95,
+             varname::String="y") where T
+    n = length(y)
+    acf_vals = [T(0.9)^k for k in 0:lags]
+    pacf_vals = [k == 0 ? T(1.0) : T(0.9) * T(0.5)^(k-1) for k in 0:lags]
+    ci = T(1.96) / sqrt(n)
+    ACFResult{T}(acf_vals, pacf_vals, lags, T(conf_level), ci, varname, n)
+end
+
+function pacf(y::AbstractVector{T}; lags::Int=20, conf_level::Real=0.95,
+              varname::String="y") where T
+    acf(y; lags=lags, conf_level=conf_level, varname=varname)
+end
+
+function ccf(y1::AbstractVector{T}, y2::AbstractVector{T}; lags::Int=20,
+             conf_level::Real=0.95, var1::String="y1", var2::String="y2") where T
+    n = length(y1)
+    acf_vals = [T(0.5) * T(0.8)^abs(k) for k in -lags:lags]
+    pacf_vals = copy(acf_vals)
+    ci = T(1.96) / sqrt(n)
+    ACFResult{T}(acf_vals, pacf_vals, lags, T(conf_level), ci, "$var1-$var2", n)
+end
+
+function periodogram(y::AbstractVector{T}; varname::String="y") where T
+    n = length(y)
+    freqs = [T(k) / n for k in 1:div(n, 2)]
+    spec = abs2.(randn(T, length(freqs))) .+ T(0.01)
+    log_spec = log.(spec)
+    SpectralDensityResult{T}(freqs, spec, log_spec, T(0.0), :none, n, varname)
+end
+
+function spectral_density(y::AbstractVector{T}; bandwidth=nothing, kernel::Symbol=:bartlett,
+                          varname::String="y") where T
+    n = length(y)
+    freqs = [T(k) / n for k in 1:div(n, 2)]
+    bw = isnothing(bandwidth) ? T(sqrt(n)) : T(bandwidth)
+    spec = abs2.(randn(T, length(freqs))) .+ T(0.01)
+    log_spec = log.(spec)
+    SpectralDensityResult{T}(freqs, spec, log_spec, bw, kernel, n, varname)
+end
+
+function cross_spectrum(y1::AbstractVector{T}, y2::AbstractVector{T};
+                        bandwidth=nothing, kernel::Symbol=:bartlett,
+                        var1::String="y1", var2::String="y2") where T
+    n = length(y1)
+    freqs = [T(k) / n for k in 1:div(n, 2)]
+    nf = length(freqs)
+    cs = randn(Complex{T}, nf)
+    coh = abs.(cs) ./ (abs.(cs) .+ T(0.1))
+    ph = angle.(cs)
+    gain = abs.(cs)
+    CrossSpectrumResult{T}(freqs, cs, coh, ph, gain, var1, var2, n)
+end
+
+function transfer_function(input::AbstractVector{T}, output::AbstractVector{T};
+                           bandwidth=nothing, kernel::Symbol=:bartlett,
+                           var_input::String="input", var_output::String="output") where T
+    n = length(input)
+    freqs = [T(k) / n for k in 1:div(n, 2)]
+    nf = length(freqs)
+    gain = abs.(randn(T, nf)) .+ T(0.5)
+    phase = randn(T, nf)
+    coherence = rand(T, nf) .* T(0.8) .+ T(0.1)
+    TransferFunctionResult{T}(freqs, gain, phase, coherence, var_input, var_output, n)
+end
+
+function fisher_test(y::AbstractVector{T}) where T
+    n = length(y)
+    freqs = [T(k) / n for k in 1:div(n, 2)]
+    pvals = abs2.(randn(T, length(freqs))) .+ T(0.01)
+    FisherTestResult{T}(T(8.5), T(0.02), T(0.1), pvals, freqs, n)
+end
+
+function bartlett_white_noise_test(y::AbstractVector{T}; lags::Int=20) where T
+    n = length(y)
+    ind_stats = fill(T(1.5), lags)
+    ind_pvals = fill(T(0.15), lags)
+    BartlettWhiteNoiseResult{T}(T(2.5), T(0.10), lags, ind_stats, ind_pvals, n)
+end
+
+function box_pierce_test(y::AbstractVector{T}; lags::Int=20, ljung_box::Bool=true) where T
+    n = length(y)
+    stat = ljung_box ? T(25.0) : T(22.0)
+    pval = T(0.10)
+    BoxPierceResult{T}(stat, pval, lags, lags, ljung_box, n)
+end
+
+function durbin_watson_test(residuals::AbstractVector{T}) where T
+    n = length(residuals)
+    dw = T(2.0) + randn(T) * T(0.1)
+    dec = abs(dw - T(2.0)) < T(0.5) ? :no_autocorrelation : :inconclusive
+    DurbinWatsonResult{T}(dw, dec, T(1.5), T(2.5), n)
+end
+
+export ACFResult, SpectralDensityResult, CrossSpectrumResult, TransferFunctionResult
+export FisherTestResult, BartlettWhiteNoiseResult, BoxPierceResult, DurbinWatsonResult
+export acf, pacf, ccf, periodogram, spectral_density, cross_spectrum, transfer_function
+export fisher_test, bartlett_white_noise_test, box_pierce_test, durbin_watson_test
+
 end # module
