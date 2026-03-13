@@ -2129,6 +2129,8 @@ struct BayesianDSGE{T<:Real}
     method::Symbol
     acceptance_rate::T
     ess_history::Vector{T}
+    spec::DSGESpec{T}
+    solution::DSGESolution{T}
 end
 
 function estimate_dsge_bayes(spec::DSGESpec{T}, data::Matrix, theta0::Vector;
@@ -2143,7 +2145,8 @@ function estimate_dsge_bayes(spec::DSGESpec{T}, data::Matrix, theta0::Vector;
     log_post = fill(T(-100.0), n_draws)
     pnames = ["param_$i" for i in 1:np]
     ess_hist = fill(T(n_smc * 0.8), 20)
-    BayesianDSGE{T}(draws, log_post, pnames, T(-500.0), method, T(0.25), ess_hist)
+    sol = solve(spec; method=:gensys)
+    BayesianDSGE{T}(draws, log_post, pnames, T(-500.0), method, T(0.25), ess_hist, spec, sol)
 end
 
 export BayesianDSGE, estimate_dsge_bayes
@@ -2657,5 +2660,85 @@ function conditions()
 end
 
 export warranty, conditions
+
+# ─── DSGE Historical Decomposition (v0.4.0) ──────────────────
+
+struct KalmanSmootherResult{T<:Real}
+    smoothed_states::Matrix{T}
+    smoothed_covariances::Array{T,3}
+    smoothed_shocks::Matrix{T}
+    filtered_states::Matrix{T}
+    filtered_covariances::Array{T,3}
+    predicted_states::Matrix{T}
+    predicted_covariances::Array{T,3}
+    log_likelihood::T
+end
+
+function dsge_smoother(sol::DSGESolution, data::AbstractMatrix,
+                       observables::Vector{Symbol}; kwargs...)
+    T_obs, _ = size(data)
+    n_states = sol.spec.n_endog
+    n_shocks = sol.spec.n_exog
+    KalmanSmootherResult{Float64}(
+        randn(T_obs, n_states), randn(T_obs, n_states, n_states),
+        randn(T_obs, n_shocks), randn(T_obs, n_states), randn(T_obs, n_states, n_states),
+        randn(T_obs, n_states), randn(T_obs, n_states, n_states), -100.0)
+end
+
+function historical_decomposition(sol::DSGESolution{T}, data::AbstractMatrix,
+        observables::Vector{Symbol}; states::Symbol=:observables,
+        measurement_error=nothing) where {T}
+    T_obs = size(data, 1)
+    n_obs = length(observables)
+    n_shocks = sol.spec.n_exog
+    n_vars = states == :all ? sol.spec.n_endog : n_obs
+    varnames_hd = states == :all ? sol.spec.varnames : [string(s) for s in observables]
+    shock_names = string.(sol.spec.exog)
+    HistoricalDecomposition{T}(
+        randn(T_obs, n_vars, n_shocks), randn(T_obs, n_vars), randn(T_obs, n_vars),
+        randn(T_obs, n_shocks), T_obs, varnames_hd, shock_names, :dsge_linear)
+end
+
+struct BayesianDSGEHistoricalDecomposition{T<:Real}
+    quantiles::Array{T,4}
+    point_estimate::Array{T,3}
+    initial_quantiles::Array{T,3}
+    initial_point_estimate::Matrix{T}
+    shocks_point_estimate::Matrix{T}
+    actual::Matrix{T}
+    T_eff::Int
+    variables::Vector{String}
+    shock_names::Vector{String}
+    quantile_levels::Vector{T}
+    method::Symbol
+end
+
+function historical_decomposition(bd::BayesianDSGE{T}, data::AbstractMatrix,
+        observables::Vector{Symbol}; mode_only::Bool=false, n_draws::Int=200,
+        quantiles::Vector{<:Real}=T[0.16, 0.5, 0.84],
+        measurement_error=nothing, states::Symbol=:observables) where {T}
+    T_obs = size(data, 1)
+    n_obs = length(observables)
+    n_shocks = bd.spec.n_exog
+    n_q = length(quantiles)
+    varnames_bd = [string(s) for s in observables]
+    shock_names = string.(bd.spec.exog)
+    BayesianDSGEHistoricalDecomposition{T}(
+        randn(T_obs, n_obs, n_shocks, n_q), randn(T_obs, n_obs, n_shocks),
+        randn(T_obs, n_obs, n_q), randn(T_obs, n_obs), randn(T_obs, n_shocks),
+        randn(T_obs, n_obs), T_obs, varnames_bd, shock_names, T.(quantiles), :dsge_bayes)
+end
+
+contribution(hd::BayesianDSGEHistoricalDecomposition, var::Int, shock::Int) = hd.point_estimate[:, var, shock]
+total_shock_contribution(hd::HistoricalDecomposition, var::Int) = dropdims(sum(hd.contributions[:, var, :]; dims=2); dims=2)
+verify_decomposition(hd::BayesianDSGEHistoricalDecomposition) = true
+
+function dsge_particle_smoother(args...; kwargs...)
+    nothing
+end
+
+export KalmanSmootherResult, BayesianDSGEHistoricalDecomposition
+export dsge_smoother, dsge_particle_smoother
+export total_shock_contribution
 
 end # module
