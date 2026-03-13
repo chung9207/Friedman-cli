@@ -10,7 +10,23 @@ Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconomet
 
 ## Installation
 
-Requires Julia 1.12+.
+### Quick Install
+
+**macOS and Linux:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/FriedmanJP/Friedman-cli/master/install.sh | bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/FriedmanJP/Friedman-cli/master/install.ps1 | iex
+```
+
+The installer checks for Julia 1.12 (installs [juliaup](https://github.com/JuliaLang/juliaup) if needed, without changing your default Julia version), downloads a precompiled sysimage, and installs to `~/.friedman-cli/`.
+
+### Install from Source
 
 ```bash
 git clone https://github.com/FriedmanJP/Friedman-cli.git
@@ -22,10 +38,12 @@ Pkg.add(url="https://github.com/FriedmanJP/MacroEconometricModels.jl.git")
 '
 ```
 
+See [Installation docs](https://friedmanjp.github.io/Friedman-cli/dev/installation/) for specific version install, manual install from GitHub Releases, upgrading, and uninstalling.
+
 ## Usage
 
 ```bash
-julia --project bin/friedman [command] [subcommand] [args...] [options...]
+friedman [command] [subcommand] [args...] [options...]
 ```
 
 ### Commands
