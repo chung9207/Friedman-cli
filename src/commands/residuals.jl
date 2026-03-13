@@ -176,6 +176,49 @@ function register_residuals_commands!()
         options=[_REG_COMMON_OPTIONS...],
         description="Probit model residuals (deviance residuals)")
 
+    res_preg = LeafCommand("preg", _residuals_preg;
+        args=[Argument("data"; description="Path to CSV panel data file")],
+        options=[_PREG_COMMON_OPTIONS[1:2]..., _PREG_COMMON_OPTIONS[3:4]...,
+                 _PREG_COMMON_OPTIONS[5:6]..., _PREG_COMMON_OPTIONS[7:8]...],
+        description="Residuals from panel regression")
+
+    res_piv = LeafCommand("piv", _residuals_piv;
+        args=[Argument("data"; description="Path to CSV panel data file")],
+        options=[Option("dep"; type=String, default="", description="Dependent variable"),
+                 Option("exog"; type=String, default="", description="Exogenous regressors (comma-separated)"),
+                 Option("endog"; type=String, default="", description="Endogenous regressors (comma-separated)"),
+                 Option("instruments"; type=String, default="", description="Instruments (comma-separated)"),
+                 _PREG_COMMON_OPTIONS[3:4]..., _PREG_COMMON_OPTIONS[5:6]...,
+                 _PREG_COMMON_OPTIONS[7:8]...],
+        description="Residuals from panel IV regression")
+
+    res_plogit = LeafCommand("plogit", _residuals_plogit;
+        args=[Argument("data"; description="Path to CSV panel data file")],
+        options=[_PREG_COMMON_OPTIONS[1:2]..., _PREG_COMMON_OPTIONS[3:4]...,
+                 _PREG_COMMON_OPTIONS[5:6]..., _PREG_COMMON_OPTIONS[7:8]...],
+        description="Residuals from panel logit")
+
+    res_pprobit = LeafCommand("pprobit", _residuals_pprobit;
+        args=[Argument("data"; description="Path to CSV panel data file")],
+        options=[_PREG_COMMON_OPTIONS[1:2]..., _PREG_COMMON_OPTIONS[3:4]...,
+                 _PREG_COMMON_OPTIONS[5:6]..., _PREG_COMMON_OPTIONS[7:8]...],
+        description="Residuals from panel probit")
+
+    res_ologit = LeafCommand("ologit", _residuals_ologit;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[_REG_COMMON_OPTIONS...],
+        description="Residuals from ordered logit")
+
+    res_oprobit = LeafCommand("oprobit", _residuals_oprobit;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[_REG_COMMON_OPTIONS...],
+        description="Residuals from ordered probit")
+
+    res_mlogit = LeafCommand("mlogit", _residuals_mlogit;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[_REG_COMMON_OPTIONS...],
+        description="Residuals from multinomial logit")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "var"       => res_var,
         "bvar"      => res_bvar,
@@ -193,6 +236,13 @@ function register_residuals_commands!()
         "reg"       => res_reg,
         "logit"     => res_logit,
         "probit"    => res_probit,
+        "preg"      => res_preg,
+        "piv"       => res_piv,
+        "plogit"    => res_plogit,
+        "pprobit"   => res_pprobit,
+        "ologit"    => res_ologit,
+        "oprobit"   => res_oprobit,
+        "mlogit"    => res_mlogit,
     )
     return NodeCommand("residuals", subcmds, "Model residuals")
 end
@@ -649,4 +699,146 @@ function _residuals_probit(; data::String="", dep::String="", cov_type::String="
     resid = residuals(model)
     res_df = DataFrame(observation=1:length(resid), residual=round.(resid; digits=6))
     output_result(res_df; format=Symbol(format), output=output, title="Probit Residuals")
+end
+
+# ── Panel Regression Residuals ──────────────────────────
+
+function _residuals_preg(; data::String="", dep::String="", indep::String="",
+                          method::String="fe", cov_type::String="cluster",
+                          id_col::String="", time_col::String="",
+                          output::String="", format::String="table")
+    isempty(dep) && error("--dep is required")
+    pd = _load_panel_for_preg(data, id_col, time_col)
+    indep_syms = _parse_indep_vars(pd, dep, indep)
+
+    model = estimate_xtreg(pd, Symbol(dep), indep_syms;
+        model=_to_sym(method), cov_type=_to_sym(cov_type))
+
+    println("Panel Regression Residuals ($method): $dep")
+    println()
+
+    resid = residuals(model)
+    res_df = DataFrame(observation=1:length(resid), residual=round.(resid; digits=6))
+    output_result(res_df; format=Symbol(format), output=output,
+                  title="Panel Regression Residuals ($method)")
+end
+
+function _residuals_piv(; data::String="", dep::String="", exog::String="",
+                         endog::String="", instruments::String="",
+                         method::String="fe", cov_type::String="cluster",
+                         id_col::String="", time_col::String="",
+                         output::String="", format::String="table")
+    isempty(dep) && error("--dep is required")
+    isempty(endog) && error("--endog is required")
+    pd = _load_panel_for_preg(data, id_col, time_col)
+
+    exog_syms = isempty(exog) ? Symbol[] : Symbol[Symbol(strip(s)) for s in split(exog, ",")]
+    endog_syms = Symbol[Symbol(strip(s)) for s in split(endog, ",")]
+    inst_syms = isempty(instruments) ? Symbol[] : Symbol[Symbol(strip(s)) for s in split(instruments, ",")]
+
+    model = estimate_xtiv(pd, Symbol(dep), exog_syms, endog_syms;
+        instruments=inst_syms, model=_to_sym(method), cov_type=_to_sym(cov_type))
+
+    println("Panel IV Residuals ($method): $dep")
+    println()
+
+    resid = residuals(model)
+    res_df = DataFrame(observation=1:length(resid), residual=round.(resid; digits=6))
+    output_result(res_df; format=Symbol(format), output=output,
+                  title="Panel IV Residuals ($method)")
+end
+
+function _residuals_plogit(; data::String="", dep::String="", indep::String="",
+                            method::String="pooled", cov_type::String="cluster",
+                            id_col::String="", time_col::String="",
+                            output::String="", format::String="table")
+    isempty(dep) && error("--dep is required")
+    pd = _load_panel_for_preg(data, id_col, time_col)
+    indep_syms = _parse_indep_vars(pd, dep, indep)
+
+    model = estimate_xtlogit(pd, Symbol(dep), indep_syms;
+        model=_to_sym(method), cov_type=_to_sym(cov_type))
+
+    println("Panel Logit Residuals ($method): $dep")
+    println()
+
+    resid = residuals(model)
+    res_df = DataFrame(observation=1:length(resid), residual=round.(resid; digits=6))
+    output_result(res_df; format=Symbol(format), output=output,
+                  title="Panel Logit Residuals ($method)")
+end
+
+function _residuals_pprobit(; data::String="", dep::String="", indep::String="",
+                             method::String="pooled", cov_type::String="cluster",
+                             id_col::String="", time_col::String="",
+                             output::String="", format::String="table")
+    isempty(dep) && error("--dep is required")
+    pd = _load_panel_for_preg(data, id_col, time_col)
+    indep_syms = _parse_indep_vars(pd, dep, indep)
+
+    model = estimate_xtprobit(pd, Symbol(dep), indep_syms;
+        model=_to_sym(method), cov_type=_to_sym(cov_type))
+
+    println("Panel Probit Residuals ($method): $dep")
+    println()
+
+    resid = residuals(model)
+    res_df = DataFrame(observation=1:length(resid), residual=round.(resid; digits=6))
+    output_result(res_df; format=Symbol(format), output=output,
+                  title="Panel Probit Residuals ($method)")
+end
+
+# ── Ordered/Multinomial Residuals ───────────────────────
+
+function _residuals_ologit(; data::String="", dep::String="", cov_type::String="hc1",
+                            clusters::String="",
+                            output::String="", format::String="table")
+    y, X, xcols = _load_reg_data(data, dep)
+    cl = _load_clusters(data, clusters)
+    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+
+    model = estimate_ologit(y, X; cov_type=Symbol(cov_type), varnames=xcols, clusters=cl)
+
+    println("Ordered Logit Residuals: $dep_name")
+    println()
+
+    resid = residuals(model)
+    res_df = DataFrame(observation=1:length(resid), residual=round.(resid; digits=6))
+    output_result(res_df; format=Symbol(format), output=output,
+                  title="Ordered Logit Residuals")
+end
+
+function _residuals_oprobit(; data::String="", dep::String="", cov_type::String="hc1",
+                             clusters::String="",
+                             output::String="", format::String="table")
+    y, X, xcols = _load_reg_data(data, dep)
+    cl = _load_clusters(data, clusters)
+    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+
+    model = estimate_oprobit(y, X; cov_type=Symbol(cov_type), varnames=xcols, clusters=cl)
+
+    println("Ordered Probit Residuals: $dep_name")
+    println()
+
+    resid = residuals(model)
+    res_df = DataFrame(observation=1:length(resid), residual=round.(resid; digits=6))
+    output_result(res_df; format=Symbol(format), output=output,
+                  title="Ordered Probit Residuals")
+end
+
+function _residuals_mlogit(; data::String="", dep::String="", cov_type::String="ols",
+                            clusters::String="",
+                            output::String="", format::String="table")
+    y, X, xcols = _load_reg_data(data, dep)
+    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+
+    model = estimate_mlogit(y, X; cov_type=Symbol(cov_type), varnames=xcols)
+
+    println("Multinomial Logit Residuals: $dep_name")
+    println()
+
+    resid = residuals(model)
+    res_df = DataFrame(observation=1:length(resid), residual=round.(resid; digits=6))
+    output_result(res_df; format=Symbol(format), output=output,
+                  title="Multinomial Logit Residuals")
 end
