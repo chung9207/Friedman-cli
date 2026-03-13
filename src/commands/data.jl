@@ -106,6 +106,24 @@ function register_data_commands!()
         ],
         description="Balance panel with missing data via DFM imputation")
 
+    data_dropna = LeafCommand("dropna", _data_dropna;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("vars"; type=String, default="", description="Column names to check (comma-separated; default: all)"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        description="Drop rows with missing/NaN values")
+
+    data_keeprows = LeafCommand("keeprows", _data_keeprows;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[
+            Option("rows"; type=String, default="", description="Row indices (e.g. 1:100, 1,5,10)"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+        ],
+        description="Filter rows by index range")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "list"      => data_list,
         "load"      => data_load,
@@ -116,6 +134,8 @@ function register_data_commands!()
         "filter"    => data_filter,
         "validate"  => data_validate,
         "balance"   => data_balance,
+        "dropna"    => data_dropna,
+        "keeprows"  => data_keeprows,
     )
     return NodeCommand("data", subcmds, "Data management: load example datasets, inspect, clean, transform")
 end
@@ -469,4 +489,56 @@ function _data_balance(; data::String, method::String="dfm", factors::Int=3,
     result_df = DataFrame(bal_Y, vn)
     output_result(result_df; format=Symbol(format), output=output,
                   title="Balanced Panel (method=$method, r=$factors, p=$lags)")
+end
+
+function _data_dropna(; data::String, vars::String="",
+                       output::String="", format::String="table")
+    df = load_data(data)
+    Y = df_to_matrix(df)
+    vnames = variable_names(df)
+    ts = TimeSeriesData(Y; varnames=vnames)
+
+    n_before = size(Y, 1)
+    var_list = isempty(vars) ? nothing : [strip(s) for s in split(vars, ",")]
+    cleaned = dropna(ts; vars=var_list)
+    n_after = size(cleaned.data, 1)
+
+    println("Drop NA: $data")
+    println("  Rows before: $n_before, after: $n_after, dropped: $(n_before - n_after)")
+    println()
+
+    result_df = DataFrame(cleaned.data, cleaned.varnames)
+    output_result(result_df; format=Symbol(format), output=output, title="Cleaned Data")
+    return cleaned
+end
+
+function _data_keeprows(; data::String, rows::String="",
+                         output::String="", format::String="table")
+    isempty(rows) && error("--rows is required (e.g. 1:100, 1,5,10)")
+
+    df = load_data(data)
+    Y = df_to_matrix(df)
+    vnames = variable_names(df)
+    ts = TimeSeriesData(Y; varnames=vnames)
+    n_total = size(Y, 1)
+
+    indices = if occursin(":", rows)
+        parts = split(rows, ":")
+        lo = parse(Int, strip(parts[1]))
+        hi_str = strip(parts[2])
+        hi = hi_str == "end" ? n_total : parse(Int, hi_str)
+        collect(lo:hi)
+    else
+        [parse(Int, strip(s)) for s in split(rows, ",")]
+    end
+
+    filtered = keeprows(ts, indices)
+
+    println("Keep Rows: $data")
+    println("  Selected $(length(indices)) of $n_total rows")
+    println()
+
+    result_df = DataFrame(filtered.data, filtered.varnames)
+    output_result(result_df; format=Symbol(format), output=output, title="Filtered Data")
+    return filtered
 end
