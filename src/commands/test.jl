@@ -1896,7 +1896,6 @@ function _test_fisher(; data::String, column::Int=1,
     pairs = Pair{String,Any}[
         "Test statistic" => round(result.statistic; digits=4),
         "p-value" => round(result.pvalue; digits=4),
-        "Critical value (5%)" => round(result.critical_value; digits=4),
         "Observations" => result.nobs,
     ]
     output_kv(pairs; format=format, output=output, title="Fisher's Test: $vname")
@@ -1918,7 +1917,6 @@ function _test_bartlett_wn(; data::String, column::Int=1,
     pairs = Pair{String,Any}[
         "Test statistic" => round(result.statistic; digits=4),
         "p-value" => round(result.pvalue; digits=4),
-        "Critical value (5%)" => round(result.critical_value; digits=4),
         "Observations" => result.nobs,
     ]
     output_kv(pairs; format=format, output=output, title="Bartlett White Noise Test: $vname")
@@ -1961,8 +1959,8 @@ function _test_durbin_watson(; data::String, column::Int=1,
 
     pairs = Pair{String,Any}[
         "DW statistic" => round(result.statistic; digits=4),
-        "Lower bound (dL)" => round(result.dl; digits=4),
-        "Upper bound (dU)" => round(result.du; digits=4),
+        "Lower bound (dL)" => round(result.lower_bound; digits=4),
+        "Upper bound (dU)" => round(result.upper_bound; digits=4),
         "Decision" => result.decision,
         "Observations" => result.nobs,
     ]

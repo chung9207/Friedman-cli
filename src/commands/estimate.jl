@@ -1581,21 +1581,18 @@ function _estimate_preg(; data::String, dep::String="", indep::String="",
     model = estimate_xtreg(pd, Symbol(dep), indep_syms;
         model=model_sym, twoway=twoway, cov_type=cov_sym)
 
-    coef_df = _preg_coef_table(model, string.(indep_syms))
+    coef_df = _preg_coef_table(model, model.varnames)
     output_result(coef_df; format=Symbol(format), output=output,
         title="Panel Regression Coefficients ($method)")
 
     println()
     pairs = Pair{String,Any}[
-        "R2 (within)"  => round(model.r2_within; digits=6),
-        "R2 (between)" => round(model.r2_between; digits=6),
-        "R2 (overall)" => round(model.r2_overall; digits=6),
-        "sigma_u"      => round(model.sigma_u; digits=6),
-        "sigma_e"      => round(model.sigma_e; digits=6),
-        "rho"          => round(model.rho; digits=6),
+        "R2 (within)"  => round(model.within_r2; digits=6),
+        "R2 (between)" => round(model.between_r2; digits=6),
+        "R2 (overall)" => round(model.overall_r2; digits=6),
         "F-statistic"  => round(model.f_stat; digits=4),
-        "F p-value"    => round(model.f_pval; digits=4),
-        "N obs"        => model.n_obs,
+        "F p-value"    => round(model.f_pvalue; digits=4),
+        "N obs"        => model.nobs,
         "N groups"     => model.n_groups,
     ]
     output_kv(pairs; format=format, title="Model Statistics")
@@ -1642,7 +1639,7 @@ function _estimate_plogit(; data::String, dep::String="", indep::String="",
     model = estimate_xtlogit(pd, Symbol(dep), indep_syms;
         model=_to_sym(method), cov_type=_to_sym(cov_type))
 
-    coef_df = _preg_coef_table(model, string.(indep_syms))
+    coef_df = _preg_coef_table(model, model.varnames)
     output_result(coef_df; format=Symbol(format), output=output,
         title="Panel Logit Coefficients ($method)")
 
@@ -1653,7 +1650,7 @@ function _estimate_plogit(; data::String, dep::String="", indep::String="",
         "AIC"             => round(model.aic; digits=4),
         "BIC"             => round(model.bic; digits=4),
         "Converged"       => model.converged,
-        "N obs"           => model.n_obs,
+        "N obs"           => model.nobs,
         "N groups"        => model.n_groups,
     ]
     output_kv(pairs; format=format, title="Model Statistics")
@@ -1674,7 +1671,7 @@ function _estimate_pprobit(; data::String, dep::String="", indep::String="",
     model = estimate_xtprobit(pd, Symbol(dep), indep_syms;
         model=_to_sym(method), cov_type=_to_sym(cov_type))
 
-    coef_df = _preg_coef_table(model, string.(indep_syms))
+    coef_df = _preg_coef_table(model, model.varnames)
     output_result(coef_df; format=Symbol(format), output=output,
         title="Panel Probit Coefficients ($method)")
 
@@ -1685,7 +1682,7 @@ function _estimate_pprobit(; data::String, dep::String="", indep::String="",
         "AIC"             => round(model.aic; digits=4),
         "BIC"             => round(model.bic; digits=4),
         "Converged"       => model.converged,
-        "N obs"           => model.n_obs,
+        "N obs"           => model.nobs,
         "N groups"        => model.n_groups,
     ]
     output_kv(pairs; format=format, title="Model Statistics")

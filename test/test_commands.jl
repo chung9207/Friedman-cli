@@ -71,6 +71,7 @@ include(joinpath(project_root, "src", "commands", "data.jl"))
 include(joinpath(project_root, "src", "commands", "nowcast.jl"))
 include(joinpath(project_root, "src", "commands", "dsge.jl"))
 include(joinpath(project_root, "src", "commands", "did.jl"))
+include(joinpath(project_root, "src", "commands", "spectral.jl"))
 
 # ─── Test Helpers ───────────────────────────────────────────────
 
@@ -565,10 +566,11 @@ end  # Shared utilities
         node = register_estimate_commands!()
         @test node isa NodeCommand
         @test node.name == "estimate"
-        @test length(node.subcmds) == 24
+        @test length(node.subcmds) == 31
         for cmd in ["var", "bvar", "lp", "arima", "gmm", "smm", "static", "dynamic", "gdfm",
                      "arch", "garch", "egarch", "gjr_garch", "sv", "fastica", "ml", "vecm", "pvar",
-                     "favar", "sdfm", "reg", "iv", "logit", "probit"]
+                     "favar", "sdfm", "reg", "iv", "logit", "probit",
+                     "preg", "piv", "plogit", "pprobit", "ologit", "oprobit", "mlogit"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -1426,13 +1428,16 @@ end  # Estimate handlers
         node = register_test_commands!()
         @test node isa NodeCommand
         @test node.name == "test"
-        @test length(node.subcmds) == 29
+        @test length(node.subcmds) == 41
         for cmd in ["adf", "kpss", "pp", "za", "np", "johansen",
                      "normality", "identifiability", "heteroskedasticity",
                      "arch_lm", "ljung_box", "var", "granger", "pvar", "lr", "lm",
                      "andrews", "bai-perron", "panic", "cips", "moon-perron", "factor-break",
                      "fourier-adf", "fourier-kpss", "dfgls", "lm-unitroot",
-                     "adf-2break", "gregory-hansen", "vif"]
+                     "adf-2break", "gregory-hansen", "vif",
+                     "hausman", "breusch-pagan", "f-fe", "pesaran-cd", "wooldridge-ar", "modified-wald",
+                     "fisher", "bartlett-wn", "box-pierce", "durbin-watson",
+                     "brant", "hausman-iia"]
             @test haskey(node.subcmds, cmd)
         end
         # VAR is a nested NodeCommand with lagselect and stability
@@ -2631,7 +2636,7 @@ end  # Forecast handlers
 
     @testset "register_estimate_commands! includes vecm" begin
         node = register_estimate_commands!()
-        @test length(node.subcmds) == 24
+        @test length(node.subcmds) == 31
         @test haskey(node.subcmds, "vecm")
         @test node.subcmds["vecm"] isa LeafCommand
     end
@@ -2662,7 +2667,7 @@ end  # Forecast handlers
 
     @testset "register_test_commands! includes granger" begin
         node = register_test_commands!()
-        @test length(node.subcmds) == 29
+        @test length(node.subcmds) == 41
         @test haskey(node.subcmds, "granger")
         @test node.subcmds["granger"] isa LeafCommand
     end
@@ -2999,10 +3004,11 @@ end  # VECM handlers
         node = register_predict_commands!()
         @test node isa NodeCommand
         @test node.name == "predict"
-        @test length(node.subcmds) == 16
+        @test length(node.subcmds) == 23
         for cmd in ["var", "bvar", "arima", "vecm", "static", "dynamic", "gdfm",
                      "arch", "garch", "egarch", "gjr_garch", "sv", "favar",
-                     "reg", "logit", "probit"]
+                     "reg", "logit", "probit",
+                     "preg", "piv", "plogit", "pprobit", "ologit", "oprobit", "mlogit"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -3438,10 +3444,11 @@ end  # Predict handlers
         node = register_residuals_commands!()
         @test node isa NodeCommand
         @test node.name == "residuals"
-        @test length(node.subcmds) == 16
+        @test length(node.subcmds) == 23
         for cmd in ["var", "bvar", "arima", "vecm", "static", "dynamic", "gdfm",
                      "arch", "garch", "egarch", "gjr_garch", "sv", "favar",
-                     "reg", "logit", "probit"]
+                     "reg", "logit", "probit",
+                     "preg", "piv", "plogit", "pprobit", "ologit", "oprobit", "mlogit"]
             @test haskey(node.subcmds, cmd)
         end
     end
@@ -4137,7 +4144,7 @@ end  # Filter handlers
         node = register_estimate_commands!()
         @test haskey(node.subcmds, "pvar")
         @test node.subcmds["pvar"] isa LeafCommand
-        @test length(node.subcmds) == 24
+        @test length(node.subcmds) == 31
     end
 
     @testset "register_irf_commands! includes pvar" begin
@@ -4167,7 +4174,7 @@ end  # Filter handlers
         @test node.subcmds["lr"] isa LeafCommand
         @test haskey(node.subcmds, "lm")
         @test node.subcmds["lm"] isa LeafCommand
-        @test length(node.subcmds) == 29
+        @test length(node.subcmds) == 41
     end
 
     @testset "_parse_varlist" begin
@@ -4503,8 +4510,8 @@ end  # Enhanced Granger handlers
         node = register_data_commands!()
         @test node isa NodeCommand
         @test node.name == "data"
-        @test length(node.subcmds) == 9
-        for cmd in ["list", "load", "describe", "diagnose", "fix", "transform", "filter", "validate", "balance"]
+        @test length(node.subcmds) == 11
+        for cmd in ["list", "load", "describe", "diagnose", "fix", "transform", "filter", "validate", "balance", "dropna", "keeprows"]
             @test haskey(node.subcmds, cmd)
             @test node.subcmds[cmd] isa LeafCommand
         end
@@ -6079,7 +6086,8 @@ end
         @test haskey(node.subcmds, "perfect-foresight")
         @test haskey(node.subcmds, "steady-state")
         @test haskey(node.subcmds, "bayes")
-        @test length(node.subcmds) == 8
+        @test haskey(node.subcmds, "hd")
+        @test length(node.subcmds) == 9
     end
 end
 

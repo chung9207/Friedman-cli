@@ -2746,11 +2746,13 @@ export total_shock_contribution
 struct ACFResult{T<:AbstractFloat}
     acf::Vector{T}
     pacf::Vector{T}
-    lags::Int
+    lags::Vector{Int}
     conf_level::T
     ci_band::T
     varname::String
     nobs::Int
+    q_stats::Vector{T}
+    q_pvalues::Vector{T}
 end
 
 struct SpectralDensityResult{T<:AbstractFloat}
@@ -2819,27 +2821,36 @@ struct DurbinWatsonResult{T<:AbstractFloat}
     nobs::Int
 end
 
-function acf(y::AbstractVector{T}; lags::Int=20, conf_level::Real=0.95,
-             varname::String="y") where T
+function acf(y::AbstractVector{T}; lags::Int=20, maxlag::Union{Int,Nothing}=nothing,
+             conf_level::Real=0.95, varname::String="y") where T
     n = length(y)
-    acf_vals = [T(0.9)^k for k in 0:lags]
-    pacf_vals = [k == 0 ? T(1.0) : T(0.9) * T(0.5)^(k-1) for k in 0:lags]
+    nlags = isnothing(maxlag) ? lags : maxlag
+    acf_vals = [T(0.9)^k for k in 0:nlags]
+    pacf_vals = [k == 0 ? T(1.0) : T(0.9) * T(0.5)^(k-1) for k in 0:nlags]
     ci = T(1.96) / sqrt(n)
-    ACFResult{T}(acf_vals, pacf_vals, lags, T(conf_level), ci, varname, n)
+    q_stats = [T(k+1) * T(0.1) for k in 0:nlags]
+    q_pvals = [T(0.05) for _ in 0:nlags]
+    lags_vec = collect(0:nlags)
+    ACFResult{T}(acf_vals, pacf_vals, lags_vec, T(conf_level), ci, varname, n, q_stats, q_pvals)
 end
 
-function pacf(y::AbstractVector{T}; lags::Int=20, conf_level::Real=0.95,
-              varname::String="y") where T
-    acf(y; lags=lags, conf_level=conf_level, varname=varname)
+function pacf(y::AbstractVector{T}; lags::Int=20, maxlag::Union{Int,Nothing}=nothing,
+              conf_level::Real=0.95, varname::String="y") where T
+    acf(y; lags=lags, maxlag=maxlag, conf_level=conf_level, varname=varname)
 end
 
 function ccf(y1::AbstractVector{T}, y2::AbstractVector{T}; lags::Int=20,
-             conf_level::Real=0.95, var1::String="y1", var2::String="y2") where T
+             maxlag::Union{Int,Nothing}=nothing, conf_level::Real=0.95,
+             var1::String="y1", var2::String="y2") where T
     n = length(y1)
-    acf_vals = [T(0.5) * T(0.8)^abs(k) for k in -lags:lags]
+    nlags = isnothing(maxlag) ? lags : maxlag
+    acf_vals = [T(0.5) * T(0.8)^abs(k) for k in -nlags:nlags]
     pacf_vals = copy(acf_vals)
     ci = T(1.96) / sqrt(n)
-    ACFResult{T}(acf_vals, pacf_vals, lags, T(conf_level), ci, "$var1-$var2", n)
+    lags_vec = collect(-nlags:nlags)
+    q_stats = [T(k+1) * T(0.1) for k in 0:nlags]
+    q_pvals = [T(0.05) for _ in 0:nlags]
+    ACFResult{T}(acf_vals, pacf_vals, lags_vec, T(conf_level), ci, "$var1-$var2", n, q_stats, q_pvals)
 end
 
 function periodogram(y::AbstractVector{T}; varname::String="y") where T
@@ -2850,8 +2861,8 @@ function periodogram(y::AbstractVector{T}; varname::String="y") where T
     SpectralDensityResult{T}(freqs, spec, log_spec, T(0.0), :none, n, varname)
 end
 
-function spectral_density(y::AbstractVector{T}; bandwidth=nothing, kernel::Symbol=:bartlett,
-                          varname::String="y") where T
+function spectral_density(y::AbstractVector{T}; method::Symbol=:welch, bandwidth=nothing,
+                          kernel::Symbol=:bartlett, varname::String="y") where T
     n = length(y)
     freqs = [T(k) / n for k in 1:div(n, 2)]
     bw = isnothing(bandwidth) ? T(sqrt(n)) : T(bandwidth)
@@ -2885,6 +2896,17 @@ function transfer_function(input::AbstractVector{T}, output::AbstractVector{T};
     TransferFunctionResult{T}(freqs, gain, phase, coherence, var_input, var_output, n)
 end
 
+function transfer_function(filter_name::Symbol; lambda::Real=1600.0, nobs::Int=200,
+                           kwargs...)
+    n = nobs
+    freqs = [Float64(k) / n for k in 1:div(n, 2)]
+    nf = length(freqs)
+    gain = abs.(randn(nf)) .+ 0.5
+    phase = randn(nf)
+    coherence = rand(nf) .* 0.8 .+ 0.1
+    TransferFunctionResult{Float64}(freqs, gain, phase, coherence, string(filter_name), "output", n)
+end
+
 function fisher_test(y::AbstractVector{T}) where T
     n = length(y)
     freqs = [T(k) / n for k in 1:div(n, 2)]
@@ -2912,6 +2934,24 @@ function durbin_watson_test(residuals::AbstractVector{T}) where T
     dec = abs(dw - T(2.0)) < T(0.5) ? :no_autocorrelation : :inconclusive
     DurbinWatsonResult{T}(dw, dec, T(1.5), T(2.5), n)
 end
+
+# Field aliases for spectral handler compat
+Base.getproperty(r::SpectralDensityResult, s::Symbol) =
+    s === :freq     ? getfield(r, :frequencies) :
+    s === :density  ? getfield(r, :spectrum) :
+    s === :ci_lower ? getfield(r, :spectrum) .- 0.1 :
+    s === :ci_upper ? getfield(r, :spectrum) .+ 0.1 :
+    getfield(r, s)
+
+Base.getproperty(r::CrossSpectrumResult, s::Symbol) =
+    s === :freq         ? getfield(r, :frequencies) :
+    s === :co_spectrum  ? real.(getfield(r, :cross_spectrum)) :
+    s === :quad_spectrum ? imag.(getfield(r, :cross_spectrum)) :
+    getfield(r, s)
+
+Base.getproperty(r::TransferFunctionResult, s::Symbol) =
+    s === :freq ? getfield(r, :frequencies) :
+    getfield(r, s)
 
 export ACFResult, SpectralDensityResult, CrossSpectrumResult, TransferFunctionResult
 export FisherTestResult, BartlettWhiteNoiseResult, BoxPierceResult, DurbinWatsonResult
@@ -3006,7 +3046,7 @@ confint(m::PanelLogitModel; level=0.95) = hcat(m.beta .- 1.96 .* stderror(m), m.
 confint(m::PanelProbitModel; level=0.95) = hcat(m.beta .- 1.96 .* stderror(m), m.beta .+ 1.96 .* stderror(m))
 
 function estimate_xtreg(pd::PanelData{T}, outcome, covariates;
-        fe=:twoway, cov_type=:cluster, clusters=nothing,
+        model=:fe, twoway=false, fe=:twoway, cov_type=:cluster, clusters=nothing,
         varnames=nothing) where T
     n, k = pd.T_obs, length(covariates) + 1
     beta = ones(T, k) * T(0.5)
@@ -3023,8 +3063,8 @@ function estimate_xtreg(pd::PanelData{T}, outcome, covariates;
         cov_type, fe, vnames, cl, pd)
 end
 
-function estimate_xtiv(pd::PanelData{T}, outcome, covariates, instruments;
-        fe=:twoway, cov_type=:cluster, clusters=nothing, varnames=nothing) where T
+function estimate_xtiv(pd::PanelData{T}, outcome, covariates, endog=Symbol[];
+        instruments=Symbol[], model=:fe, fe=:twoway, cov_type=:cluster, clusters=nothing, varnames=nothing) where T
     n, k = pd.T_obs, length(covariates) + 1
     kz = length(instruments) + 1
     beta = ones(T, k) * T(0.5)
@@ -3043,7 +3083,7 @@ function estimate_xtiv(pd::PanelData{T}, outcome, covariates, instruments;
 end
 
 function estimate_xtlogit(pd::PanelData{T}, outcome, covariates;
-        fe=:fe, cov_type=:cluster, clusters=nothing, varnames=nothing,
+        model=:pooled, fe=:fe, cov_type=:cluster, clusters=nothing, varnames=nothing,
         maxiter=100, tol=1e-8) where T
     n, k = pd.T_obs, length(covariates) + 1
     beta = ones(T, k) * T(0.3)
@@ -3060,7 +3100,7 @@ function estimate_xtlogit(pd::PanelData{T}, outcome, covariates;
 end
 
 function estimate_xtprobit(pd::PanelData{T}, outcome, covariates;
-        fe=:re, cov_type=:cluster, clusters=nothing, varnames=nothing,
+        model=:pooled, fe=:re, cov_type=:cluster, clusters=nothing, varnames=nothing,
         maxiter=100, tol=1e-8) where T
     n, k = pd.T_obs, length(covariates) + 1
     beta = ones(T, k) * T(0.3)
@@ -3146,9 +3186,14 @@ residuals(m::MultinomialLogitModel) = m.residuals
 predict(m::OrderedLogitModel) = m.fitted[:, 1]
 predict(m::OrderedProbitModel) = m.fitted[:, 1]
 predict(m::MultinomialLogitModel) = m.fitted[:, 1]
+
+# Alias cutpoints → thresholds, categories → unique(y) for compat with estimate.jl handlers
+Base.getproperty(m::OrderedLogitModel, s::Symbol) = s === :cutpoints ? getfield(m, :thresholds) : (s === :categories ? collect(1:getfield(m, :n_categories)) : getfield(m, s))
+Base.getproperty(m::OrderedProbitModel, s::Symbol) = s === :cutpoints ? getfield(m, :thresholds) : (s === :categories ? collect(1:getfield(m, :n_categories)) : getfield(m, s))
+Base.getproperty(m::MultinomialLogitModel, s::Symbol) = s === :categories ? collect(1:getfield(m, :n_categories)) : getfield(m, s)
 stderror(m::OrderedLogitModel) = [sqrt(m.var_beta[i,i]) for i in 1:size(m.var_beta,1)]
 stderror(m::OrderedProbitModel) = [sqrt(m.var_beta[i,i]) for i in 1:size(m.var_beta,1)]
-stderror(m::MultinomialLogitModel) = [sqrt(m.var_beta[i,i,1]) for i in 1:size(m.var_beta,1)]
+stderror(m::MultinomialLogitModel) = vcat([[sqrt(m.var_beta[i,i,c]) for i in 1:size(m.var_beta,1)] for c in 1:size(m.var_beta,3)]...)
 nobs(m::OrderedLogitModel) = m.nobs
 nobs(m::OrderedProbitModel) = m.nobs
 nobs(m::MultinomialLogitModel) = m.nobs
@@ -3183,14 +3228,14 @@ function _build_ordered(::Type{M}, y::AbstractVector{T}, X::AbstractMatrix{T};
 end
 
 function estimate_ologit(y::AbstractVector{T}, X::AbstractMatrix{T};
-        n_categories::Int=3, cov_type::Symbol=:hc1, varnames=nothing,
+        n_categories::Int=3, cov_type::Symbol=:hc1, varnames=nothing, clusters=nothing,
         maxiter::Int=100, tol::Real=1e-8) where T
     _build_ordered(OrderedLogitModel, y, X; n_categories=n_categories,
                    cov_type=cov_type, varnames=varnames, maxiter=maxiter, tol=tol)
 end
 
 function estimate_oprobit(y::AbstractVector{T}, X::AbstractMatrix{T};
-        n_categories::Int=3, cov_type::Symbol=:hc1, varnames=nothing,
+        n_categories::Int=3, cov_type::Symbol=:hc1, varnames=nothing, clusters=nothing,
         maxiter::Int=100, tol::Real=1e-8) where T
     _build_ordered(OrderedProbitModel, y, X; n_categories=n_categories,
                    cov_type=cov_type, varnames=varnames, maxiter=maxiter, tol=tol)
@@ -3248,12 +3293,12 @@ function hausman_iia(m::MultinomialLogitModel{T}; omit_category::Int=2) where T
         m.nobs, m.n_categories)
 end
 
-function dropna(df; cols=nothing)
-    df
+function dropna(ts; vars=nothing, cols=nothing)
+    ts
 end
 
-function keeprows(df, mask::AbstractVector{Bool})
-    df
+function keeprows(ts, indices::AbstractVector)
+    ts
 end
 
 export OrderedLogitModel, OrderedProbitModel, MultinomialLogitModel
