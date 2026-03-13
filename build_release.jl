@@ -4,10 +4,14 @@
 # Produces: build/friedman/ with platform-appropriate sysimage and launcher
 #
 # This script:
-# 1. Creates a temporary build environment with all deps (including weak deps)
+# 1. Creates a temporary build environment (weak deps excluded for license compat)
 # 2. Builds a sysimage via PackageCompiler.create_sysimage()
 # 3. Creates a self-contained app directory with sysimage + launcher
 # 4. Does NOT modify the source Project.toml
+#
+# Note: JuMP/Ipopt/PATHSolver are excluded from the sysimage because Ipopt's
+# EPL-2.0 license is incompatible with GPL-3.0. Users who need DSGE constrained
+# optimization can install them separately: Pkg.add(["JuMP", "Ipopt"])
 
 using Pkg
 
@@ -28,23 +32,19 @@ mkpath(build_project_dir)
 cp(joinpath(project_dir, "src"), joinpath(build_project_dir, "src"))
 cp(joinpath(project_dir, "bin"), joinpath(build_project_dir, "bin"))
 
-# Read original Project.toml, drop weakdeps (will Pkg.add them by name)
+# Read original Project.toml, drop weakdeps and extensions (EPL-incompatible)
 original_toml = Pkg.TOML.parsefile(joinpath(project_dir, "Project.toml"))
-weak_dep_names = collect(keys(get(original_toml, "weakdeps", Dict())))
 delete!(original_toml, "weakdeps")
+delete!(original_toml, "extensions")
 
 # Write Project.toml without weakdeps
 open(joinpath(build_project_dir, "Project.toml"), "w") do io
     Pkg.TOML.print(io, original_toml)
 end
 
-# Activate build env and add weak deps by name (resolves correct UUIDs from registry)
+# Activate build env and install deps (weak deps excluded)
 Pkg.activate(build_project_dir)
 Pkg.instantiate()
-if !isempty(weak_dep_names)
-    println("Adding weak deps as real deps: ", join(weak_dep_names, ", "))
-    Pkg.add(weak_dep_names)
-end
 
 # Add REPL stdlib so interactive mode can load it at runtime
 println("Adding REPL stdlib for interactive mode...")

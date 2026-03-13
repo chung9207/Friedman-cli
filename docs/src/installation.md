@@ -103,7 +103,7 @@ using Pkg
 Pkg.add(["JuMP", "Ipopt"])
 ```
 
-These are included automatically in the precompiled release builds.
+These are **not** included in precompiled release builds due to license incompatibility (Ipopt uses EPL-2.0, which conflicts with GPL-3.0).
 
 ## Testing
 
