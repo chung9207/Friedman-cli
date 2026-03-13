@@ -119,6 +119,20 @@ function register_dsge_commands!()
         ],
         description="Compute the steady state of a DSGE model")
 
+    dsge_hd = LeafCommand("hd", _dsge_hd;
+        args=[Argument("model"; description="Path to DSGE model file (.toml or .jl)")],
+        options=[
+            Option("data"; short="d", type=String, default="", description="Path to CSV data file"),
+            Option("observables"; type=String, default="", description="Observable variable names (comma-separated)"),
+            Option("states"; type=String, default="observables", description="observables|all"),
+            Option("measurement-error"; type=String, default="", description="Measurement error std devs (comma-separated) or auto"),
+            Option("output"; short="o", type=String, default="", description="Export results to file"),
+            Option("format"; short="f", type=String, default="table", description="table|csv|json"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
+        ],
+        flags=[Flag("plot"; description="Open interactive plot in browser")],
+        description="Historical decomposition of DSGE model via Kalman smoother")
+
     # ── Bayesian DSGE sub-commands (NodeCommand with 7 leaves) ──
 
     _bayes_common_options = [
@@ -209,6 +223,21 @@ function register_dsge_commands!()
         ],
         description="Posterior predictive checks")
 
+    bayes_hd = LeafCommand("hd", _dsge_bayes_hd;
+        args=[Argument("model"; description="Path to DSGE model file (.toml or .jl)")],
+        options=[_bayes_common_options...,
+            Option("n-hd-draws"; type=Int, default=200, description="Number of posterior draws for HD"),
+            Option("quantiles"; type=String, default="0.16,0.5,0.84", description="Quantile levels"),
+            Option("horizon"; short="h", type=Int, default=40, description="IRF horizon"),
+            Option("plot-save"; type=String, default="", description="Save plot to HTML file"),
+        ],
+        flags=[
+            Flag("mode-only"; description="Use posterior mode only (no full posterior)"),
+            Flag("delayed-acceptance"; description="Use delayed acceptance for MH"),
+            Flag("plot"; description="Open interactive plot in browser"),
+        ],
+        description="Historical decomposition from Bayesian DSGE posterior")
+
     bayes_subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "estimate"   => bayes_estimate,
         "irf"        => bayes_irf,
@@ -217,6 +246,7 @@ function register_dsge_commands!()
         "summary"    => bayes_summary,
         "compare"    => bayes_compare,
         "predictive" => bayes_predictive,
+        "hd"         => bayes_hd,
     )
     bayes_node = NodeCommand("bayes", bayes_subcmds,
         "Bayesian DSGE: estimation, IRF, FEVD, simulation, summary, comparison, predictive checks")
@@ -230,6 +260,7 @@ function register_dsge_commands!()
         "bayes"              => bayes_node,
         "perfect-foresight"  => dsge_pf,
         "steady-state"       => dsge_ss,
+        "hd"                 => dsge_hd,
     )
     return NodeCommand("dsge", subcmds, "DSGE models: solve, IRF, FEVD, simulate, estimate, Bayesian, OccBin, perfect foresight")
 end
@@ -823,4 +854,93 @@ function _dsge_bayes_predictive(; model::String, data::String="", params::String
     )
     output_result(pp_df; format=Symbol(format), output=output,
                   title="Posterior Predictive Summary ($sampler, n=$n_sim, T=$periods)")
+end
+
+function _dsge_hd(; model::String, data::String="", observables::String="",
+                   states::String="observables",
+                   measurement_error::String="",
+                   output::String="", format::String="table",
+                   plot::Bool=false, plot_save::String="")
+    isempty(data) && error("--data is required for DSGE historical decomposition")
+    isempty(observables) && error("--observables is required (comma-separated variable names)")
+
+    spec = _load_dsge_model(model)
+    sol = _solve_dsge(spec)
+
+    df = load_data(data)
+    Y = df_to_matrix(df)
+    obs_syms = Symbol[Symbol(strip(s)) for s in split(observables, ",")]
+
+    println("DSGE Historical Decomposition")
+    println("  Model: $model")
+    println("  Observations: $(size(Y, 1)), Observable variables: $(length(obs_syms))")
+    println("  States: $states")
+    println()
+
+    me = if isempty(measurement_error)
+        nothing
+    elseif measurement_error == "auto"
+        :auto
+    else
+        [parse(Float64, strip(s)) for s in split(measurement_error, ",")]
+    end
+
+    hd = historical_decomposition(sol, Y, obs_syms;
+        states=Symbol(states), measurement_error=me)
+
+    ok = verify_decomposition(hd)
+    ok && printstyled("  Decomposition verified\n"; color=:green)
+
+    for (si, sname) in enumerate(hd.shock_names)
+        contrib = hd.contributions[:, :, si]
+        contrib_df = DataFrame(contrib, hd.variables)
+        insertcols!(contrib_df, 1, :t => 1:hd.T_eff)
+        output_result(contrib_df; format=Symbol(format), output=output,
+            title="Shock: $sname contributions")
+    end
+
+    _maybe_plot(hd; plot=plot, plot_save=plot_save)
+    return hd
+end
+
+function _dsge_bayes_hd(; model::String, data::String="", params::String="",
+                         priors::String="", observables::String="",
+                         sampler::String="smc", n_smc::Int=5000,
+                         n_particles::Int=500,
+                         n_draws::Int=10000, burnin::Int=5000,
+                         ess_target::Float64=0.5,
+                         solver::String="gensys", order::Int=1,
+                         n_hd_draws::Int=200, quantiles::String="0.16,0.5,0.84",
+                         mode_only::Bool=false,
+                         delayed_acceptance::Bool=false,
+                         horizon::Int=40,
+                         output::String="", format::String="table",
+                         plot::Bool=false, plot_save::String="")
+    isempty(observables) && error("--observables is required (comma-separated variable names)")
+
+    bd = _dsge_bayes_run_estimation(; model, data, params, priors, sampler,
+        n_smc, n_particles, n_draws, burnin, ess_target, observables,
+        solver, order, delayed_acceptance)
+
+    df = load_data(data)
+    Y = df_to_matrix(df)
+    obs_syms = Symbol[Symbol(strip(s)) for s in split(observables, ",")]
+    q_levels = [parse(Float64, strip(s)) for s in split(quantiles, ",")]
+
+    println("Historical Decomposition from Bayesian DSGE posterior")
+    println()
+
+    hd = historical_decomposition(bd, Y, obs_syms;
+        mode_only=mode_only, n_draws=n_hd_draws, quantiles=q_levels)
+
+    for (si, sname) in enumerate(hd.shock_names)
+        pe = hd.point_estimate[:, :, si]
+        pe_df = DataFrame(pe, hd.variables)
+        insertcols!(pe_df, 1, :t => 1:hd.T_eff)
+        output_result(pe_df; format=Symbol(format), output=output,
+            title="Shock: $sname (posterior mean)")
+    end
+
+    _maybe_plot(hd; plot=plot, plot_save=plot_save)
+    return hd
 end
