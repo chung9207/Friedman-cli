@@ -39,8 +39,15 @@ Macroeconometric analysis from the terminal. A Julia CLI wrapping [MacroEconomet
 | **Cointegration** | Johansen trace and max eigenvalue | `test johansen` |
 | **Diagnostics** | Normality, identifiability, ARCH-LM, Ljung-Box, heteroskedasticity | `test normality`, ... |
 | **Model Comparison** | Granger causality, LR test, LM test | `test granger`, `test lr`, `test lm` |
+| **Panel Regression** | FE/RE/BE/pooled OLS, panel IV (2SLS), panel logit/probit | `estimate preg`, `estimate piv`, `estimate plogit`, `estimate pprobit` |
+| **Panel Specification Tests** | Hausman, Breusch-Pagan LM, F-test FE, Pesaran CD, Wooldridge AR, Modified Wald | `test hausman`, `test breusch-pagan`, ... |
+| **Ordered & Multinomial** | Ordered logit/probit, multinomial logit | `estimate ologit`, `estimate oprobit`, `estimate mlogit` |
+| **Discrete Choice Tests** | Brant parallel regression test, Hausman-McFadden IIA test | `test brant`, `test hausman-iia` |
+| **DSGE HD** | Historical decomposition from solved/Bayesian DSGE | `dsge hd`, `dsge bayes hd` |
+| **Spectral Analysis** | ACF/PACF, periodogram, spectral density, cross-spectrum, transfer function | `spectral acf`, `spectral density`, ... |
+| **Data Utilities** | Drop rows with missing values, keep rows by condition | `data dropna`, `data keeprows` |
 
-**13 top-level commands, ~164 subcommands.** Action-first CLI: commands organized by action (`estimate`, `irf`, `forecast`, `did`, ...) rather than by model type.
+**14 top-level commands, ~200 subcommands.** Action-first CLI: commands organized by action (`estimate`, `irf`, `forecast`, `did`, ...) rather than by model type.
 
 ## Quick Start
 
@@ -111,6 +118,9 @@ Pages = [
     "commands/favar.md",
     "commands/structural-breaks.md",
     "commands/panel-unit-root.md",
+    "commands/spectral.md",
+    "commands/panel-regression.md",
+    "commands/ordered-multinomial.md",
     "configuration.md",
     "api.md",
     "architecture.md",

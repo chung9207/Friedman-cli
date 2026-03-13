@@ -1,6 +1,6 @@
 # test
 
-Statistical tests: unit root (including Fourier, DF-GLS, LM with breaks, ADF 2-break), cointegration (including Gregory-Hansen), diagnostics, identification, model comparison, structural breaks, panel unit root, and multicollinearity (VIF). 29 subcommands plus nested `var` (2) and `pvar` (4) nodes.
+Statistical tests: unit root (including Fourier, DF-GLS, LM with breaks, ADF 2-break), cointegration (including Gregory-Hansen), diagnostics, identification, model comparison, structural breaks, panel unit root, panel specification, discrete choice, and multicollinearity (VIF). 41 subcommands plus nested `var` (2) and `pvar` (4) nodes.
 
 ## Unit Root Tests
 
@@ -534,6 +534,157 @@ friedman test vif data.csv --dep=wage --cov-type=hc1
 
 **Output:** Per-regressor VIF and tolerance values, with colored warnings (VIF > 5 moderate, VIF > 10 severe).
 
+## Panel Specification Tests
+
+### test hausman
+
+Hausman specification test for fixed effects vs random effects in panel models.
+
+```bash
+friedman test hausman panel.csv --dep=gdp --indep=investment,trade
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name |
+| `--indep` | | String | | Comma-separated independent variable names |
+| `--id-col` | | String | (auto) | Panel group identifier column |
+| `--time-col` | | String | (auto) | Panel time identifier column |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Hausman statistic, degrees of freedom, p-value, recommendation (FE or RE).
+
+### test breusch-pagan
+
+Breusch-Pagan LM test for random effects. H0: no random effects (pooled OLS is appropriate).
+
+```bash
+friedman test breusch-pagan panel.csv --dep=gdp --indep=investment,trade
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name |
+| `--indep` | | String | | Comma-separated independent variable names |
+| `--id-col` | | String | (auto) | Panel group identifier column |
+| `--time-col` | | String | (auto) | Panel time identifier column |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** LM statistic, p-value, rejection decision.
+
+### test f-fe
+
+F-test for the joint significance of individual fixed effects. H0: all individual effects are zero.
+
+```bash
+friedman test f-fe panel.csv --dep=gdp --indep=investment,trade
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name |
+| `--indep` | | String | | Comma-separated independent variable names |
+| `--id-col` | | String | (auto) | Panel group identifier column |
+| `--time-col` | | String | (auto) | Panel time identifier column |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** F-statistic, numerator/denominator df, p-value.
+
+### test pesaran-cd
+
+Pesaran CD test for cross-sectional dependence in panel data. H0: cross-sectional independence.
+
+```bash
+friedman test pesaran-cd panel.csv --dep=gdp --indep=investment,trade
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name |
+| `--indep` | | String | | Comma-separated independent variable names |
+| `--id-col` | | String | (auto) | Panel group identifier column |
+| `--time-col` | | String | (auto) | Panel time identifier column |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** CD statistic, p-value, rejection decision.
+
+### test wooldridge-ar
+
+Wooldridge test for first-order serial correlation in panel data. H0: no serial correlation.
+
+```bash
+friedman test wooldridge-ar panel.csv --dep=gdp --indep=investment,trade
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name |
+| `--indep` | | String | | Comma-separated independent variable names |
+| `--id-col` | | String | (auto) | Panel group identifier column |
+| `--time-col` | | String | (auto) | Panel time identifier column |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** F-statistic, p-value, rejection decision.
+
+### test modified-wald
+
+Modified Wald test for groupwise heteroskedasticity in FE panel models. H0: homoskedastic errors.
+
+```bash
+friedman test modified-wald panel.csv --dep=gdp --indep=investment,trade
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name |
+| `--indep` | | String | | Comma-separated independent variable names |
+| `--id-col` | | String | (auto) | Panel group identifier column |
+| `--time-col` | | String | (auto) | Panel time identifier column |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Wald statistic, degrees of freedom, p-value.
+
+## Discrete Choice Tests
+
+### test brant
+
+Brant test for the parallel regression (proportional odds) assumption in ordered logit models. H0: proportional odds hold.
+
+```bash
+friedman test brant data.csv --dep=satisfaction
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name (ordered integer) |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Overall and per-variable Brant statistics with p-values; rejection indicates violation of the parallel regression assumption.
+
+### test hausman-iia
+
+Hausman-McFadden IIA (Independence of Irrelevant Alternatives) test for multinomial logit. H0: IIA holds for the omitted category.
+
+```bash
+friedman test hausman-iia data.csv --dep=choice --omit-category=3
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name (categorical integer) |
+| `--omit-category` | | Int | (last) | Category to omit when testing IIA |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Hausman chi-squared statistic, degrees of freedom, p-value; rejection suggests IIA violation.
+
 ## See Also
 
-For structural break tests (`test andrews`, `test bai-perron`), see [Structural Breaks](structural-breaks.md). For panel unit root tests (`test panic`, `test cips`, `test moon-perron`, `test factor-break`), see [Panel Unit Root](panel-unit-root.md).
+For structural break tests (`test andrews`, `test bai-perron`), see [Structural Breaks](structural-breaks.md). For panel unit root tests (`test panic`, `test cips`, `test moon-perron`, `test factor-break`), see [Panel Unit Root](panel-unit-root.md). For panel regression specification tests, see [Panel Regression](panel-regression.md). For ordered/multinomial tests, see [Ordered & Multinomial](ordered-multinomial.md).

@@ -8,36 +8,44 @@ Friedman-cli uses an **action-first** command hierarchy: commands are organized 
 friedman
 ├── estimate     var | bvar | lp | arima | gmm | smm | static | dynamic | gdfm |
 │                arch | garch | egarch | gjr_garch | sv | fastica | ml | vecm | pvar |
-│                favar | sdfm | reg | iv | logit | probit
+│                favar | sdfm | reg | iv | logit | probit |
+│                preg | piv | plogit | pprobit |
+│                ologit | oprobit | mlogit
 ├── test         adf | kpss | pp | za | np | johansen | normality |
 │                identifiability | heteroskedasticity | arch_lm | ljung_box |
 │                granger | lr | lm | andrews | bai-perron |
 │                panic | cips | moon-perron | factor-break |
 │                fourier-adf | fourier-kpss | dfgls | lm-unitroot |
 │                adf-2break | gregory-hansen | vif |
+│                hausman | breusch-pagan | f-fe | pesaran-cd |
+│                wooldridge-ar | modified-wald |
+│                brant | hausman-iia |
 │                var (lagselect | stability) |
 │                pvar (hansen_j | mmsc | lagselect | stability)
 ├── irf          var | bvar | lp | vecm | pvar | favar | sdfm
 ├── fevd         var | bvar | lp | vecm | pvar | favar | sdfm
-├── hd           var | bvar | lp | vecm | favar
+├── hd           var | bvar | lp | vecm | favar | dsge | dsge-bayes
 ├── forecast     var | bvar | lp | arima | static | dynamic | gdfm |
 │                arch | garch | egarch | gjr_garch | sv | vecm | favar
 ├── predict      var | bvar | arima | vecm | static | dynamic | gdfm |
-│                arch | garch | egarch | gjr_garch | sv | favar | reg | logit | probit
+│                arch | garch | egarch | gjr_garch | sv | favar | reg | logit | probit |
+│                preg | piv | plogit | pprobit | ologit | oprobit | mlogit
 ├── residuals    var | bvar | arima | vecm | static | dynamic | gdfm |
-│                arch | garch | egarch | gjr_garch | sv | favar | reg | logit | probit
+│                arch | garch | egarch | gjr_garch | sv | favar | reg | logit | probit |
+│                preg | piv | plogit | pprobit | ologit | oprobit | mlogit
 ├── filter       hp | hamilton | bn | bk | bhp
 ├── data         list | load | describe | diagnose | fix | transform | filter |
-│                validate | balance
+│                validate | balance | dropna | keeprows
 ├── nowcast      dfm | bvar | bridge | news | forecast
-├── dsge         solve | irf | fevd | simulate | estimate |
+├── dsge         solve | irf | fevd | hd | simulate | estimate |
 │                perfect-foresight | steady-state |
-│                bayes (estimate | irf | fevd | simulate | summary | compare | predictive)
-└── did          estimate | event-study | lp-did |
-                 test (bacon | pretrend | negweight | honest)
+│                bayes (estimate | irf | fevd | hd | simulate | summary | compare | predictive)
+├── did          estimate | event-study | lp-did |
+│                test (bacon | pretrend | negweight | honest)
+└── spectral     acf | periodogram | density | cross | transfer
 ```
 
-**Total: 13 top-level commands, ~164 subcommands.**
+**Total: 14 top-level commands, ~200 subcommands.**
 
 Additionally, `friedman repl` launches an [interactive REPL session](@ref Interactive-REPL) with persistent data loading, result caching, and tab completion.
 

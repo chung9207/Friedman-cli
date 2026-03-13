@@ -1,6 +1,6 @@
 # data
 
-Data management commands: load example datasets, inspect, clean, transform, and validate data. 9 subcommands.
+Data management commands: load example datasets, inspect, clean, transform, and validate data. 11 subcommands.
 
 ## data list
 
@@ -178,3 +178,38 @@ friedman data balance data.csv --output=balanced.csv
 | `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
 
 **Output:** Balanced panel with imputed values.
+
+## data dropna
+
+Drop all rows containing NaN or missing values from a dataset.
+
+```bash
+friedman data dropna data.csv
+friedman data dropna data.csv --output=data_clean.csv
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--output` | `-o` | String | auto | Output CSV file path |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+
+**Output:** Cleaned dataset with missing rows removed, plus a summary of rows dropped.
+
+## data keeprows
+
+Keep only rows satisfying a condition on a specified column.
+
+```bash
+friedman data keeprows data.csv --col=year --op=ge --val=1990
+friedman data keeprows data.csv --col=country --op=eq --val=USA --output=usa.csv
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--col` | `-c` | String | (required) | Column name to filter on |
+| `--op` | | String | (required) | Comparison operator: `eq`, `ne`, `lt`, `le`, `gt`, `ge` |
+| `--val` | | String | (required) | Value to compare against |
+| `--output` | `-o` | String | auto | Output CSV file path |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+
+**Output:** Filtered dataset containing only rows that satisfy the condition.

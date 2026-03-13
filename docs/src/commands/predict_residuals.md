@@ -1,6 +1,6 @@
 # predict & residuals
 
-In-sample fitted values (`predict`) and model residuals (`residuals`). 16 subcommands each, covering time series, volatility, factor, and cross-sectional regression models.
+In-sample fitted values (`predict`) and model residuals (`residuals`). 23 subcommands each, covering time series, volatility, factor, cross-sectional regression, panel regression, and ordered/multinomial choice models.
 
 Both commands share identical subcommand structure and options. Each subcommand estimates the model and extracts fitted values or residuals.
 
@@ -24,6 +24,13 @@ Both commands share identical subcommand structure and options. Each subcommand 
 | `reg` | OLS/WLS regression |
 | `logit` | Logit regression |
 | `probit` | Probit regression |
+| `preg` | Panel regression (FE/RE/BE/pooled) |
+| `piv` | Panel IV (2SLS) regression |
+| `plogit` | Panel logit |
+| `pprobit` | Panel probit |
+| `ologit` | Ordered logit |
+| `oprobit` | Ordered probit |
+| `mlogit` | Multinomial logit |
 
 ## predict
 
@@ -109,3 +116,23 @@ Options match those in the corresponding `estimate` command for each model type.
 | `--threshold` | Classification threshold (default: 0.5, with `--classification-table`) |
 
 These flags are mutually exclusive with default fitted-values output.
+
+### Panel Regression Models (preg, piv, plogit, pprobit)
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name |
+| `--method` | | String | (varies) | Estimation method (fe/re/pooled for preg/piv) |
+| `--id-col` | | String | (auto) | Panel group identifier column |
+| `--time-col` | | String | (auto) | Panel time identifier column |
+
+For `piv`, also requires `--endog` and `--instruments`.
+
+### Ordered & Multinomial Models (ologit, oprobit, mlogit)
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name |
+| `--cov-type` | | String | `hc1` | Covariance type |
+
+`predict ologit`, `predict oprobit`, and `predict mlogit` return predicted category probabilities. `predict mlogit` supports `--base-category` to control the reference level.

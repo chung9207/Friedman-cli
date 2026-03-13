@@ -1,6 +1,6 @@
 # dsge
 
-DSGE modeling from the terminal. 7 direct subcommands (`solve`, `irf`, `fevd`, `simulate`, `estimate`, `perfect-foresight`, `steady-state`) plus a `bayes` node with 7 sub-leaves for the full Bayesian DSGE workflow.
+DSGE modeling from the terminal. 8 direct subcommands (`solve`, `irf`, `fevd`, `hd`, `simulate`, `estimate`, `perfect-foresight`, `steady-state`) plus a `bayes` node with 8 sub-leaves for the full Bayesian DSGE workflow.
 
 Friedman supports DSGE models specified as TOML files or Julia scripts. See [Configuration](../configuration.md#dsge-model) for TOML format details.
 
@@ -128,6 +128,27 @@ friedman dsge fevd rbc.toml --method=perturbation --order=2
 
 **Output:** Per-variable FEVD proportions table (columns = shocks, rows = horizons).
 
+## dsge hd
+
+Historical decomposition from a solved DSGE model.
+
+```bash
+friedman dsge hd rbc.toml --horizon=40
+friedman dsge hd rbc.toml --method=perturbation --order=2
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--method` | | String | `gensys` | Solution method |
+| `--order` | | Int | 1 | Perturbation order |
+| `--horizon` | `-h` | Int | 40 | HD horizon |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+| `--plot` | | Flag | | Open interactive plot in browser |
+| `--plot-save` | | String | | Save plot to HTML file |
+
+**Output:** Per-variable historical decomposition tables (columns = shocks, rows = time periods).
+
 ## dsge simulate
 
 Simulate from a solved DSGE model.
@@ -220,7 +241,7 @@ friedman dsge steady-state rbc.toml --constraints=occbin.toml
 
 ## dsge bayes
 
-Bayesian DSGE workflow. `bayes` is a **nested command group** with 7 sub-leaves: `estimate`, `irf`, `fevd`, `simulate`, `summary`, `compare`, `predictive`. All share common options for model specification, data, parameters, and priors.
+Bayesian DSGE workflow. `bayes` is a **nested command group** with 8 sub-leaves: `estimate`, `irf`, `fevd`, `hd`, `simulate`, `summary`, `compare`, `predictive`. All share common options for model specification, data, parameters, and priors.
 
 ### Common Options (all dsge bayes sub-commands)
 
@@ -273,6 +294,20 @@ friedman dsge bayes fevd rbc.toml --data=macro.csv --params=alpha,beta --priors=
 | Additional Option | Type | Default | Description |
 |-------------------|------|---------|-------------|
 | `--horizon` | Int | 40 | FEVD horizon |
+| `--plot` | Flag | | Open interactive plot |
+| `--plot-save` | String | | Save plot to HTML |
+
+### dsge bayes hd
+
+Bayesian DSGE historical decomposition with posterior uncertainty.
+
+```bash
+friedman dsge bayes hd rbc.toml --data=macro.csv --params=alpha,beta --priors=priors.toml --horizon=40
+```
+
+| Additional Option | Type | Default | Description |
+|-------------------|------|---------|-------------|
+| `--horizon` | Int | 40 | HD horizon |
 | `--plot` | Flag | | Open interactive plot |
 | `--plot-save` | String | | Save plot to HTML |
 

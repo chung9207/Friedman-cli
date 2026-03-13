@@ -1,6 +1,6 @@
 # estimate
 
-Estimate econometric models. 24 subcommands covering VAR, BVAR, VECM, Panel VAR, FAVAR, Structural DFM, cross-sectional regression (OLS/WLS/IV/Logit/Probit), local projections, ARIMA, GMM, SMM, factor models, volatility models, and non-Gaussian SVAR identification.
+Estimate econometric models. 31 subcommands covering VAR, BVAR, VECM, Panel VAR, FAVAR, Structural DFM, cross-sectional regression (OLS/WLS/IV/Logit/Probit), panel regression (FE/RE/IV/Logit/Probit), ordered and multinomial choice models, local projections, ARIMA, GMM, SMM, factor models, volatility models, and non-Gaussian SVAR identification.
 
 ## estimate var
 
@@ -495,3 +495,153 @@ friedman estimate probit data.csv --dep=default --clusters=state
 | `--output` | `-o` | String | | Export file path |
 
 **Output:** Coefficient table + fit statistics (pseudo R², log-likelihood, AIC, BIC, convergence).
+
+## Panel Regression Models
+
+### estimate preg
+
+Panel regression with fixed effects (FE), random effects (RE), between effects (BE), or pooled OLS. Supports two-way fixed effects.
+
+```bash
+friedman estimate preg panel.csv --dep=gdp --indep=investment,trade --method=fe
+friedman estimate preg panel.csv --dep=gdp --indep=investment,trade --method=re --twoway
+friedman estimate preg panel.csv --id-col=country --time-col=year --dep=gdp --method=pooled
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name |
+| `--indep` | | String | | Comma-separated independent variable names |
+| `--method` | | String | `fe` | `fe`, `re`, `be`, `pooled` |
+| `--twoway` | | Flag | | Include time fixed effects (two-way FE/RE) |
+| `--id-col` | | String | (auto) | Panel group identifier column |
+| `--time-col` | | String | (auto) | Panel time identifier column |
+| `--cov-type` | | String | `cluster` | `ols`, `hc1`, `cluster` |
+| `--clusters` | | String | | Cluster variable column name |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Coefficient table with SE, t-stat, p-value; within/between/overall R²; F-statistic.
+
+### estimate piv
+
+Panel IV (2SLS) regression with panel-robust standard errors.
+
+```bash
+friedman estimate piv panel.csv --dep=gdp --exog=trade --endog=investment --instruments=lag_inv
+friedman estimate piv panel.csv --dep=gdp --endog=investment,credit --instruments=z1,z2,z3 --method=fe
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name |
+| `--exog` | | String | | Comma-separated exogenous regressor names |
+| `--endog` | | String | (required) | Comma-separated endogenous regressor names |
+| `--instruments` | | String | (required) | Comma-separated instrument column names |
+| `--method` | | String | `fe` | `fe`, `re`, `pooled` |
+| `--id-col` | | String | (auto) | Panel group identifier column |
+| `--time-col` | | String | (auto) | Panel time identifier column |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Coefficient table + IV diagnostics (first-stage F-statistic, Sargan test).
+
+### estimate plogit
+
+Panel logit regression (pooled MLE or random effects).
+
+```bash
+friedman estimate plogit panel.csv --dep=employed --method=re
+friedman estimate plogit panel.csv --dep=default --method=pooled
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name (binary 0/1) |
+| `--method` | | String | `pooled` | `pooled`, `re` |
+| `--id-col` | | String | (auto) | Panel group identifier column |
+| `--time-col` | | String | (auto) | Panel time identifier column |
+| `--maxiter` | | Int | 100 | Maximum iterations |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Coefficient table + fit statistics (pseudo R², log-likelihood, AIC, BIC).
+
+### estimate pprobit
+
+Panel probit regression (pooled MLE or random effects).
+
+```bash
+friedman estimate pprobit panel.csv --dep=employed --method=pooled
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name (binary 0/1) |
+| `--method` | | String | `pooled` | `pooled`, `re` |
+| `--id-col` | | String | (auto) | Panel group identifier column |
+| `--time-col` | | String | (auto) | Panel time identifier column |
+| `--maxiter` | | Int | 100 | Maximum iterations |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Coefficient table + fit statistics (pseudo R², log-likelihood, AIC, BIC).
+
+## Ordered & Multinomial Choice Models
+
+### estimate ologit
+
+Ordered logit regression for ordered categorical outcomes.
+
+```bash
+friedman estimate ologit data.csv --dep=satisfaction
+friedman estimate ologit data.csv --dep=rating --cov-type=hc1
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name (ordered integer) |
+| `--cov-type` | | String | `hc1` | `ols`, `hc0`, `hc1`, `hc2`, `hc3` |
+| `--maxiter` | | Int | 100 | Maximum IRLS iterations |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Coefficient table, threshold parameters, pseudo R², log-likelihood, AIC, BIC.
+
+### estimate oprobit
+
+Ordered probit regression for ordered categorical outcomes.
+
+```bash
+friedman estimate oprobit data.csv --dep=satisfaction
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name (ordered integer) |
+| `--cov-type` | | String | `hc1` | `ols`, `hc0`, `hc1`, `hc2`, `hc3` |
+| `--maxiter` | | Int | 100 | Maximum iterations |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Coefficient table, threshold parameters, pseudo R², log-likelihood, AIC, BIC.
+
+### estimate mlogit
+
+Multinomial logit regression for unordered categorical outcomes.
+
+```bash
+friedman estimate mlogit data.csv --dep=choice
+friedman estimate mlogit data.csv --dep=mode --base-category=1
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--dep` | | String | (1st col) | Dependent variable column name (categorical integer) |
+| `--base-category` | | Int | 1 | Reference category |
+| `--cov-type` | | String | `hc1` | `ols`, `hc0`, `hc1`, `hc2`, `hc3` |
+| `--maxiter` | | Int | 100 | Maximum iterations |
+| `--format` | `-f` | String | `table` | `table`, `csv`, `json` |
+| `--output` | `-o` | String | | Export file path |
+
+**Output:** Per-category coefficient tables (relative to base category), pseudo R², log-likelihood, AIC, BIC.
