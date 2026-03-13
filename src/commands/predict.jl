@@ -191,6 +191,49 @@ function register_predict_commands!()
         ],
         description="Probit in-sample fitted probabilities")
 
+    pred_preg = LeafCommand("preg", _predict_preg;
+        args=[Argument("data"; description="Path to CSV panel data file")],
+        options=[_PREG_COMMON_OPTIONS[1:2]..., _PREG_COMMON_OPTIONS[3:4]...,
+                 _PREG_COMMON_OPTIONS[5:6]..., _PREG_COMMON_OPTIONS[7:8]...],
+        description="In-sample fitted values from panel regression")
+
+    pred_piv = LeafCommand("piv", _predict_piv;
+        args=[Argument("data"; description="Path to CSV panel data file")],
+        options=[Option("dep"; type=String, default="", description="Dependent variable"),
+                 Option("exog"; type=String, default="", description="Exogenous regressors (comma-separated)"),
+                 Option("endog"; type=String, default="", description="Endogenous regressors (comma-separated)"),
+                 Option("instruments"; type=String, default="", description="Instruments (comma-separated)"),
+                 _PREG_COMMON_OPTIONS[3:4]..., _PREG_COMMON_OPTIONS[5:6]...,
+                 _PREG_COMMON_OPTIONS[7:8]...],
+        description="In-sample fitted values from panel IV regression")
+
+    pred_plogit = LeafCommand("plogit", _predict_plogit;
+        args=[Argument("data"; description="Path to CSV panel data file")],
+        options=[_PREG_COMMON_OPTIONS[1:2]..., _PREG_COMMON_OPTIONS[3:4]...,
+                 _PREG_COMMON_OPTIONS[5:6]..., _PREG_COMMON_OPTIONS[7:8]...],
+        description="In-sample fitted probabilities from panel logit")
+
+    pred_pprobit = LeafCommand("pprobit", _predict_pprobit;
+        args=[Argument("data"; description="Path to CSV panel data file")],
+        options=[_PREG_COMMON_OPTIONS[1:2]..., _PREG_COMMON_OPTIONS[3:4]...,
+                 _PREG_COMMON_OPTIONS[5:6]..., _PREG_COMMON_OPTIONS[7:8]...],
+        description="In-sample fitted probabilities from panel probit")
+
+    pred_ologit = LeafCommand("ologit", _predict_ologit;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[_REG_COMMON_OPTIONS...],
+        description="Predicted probabilities from ordered logit")
+
+    pred_oprobit = LeafCommand("oprobit", _predict_oprobit;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[_REG_COMMON_OPTIONS...],
+        description="Predicted probabilities from ordered probit")
+
+    pred_mlogit = LeafCommand("mlogit", _predict_mlogit;
+        args=[Argument("data"; description="Path to CSV data file")],
+        options=[_REG_COMMON_OPTIONS...],
+        description="Predicted probabilities from multinomial logit")
+
     subcmds = Dict{String,Union{NodeCommand,LeafCommand}}(
         "var"       => pred_var,
         "bvar"      => pred_bvar,
@@ -208,6 +251,13 @@ function register_predict_commands!()
         "reg"       => pred_reg,
         "logit"     => pred_logit,
         "probit"    => pred_probit,
+        "preg"      => pred_preg,
+        "piv"       => pred_piv,
+        "plogit"    => pred_plogit,
+        "pprobit"   => pred_pprobit,
+        "ologit"    => pred_ologit,
+        "oprobit"   => pred_oprobit,
+        "mlogit"    => pred_mlogit,
     )
     return NodeCommand("predict", subcmds, "In-sample predictions (fitted values)")
 end
@@ -711,4 +761,145 @@ function _predict_probit(; data::String="", dep::String="", cov_type::String="hc
         output_result(pred_df; format=Symbol(format), output=output,
                       title="Probit Fitted Probabilities")
     end
+end
+
+# ── Panel Regression Predict ────────────────────────────
+
+function _predict_preg(; data::String, dep::String="", indep::String="",
+                        method::String="fe", cov_type::String="cluster",
+                        id_col::String="", time_col::String="",
+                        output::String="", format::String="table")
+    isempty(dep) && error("--dep is required")
+    pd = _load_panel_for_preg(data, id_col, time_col)
+    indep_syms = _parse_indep_vars(pd, dep, indep)
+
+    model = estimate_xtreg(pd, Symbol(dep), indep_syms;
+        model=_to_sym(method), cov_type=_to_sym(cov_type))
+
+    println("Panel Regression Fitted Values ($method): $dep")
+    println()
+
+    fitted = predict(model)
+    pred_df = DataFrame(observation=1:length(fitted), fitted_value=round.(fitted; digits=6))
+    output_result(pred_df; format=Symbol(format), output=output,
+                  title="Panel Regression Fitted Values ($method)")
+end
+
+function _predict_piv(; data::String, dep::String="", exog::String="",
+                       endog::String="", instruments::String="",
+                       method::String="fe", cov_type::String="cluster",
+                       id_col::String="", time_col::String="",
+                       output::String="", format::String="table")
+    isempty(dep) && error("--dep is required")
+    isempty(endog) && error("--endog is required")
+    pd = _load_panel_for_preg(data, id_col, time_col)
+
+    exog_syms = isempty(exog) ? Symbol[] : Symbol[Symbol(strip(s)) for s in split(exog, ",")]
+    endog_syms = Symbol[Symbol(strip(s)) for s in split(endog, ",")]
+    inst_syms = isempty(instruments) ? Symbol[] : Symbol[Symbol(strip(s)) for s in split(instruments, ",")]
+
+    model = estimate_xtiv(pd, Symbol(dep), exog_syms, endog_syms;
+        instruments=inst_syms, model=_to_sym(method), cov_type=_to_sym(cov_type))
+
+    println("Panel IV Fitted Values ($method): $dep")
+    println()
+
+    fitted = predict(model)
+    pred_df = DataFrame(observation=1:length(fitted), fitted_value=round.(fitted; digits=6))
+    output_result(pred_df; format=Symbol(format), output=output,
+                  title="Panel IV Fitted Values ($method)")
+end
+
+function _predict_plogit(; data::String, dep::String="", indep::String="",
+                          method::String="pooled", cov_type::String="cluster",
+                          id_col::String="", time_col::String="",
+                          output::String="", format::String="table")
+    isempty(dep) && error("--dep is required")
+    pd = _load_panel_for_preg(data, id_col, time_col)
+    indep_syms = _parse_indep_vars(pd, dep, indep)
+
+    model = estimate_xtlogit(pd, Symbol(dep), indep_syms;
+        model=_to_sym(method), cov_type=_to_sym(cov_type))
+
+    println("Panel Logit Fitted Probabilities ($method): $dep")
+    println()
+
+    fitted = predict(model)
+    pred_df = DataFrame(observation=1:length(fitted), fitted_prob=round.(fitted; digits=6))
+    output_result(pred_df; format=Symbol(format), output=output,
+                  title="Panel Logit Fitted Probabilities ($method)")
+end
+
+function _predict_pprobit(; data::String, dep::String="", indep::String="",
+                           method::String="pooled", cov_type::String="cluster",
+                           id_col::String="", time_col::String="",
+                           output::String="", format::String="table")
+    isempty(dep) && error("--dep is required")
+    pd = _load_panel_for_preg(data, id_col, time_col)
+    indep_syms = _parse_indep_vars(pd, dep, indep)
+
+    model = estimate_xtprobit(pd, Symbol(dep), indep_syms;
+        model=_to_sym(method), cov_type=_to_sym(cov_type))
+
+    println("Panel Probit Fitted Probabilities ($method): $dep")
+    println()
+
+    fitted = predict(model)
+    pred_df = DataFrame(observation=1:length(fitted), fitted_prob=round.(fitted; digits=6))
+    output_result(pred_df; format=Symbol(format), output=output,
+                  title="Panel Probit Fitted Probabilities ($method)")
+end
+
+# ── Ordered/Multinomial Predict ─────────────────────────
+
+function _predict_ologit(; data::String="", dep::String="", cov_type::String="hc1",
+                          clusters::String="",
+                          output::String="", format::String="table")
+    y, X, xcols = _load_reg_data(data, dep)
+    cl = _load_clusters(data, clusters)
+    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+
+    model = estimate_ologit(y, X; cov_type=Symbol(cov_type), varnames=xcols, clusters=cl)
+
+    println("Ordered Logit Predicted Probabilities: $dep_name")
+    println()
+
+    fitted = predict(model)
+    pred_df = DataFrame(observation=1:length(fitted), fitted_prob=round.(fitted; digits=6))
+    output_result(pred_df; format=Symbol(format), output=output,
+                  title="Ordered Logit Predicted Probabilities")
+end
+
+function _predict_oprobit(; data::String="", dep::String="", cov_type::String="hc1",
+                           clusters::String="",
+                           output::String="", format::String="table")
+    y, X, xcols = _load_reg_data(data, dep)
+    cl = _load_clusters(data, clusters)
+    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+
+    model = estimate_oprobit(y, X; cov_type=Symbol(cov_type), varnames=xcols, clusters=cl)
+
+    println("Ordered Probit Predicted Probabilities: $dep_name")
+    println()
+
+    fitted = predict(model)
+    pred_df = DataFrame(observation=1:length(fitted), fitted_prob=round.(fitted; digits=6))
+    output_result(pred_df; format=Symbol(format), output=output,
+                  title="Ordered Probit Predicted Probabilities")
+end
+
+function _predict_mlogit(; data::String="", dep::String="", cov_type::String="ols",
+                          output::String="", format::String="table")
+    y, X, xcols = _load_reg_data(data, dep)
+    dep_name = isempty(dep) ? variable_names(load_data(data))[1] : dep
+
+    model = estimate_mlogit(y, X; cov_type=Symbol(cov_type), varnames=xcols)
+
+    println("Multinomial Logit Predicted Probabilities: $dep_name")
+    println()
+
+    fitted = predict(model)
+    pred_df = DataFrame(observation=1:length(fitted), fitted_prob=round.(fitted; digits=6))
+    output_result(pred_df; format=Symbol(format), output=output,
+                  title="Multinomial Logit Predicted Probabilities")
 end
