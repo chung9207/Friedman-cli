@@ -49,6 +49,7 @@ include("commands/data.jl")
 include("commands/nowcast.jl")
 include("commands/dsge.jl")
 include("commands/did.jl")
+include("commands/spectral.jl")
 
 # REPL (interactive session)
 include("repl.jl")
@@ -75,6 +76,7 @@ function build_app()
         "nowcast"   => register_nowcast_commands!(),
         "dsge"      => register_dsge_commands!(),
         "did"       => register_did_commands!(),
+        "spectral"  => register_spectral_commands!(),
     )
 
     root = NodeCommand("friedman", root_cmds,
