@@ -3521,3 +3521,40 @@ end
     @test "method" in fb_opts
     @test "id-col" in fb_opts
 end
+
+@testset "Spectral command structure" begin
+    spectral_node = register_spectral_commands!()
+    @test spectral_node isa NodeCommand
+    @test length(spectral_node.subcmds) == 5
+
+    @test haskey(spectral_node.subcmds, "acf")
+    acf_cmd = spectral_node.subcmds["acf"]
+    @test acf_cmd isa LeafCommand
+    acf_opts = [o.name for o in acf_cmd.options]
+    @test "column" in acf_opts
+    @test "max-lag" in acf_opts
+
+    @test haskey(spectral_node.subcmds, "periodogram")
+    peri_cmd = spectral_node.subcmds["periodogram"]
+    @test peri_cmd isa LeafCommand
+
+    @test haskey(spectral_node.subcmds, "density")
+    dens_cmd = spectral_node.subcmds["density"]
+    @test dens_cmd isa LeafCommand
+    dens_opts = [o.name for o in dens_cmd.options]
+    @test "method" in dens_opts
+
+    @test haskey(spectral_node.subcmds, "cross")
+    cross_cmd = spectral_node.subcmds["cross"]
+    @test cross_cmd isa LeafCommand
+    cross_opts = [o.name for o in cross_cmd.options]
+    @test "var1" in cross_opts
+    @test "var2" in cross_opts
+
+    @test haskey(spectral_node.subcmds, "transfer")
+    trans_cmd = spectral_node.subcmds["transfer"]
+    @test trans_cmd isa LeafCommand
+    trans_opts = [o.name for o in trans_cmd.options]
+    @test "filter" in trans_opts
+    @test "lambda" in trans_opts
+end
