@@ -25,6 +25,10 @@ jobs:
             arch: x64
             platform: linux-x86_64
             archive_ext: tar.gz
+          - os: ubuntu-24.04-arm
+            arch: aarch64
+            platform: linux-aarch64
+            archive_ext: tar.gz
           - os: windows-latest
             arch: x64
             platform: windows-x86_64

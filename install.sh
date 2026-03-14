@@ -40,11 +40,18 @@ case "$OS" in
 esac
 
 case "$ARCH" in
-    arm64|aarch64) ARCH_NAME="arm64" ;;
-    x86_64|amd64)  ARCH_NAME="x86_64" ;;
+    arm64|aarch64)
+        # macOS reports arm64, Linux reports aarch64
+        if [ "$PLATFORM" = "darwin" ]; then
+            ARCH_NAME="arm64"
+        else
+            ARCH_NAME="aarch64"
+        fi
+        ;;
+    x86_64|amd64) ARCH_NAME="x86_64" ;;
     *)
         echo "Error: Unsupported architecture: $ARCH" >&2
-        echo "Supported: arm64, x86_64" >&2
+        echo "Supported: arm64/aarch64, x86_64" >&2
         exit 1
         ;;
 esac
