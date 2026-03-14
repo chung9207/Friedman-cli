@@ -1,6 +1,6 @@
 # MacroEconometricModels.jl API Reference
 
-Upstream library (v0.3.5): 300+ exports. Full docs: https://chung9207.github.io/MacroEconometricModels.jl/dev/
+Upstream library (v0.4.0): 350+ exports. Full docs: https://friedmanjp.github.io/MacroEconometricModels.jl/dev/
 Deps: DataFrames, Distributions, LinearAlgebra, Optim, MCMCChains, PrettyTables, Random, SparseArrays, SpecialFunctions, Statistics, StatsAPI, Turing. Weak: FFTW, JuMP/Ipopt/PATHSolver.
 
 ## Key Types
@@ -28,6 +28,10 @@ Deps: DataFrames, Distributions, LinearAlgebra, Optim, MCMCChains, PrettyTables,
 **Regression:** `RegModel{T}` (OLS/WLS), `IVModel{T}` (2SLS), `LogitModel{T}`, `ProbitModel{T}`, `MarginalEffects{T}` — cross-sectional regression types
 **Advanced unit root:** `FourierADFResult{T}`, `FourierKPSSResult{T}`, `DFGLSResult{T}`, `LMUnitRootResult{T}`, `ADF2BreakResult{T}`, `GregoryHansenResult{T}`
 **Panel unit root:** `PANICResult{T}`, `PesaranCIPSResult{T}`, `MoonPerronResult{T}`, `FactorBreakResult{T}`
+**Panel regression (v0.4.0):** `PanelRegModel{T}` (beta, var_beta, within_r2, effect_type), `PanelIVModel{T}` (beta, var_beta, first_stage_f, sargan_stat), `PanelLogitModel{T}`, `PanelProbitModel{T}` — panel FE/RE/pooled regression types
+**Ordered/multinomial choice (v0.4.0):** `OrderedLogitModel{T}` (beta, thresholds/cutpoints, categories), `OrderedProbitModel{T}`, `MultinomialLogitModel{T}` (beta::Matrix, base_category) — discrete choice models
+**Spectral analysis (v0.4.0):** `ACFResult{T}` (acf, pacf, lags, ci, q_stats, q_pvals), `SpectralDensityResult{T}` (frequencies, density, log_density), `CrossSpectrumResult{T}` (coherence, phase, gain), `TransferFunctionResult{T}` (gain, phase, coherence)
+**Panel diagnostics (v0.4.0):** `PanelTestResult{T}` — used by hausman, breusch-pagan, pesaran-cd, wooldridge, modified-wald, f-fe, fisher, brant, hausman-iia tests
 
 ## Functions by Domain
 
@@ -55,6 +59,7 @@ Tests: `normality_test_suite`, `test_identification_strength`, `test_shock_gauss
 `irf_median(result)`, `irf_bounds(result)`, `cumulative_irf(irf)`
 `fevd(model, horizon; method)` | `fevd(chain, p, n, horizon; quantiles)` | `fevd(sol, horizon)`
 `historical_decomposition(model, horizon; method)` | `historical_decomposition(chain, p, n, horizon; data, quantiles)` | `historical_decomposition(model, restrictions, horizon)`
+`historical_decomposition(sol::DSGESolution, data; horizon)` | `historical_decomposition(bd::BayesianDSGE, data; horizon, quantiles)` — DSGE HD (v0.4.0)
 `contribution(hd, var, shock)`, `verify_decomposition(hd)`
 
 **LP:**
@@ -121,9 +126,10 @@ Accessors: `point_forecast(fc)`, `lower_bound(fc)`, `upper_bound(fc)`, `forecast
 `estimate_structural_dfm(X, q; identification, p, H, sign_check)` → StructuralDFM
 
 **Data:**
-`TimeSeriesData(data; varnames, frequency, tcode, time_index)` | `load_example(name)` — :fred_md/:fred_qd/:pwt
+`TimeSeriesData(data; varnames, frequency, tcode, time_index)` | `load_example(name)` — :fred_md/:fred_qd/:pwt/:mpdta/:ddcg
 `describe_data(d)`, `diagnose(d)`, `fix(d; method)`, `apply_tcode(d, codes)`, `validate_for_model(d, model_type)`
 `to_matrix(d)`, `varnames(d)`, `balance_panel(d)`, `set_dates!(d, dates)`, `dates(d)`
+`dropna(ts; vars, cols)`, `keeprows(ts, indices)` — row-level data filtering (v0.4.0)
 
 **Nowcast:**
 `nowcast_dfm(Y; factors, lags)`, `nowcast_bvar(Y; lags)`, `nowcast_bridge(Y, target)`
@@ -141,11 +147,48 @@ Accessors: `point_forecast(fc)`, `lower_bound(fc)`, `upper_bound(fc)`, `forecast
 OccBin: `OccBinConstraint(var, lower, upper)`, `variable_bound(var; lower, upper)`, `parse_constraint(expr)`, `occbin_solve(spec, shocks, constraints; T_periods)`, `occbin_irf(spec, constraints, shock_idx; shock_size, horizon)`
 `estimate_dsge_bayes(spec, data, theta0; priors, method, n_smc, n_mh, n_blocks, conf_level)` → BayesianDSGE — method: :smc/:smc2/:mh
 `posterior_summary(bd::BayesianDSGE)`, `bayes_factor(bd1, bd2)`, `prior_posterior_table(bd)`, `posterior_predictive(bd; n_sim, periods)`
+`historical_decomposition(sol::DSGESolution, data; horizon)` → HistoricalDecomposition — DSGE frequentist HD (v0.4.0)
+`historical_decomposition(bd::BayesianDSGE, data; horizon, quantiles)` → BayesianHistoricalDecomposition — DSGE Bayesian HD (v0.4.0)
 
 **Cross-sectional regression:**
 `estimate_reg(y, X; cov_type, weights, varnames, clusters)` → RegModel | `estimate_iv(y, X, Z; endogenous, cov_type, varnames)` → IVModel
 `estimate_logit(y, X; cov_type, varnames, clusters, maxiter, tol)` → LogitModel | `estimate_probit(y, X; cov_type, varnames, clusters, maxiter, tol)` → ProbitModel
 `vif(model::RegModel)` → Vector{Float64} | `marginal_effects(model)` → MarginalEffects | `odds_ratio(model::LogitModel)`, `classification_table(model; threshold)`
+
+**Panel regression (v0.4.0):**
+`estimate_panel_reg(panel, dep; effect, cov_type, weights, clusters, varnames)` → PanelRegModel — effect: :fe/:re/:pooled
+`estimate_panel_iv(panel, dep, endog, instruments; effect, cov_type, varnames)` → PanelIVModel
+`estimate_panel_logit(panel, dep; effect, cov_type, varnames, clusters, maxiter, tol)` → PanelLogitModel
+`estimate_panel_probit(panel, dep; effect, cov_type, varnames, clusters, maxiter, tol)` → PanelProbitModel
+
+**Panel specification tests (v0.4.0):**
+`hausman_test(fe_model, re_model)` → PanelTestResult — FE vs RE specification
+`breusch_pagan_test(model)` → PanelTestResult — LM test for random effects
+`f_test_fe(model)` → PanelTestResult — F-test for fixed effects significance
+`pesaran_cd_test(model)` → PanelTestResult — cross-sectional dependence
+`wooldridge_ar_test(model)` → PanelTestResult — serial correlation in panel data
+`modified_wald_test(model)` → PanelTestResult — groupwise heteroskedasticity
+
+**Ordered/multinomial choice models (v0.4.0):**
+`estimate_ologit(y, X; n_categories, cov_type, varnames, clusters, maxiter, tol)` → OrderedLogitModel
+`estimate_oprobit(y, X; n_categories, cov_type, varnames, clusters, maxiter, tol)` → OrderedProbitModel
+`estimate_mlogit(y, X; n_categories, base_category, cov_type, varnames, maxiter, tol)` → MultinomialLogitModel
+`marginal_effects(model::OrderedLogitModel)`, `marginal_effects(model::MultinomialLogitModel)` → MarginalEffects
+`brant_test(model)` → PanelTestResult — proportional odds assumption (ordered logit/probit)
+`hausman_iia(model; omit_category)` → PanelTestResult — IIA test (multinomial logit)
+
+**Spectral analysis (v0.4.0):**
+`acf(y; lags, conf_level)` → ACFResult | `pacf(y; lags)` | `ccf(y1, y2; lags, conf_level)` → ACFResult
+`periodogram(y; detrend)` → ACFResult — raw periodogram (DFT squared magnitudes)
+`spectral_density(y; method, bandwidth, kernel, varname)` → SpectralDensityResult — kernel: :bartlett/:parzen/:tukey_hanning
+`cross_spectrum(y1, y2; bandwidth, var1, var2)` → CrossSpectrumResult — coherence, phase, gain
+`transfer_function(input, output; bandwidth)` → TransferFunctionResult
+
+**Additional time series tests (v0.4.0):**
+`fisher_test(y)` — Fisher-type panel unit root test
+`bartlett_white_noise_test(y; lags)` — Bartlett white noise test
+`box_pierce_test(y; lags, ljung_box)` — Box-Pierce/Ljung-Box portmanteau test
+`durbin_watson_test(residuals)` — Durbin-Watson first-order serial correlation test
 
 **Advanced unit root tests:**
 `fourier_adf_test(y; regression, fmax, lags, trim)` → FourierADFResult | `fourier_kpss_test(y; regression, fmax, bandwidth)` → FourierKPSSResult
@@ -160,6 +203,8 @@ OccBin: `OccBinConstraint(var, lower, upper)`, `variable_bound(var; lower, upper
 
 **Covariance estimators:** `newey_west(X, u; bandwidth, kernel)`, `white_vcov(X, u; variant)`, `driscoll_kraay(X, u; bandwidth, kernel)` — kernels: :bartlett/:parzen/:quadratic_spectral/:tukey_hanning
 
-**StatsAPI:** VARModel/ARIMA implement: `coef`, `vcov`, `residuals`, `predict`, `r2`, `aic`, `bic`, `dof`, `dof_residual`, `nobs`, `loglikelihood`, `confint`, `stderror`, `islinear`, `fit`
+**StatsAPI:** VARModel/ARIMA/RegModel/LogitModel/ProbitModel/PanelRegModel/OrderedLogitModel/MultinomialLogitModel implement: `coef`, `vcov`, `residuals`, `predict`, `r2`, `aic`, `bic`, `dof`, `dof_residual`, `nobs`, `loglikelihood`, `confint`, `stderror`, `islinear`, `fit`
+
+**Plotting:** `plot_result(result; kwargs...)` → PlotOutput, `save_plot(p, path)`, `display_plot(p)` — interactive D3.js HTML plots
 
 **GPL Notice:** `warranty()`, `conditions()` — display GPL-3.0 warranty/conditions text
