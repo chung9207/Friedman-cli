@@ -22,6 +22,7 @@
 Load and validate a TOML configuration file.
 """
 function load_config(path::String)
+    _validate_input_path(path)
     isfile(path) || error("config file not found: $path")
     try
         return TOML.parsefile(path)

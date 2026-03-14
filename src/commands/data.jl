@@ -184,6 +184,7 @@ function _data_load(; name::String, output::String="", format::String="table",
         end
 
         out_path = isempty(output) ? replace(basename(path), r"\.[^.]+$" => "_loaded.csv") : output
+        _validate_output_path(out_path)
         out_df = DataFrame(Y, vn)
         CSV.write(out_path, out_df)
         println("Loaded $(basename(path)): $n_obs × $n_vars")
@@ -203,6 +204,7 @@ function _data_load(; name::String, output::String="", format::String="table",
         end
 
         out_path = isempty(output) ? "$name.csv" : output
+        _validate_output_path(out_path)
         n_obs, n_vars = size(data_mat)
         df = DataFrame(data_mat, vn)
         # Add group/time columns for panel data
@@ -256,6 +258,7 @@ function _data_load(; name::String, output::String="", format::String="table",
         end
 
         out_path = isempty(output) ? "$name.csv" : output
+        _validate_output_path(out_path)
         n_obs, n_vars = size(data_mat)
         df = DataFrame(data_mat, vn)
         CSV.write(out_path, df)
@@ -343,6 +346,7 @@ function _data_fix(; data::String, method::String="listwise", output::String="",
         base = replace(basename(data), r"\.[^.]+$" => "")
         "$(base)_clean.csv"
     end
+    _validate_output_path(out_path)
 
     fixed_df = DataFrame(fixed_mat, vn)
     CSV.write(out_path, fixed_df)
@@ -373,6 +377,7 @@ function _data_transform(; data::String, tcodes::String="", output::String="", f
         base = replace(basename(data), r"\.[^.]+$" => "")
         "$(base)_transformed.csv"
     end
+    _validate_output_path(out_path)
 
     trans_df = DataFrame(trans_mat, vn)
     CSV.write(out_path, trans_df)

@@ -16,6 +16,35 @@
 
 # IO utilities: CSV reading, table/CSV/JSON output
 
+# ── Path Validation ──────────────────────────────────────
+
+"""
+    _validate_input_path(path) → String
+
+Validate that an input file path does not contain path traversal sequences (`..`).
+Returns the path unchanged if valid; throws on suspicious paths.
+"""
+function _validate_input_path(path::String)
+    if contains(path, "..")
+        error("path traversal ('..') not allowed in file paths: $path")
+    end
+    return path
+end
+
+"""
+    _validate_output_path(path) → String
+
+Validate that an output file path does not contain path traversal sequences (`..`).
+Returns the path unchanged if valid; throws on suspicious paths.
+"""
+function _validate_output_path(path::String)
+    isempty(path) && return path
+    if contains(path, "..")
+        error("path traversal ('..') not allowed in output paths: $path")
+    end
+    return path
+end
+
 """
     load_data(path) → DataFrame
 
@@ -27,6 +56,7 @@ function load_data(path::String)
         ts = load_example(name)
         return DataFrame(ts.data, ts.varnames)
     end
+    _validate_input_path(path)
     isfile(path) || error("file not found: $path")
     df = CSV.read(path, DataFrame)
     nrow(df) == 0 && error("empty dataset: $path")
@@ -78,6 +108,7 @@ function output_result(result::AbstractMatrix, varnames::Vector{String};
 end
 
 function output_result(df::DataFrame; format::Symbol=:table, output::String="", title::String="Results")
+    _validate_output_path(output)
     if format == :csv
         _write_csv(df, output)
     elseif format == :json
@@ -93,6 +124,7 @@ end
 Output key-value results (e.g., test statistics).
 """
 function output_kv(pairs::Vector{<:Pair{String}}; format::String="table", output::String="", title::String="Results")
+    _validate_output_path(output)
     fmt = Symbol(lowercase(format))
     if fmt == :json
         d = Dict(pairs)

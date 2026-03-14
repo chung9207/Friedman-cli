@@ -56,6 +56,7 @@ _var_name(varnames::Vector{String}, idx::Int) =
 """Generate per-variable output path by inserting suffix before extension."""
 function _per_var_output_path(output::String, suffix::String)
     isempty(output) && return ""
+    _validate_output_path(output)
     return replace(output, "." => "_$(suffix).")
 end
 
@@ -666,6 +667,7 @@ If `plot` is true, opens in browser. If `plot_save` is non-empty, saves to HTML 
 """
 function _maybe_plot(result; plot::Bool=false, plot_save::String="", kwargs...)
     !plot && isempty(plot_save) && return
+    _validate_output_path(plot_save)
     p = plot_result(result; kwargs...)
     if !isempty(plot_save)
         save_plot(p, plot_save)
@@ -687,6 +689,7 @@ Load a DSGE model from a .toml or .jl file.
 - .jl: include() the file, expect a `model` variable of type DSGESpec
 """
 function _load_dsge_model(path::String)
+    _validate_input_path(path)
     isfile(path) || error("model file not found: $path")
     ext = lowercase(splitext(path)[2])
 
