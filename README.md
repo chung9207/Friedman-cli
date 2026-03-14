@@ -762,16 +762,6 @@ sim_ratio = 5
 burn = 100
 ```
 
-## What's New
-
-### v0.4.0
-- **Spectral analysis** — new `spectral` top-level command with `acf`, `periodogram`, `density`, `cross`, and `transfer` subcommands
-- **Panel regression** — `estimate preg/pols/pfe/pre` for pooled OLS, fixed effects, random effects, and first-difference panel estimators
-- **Ordered and multinomial choice models** — `estimate ologit`, `estimate oprobit`, `estimate mlogit` with marginal effects and prediction support
-- **DSGE historical decomposition** — `dsge hd` for shock-contribution decomposition of DSGE model simulations
-- **Extended predict/residuals** — 23 model types each (up from 16), covering all new estimators
-- **Data management additions** — `data dropna` and `data keeprows` for row-level filtering
-
 ## License
 
 GPL-3.0-or-later
