@@ -26,7 +26,7 @@ irm https://raw.githubusercontent.com/FriedmanJP/Friedman-cli/master/install.ps1
 
 The installer checks for Julia 1.12 (installs [juliaup](https://github.com/JuliaLang/juliaup) if needed, without changing your default Julia version), downloads a precompiled sysimage, and installs to `~/.friedman-cli/`.
 
-**Supported platforms:** macOS ARM64 (Apple Silicon), Linux x86_64, Linux ARM64 (aarch64), Windows x86_64.
+**Supported platforms:** macOS ARM64 (Apple Silicon), Linux x86_64, Windows x86_64.
 
 > **Note:** The precompiled release does not include JuMP, Ipopt, or PATHSolver due to license incompatibility (Ipopt's EPL-2.0 conflicts with GPL-3.0). For DSGE constrained optimization (OccBin, etc.), install them separately: `julia -e 'using Pkg; Pkg.add(["JuMP", "Ipopt"])'`
 

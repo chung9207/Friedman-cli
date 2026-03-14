@@ -41,7 +41,6 @@ $env:FRIEDMAN_VERSION = "0.4.0"; irm https://raw.githubusercontent.com/FriedmanJ
 2. Download the archive for your platform:
    - `friedman-vX.Y.Z-darwin-arm64.tar.gz` (macOS Apple Silicon)
    - `friedman-vX.Y.Z-linux-x86_64.tar.gz` (Linux x64)
-   - `friedman-vX.Y.Z-linux-aarch64.tar.gz` (Linux ARM64)
    - `friedman-vX.Y.Z-windows-x86_64.zip` (Windows x64)
 3. Extract to `~/.friedman-cli/`
 4. Add `~/.friedman-cli/bin` to your PATH
