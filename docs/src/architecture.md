@@ -139,8 +139,8 @@ src/
 | | Version |
 |---|---------|
 | Julia | `>= 1.12` |
-| MacroEconometricModels | `0.3.5` |
+| MacroEconometricModels | `0.4.0` |
 
 ## Totals
 
-13 top-level commands, ~164 subcommands across 19 source files.
+14 top-level commands, ~199 subcommands across 21 source files.

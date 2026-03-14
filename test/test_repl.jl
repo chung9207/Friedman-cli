@@ -48,7 +48,7 @@ module Friedman
     struct LeafCommand; name::String; handler::Function; args::Vector{Argument}; options::Vector{Option}; flags::Vector{Flag}; description::String; end
     struct NodeCommand; name::String; subcmds::Dict{String,Union{NodeCommand,LeafCommand}}; description::String; end
     struct Entry; name::String; root::NodeCommand; version::VersionNumber; end
-    const FRIEDMAN_VERSION = v"0.3.5"
+    const FRIEDMAN_VERSION = v"0.4.1"
     _last_injected_model = nothing
     function dispatch(app, args; extra_kwargs...)
         # Return a mock result for estimate commands
@@ -82,7 +82,7 @@ module Friedman
             "estimate" => estimate_node, "irf" => irf_node
         ), "Main")
 
-        Entry("friedman", root, v"0.3.5")
+        Entry("friedman", root, v"0.4.1")
     end
 
     include(joinpath(@__DIR__, "..", "src", "repl.jl"))
