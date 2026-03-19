@@ -757,20 +757,40 @@ function _solve_dsge(spec::MacroEconometricModels.DSGESpec;
 end
 
 """
-    _load_dsge_constraints(path) → Vector{OccBinConstraint}
+    _load_dsge_constraints(path; spec=nothing) → Vector{constraint}
 
-Load OccBin constraints from a TOML file.
+Load OccBin and/or nonlinear constraints from a TOML file.
+Nonlinear constraints require a loaded DSGE spec.
 """
-function _load_dsge_constraints(path::String)
+function _load_dsge_constraints(path::String; spec=nothing)
     config = load_config(path)
     con_cfg = get_dsge_constraints(config)
-    constraints = MacroEconometricModels.OccBinConstraint[]
-    for b in con_cfg["bounds"]
-        lower = get(b, "lower", -Inf)
-        c = variable_bound(Symbol(b["variable"]); lower=lower,
-                           upper=get(b, "upper", Inf))
-        push!(constraints, c)
+
+    has_bounds = !isempty(get(con_cfg, "bounds", []))
+    has_nonlinear = !isempty(get(con_cfg, "nonlinear", []))
+
+    if has_nonlinear && spec === nothing
+        error("nonlinear constraints require a loaded DSGE spec (pass spec keyword)")
     end
+
+    constraints = Any[]
+
+    if has_bounds
+        for b in con_cfg["bounds"]
+            lower = get(b, "lower", -Inf)
+            c = variable_bound(Symbol(b["variable"]); lower=lower,
+                               upper=get(b, "upper", Inf))
+            push!(constraints, c)
+        end
+    end
+
+    if has_nonlinear
+        for nl in con_cfg["nonlinear"]
+            c = parse_constraint(nl["expr"], spec)
+            push!(constraints, c)
+        end
+    end
+
     return constraints
 end
 

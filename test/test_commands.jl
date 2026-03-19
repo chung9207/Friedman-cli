@@ -5684,6 +5684,66 @@ end  # Plot Support
             @test cons[1] isa MacroEconometricModels.OccBinConstraint
         end
     end
+
+    @testset "_load_dsge_constraints — nonlinear" begin
+        mktempdir() do dir
+            toml_path = joinpath(dir, "constraints.toml")
+            write(toml_path, """
+            [[constraints.nonlinear]]
+            expr = "K[t] + C[t] <= Y[t]"
+            label = "resource constraint"
+            """)
+            spec = MacroEconometricModels.DSGESpec(; n_endog=3, n_exog=1)
+            cons = _load_dsge_constraints(toml_path; spec=spec)
+            @test length(cons) == 1
+            @test cons[1] isa MacroEconometricModels.NonlinearConstraint
+        end
+    end
+
+    @testset "_load_dsge_constraints — nonlinear without spec errors" begin
+        mktempdir() do dir
+            toml_path = joinpath(dir, "constraints.toml")
+            write(toml_path, """
+            [[constraints.nonlinear]]
+            expr = "K[t] <= Y[t]"
+            """)
+            @test_throws ErrorException _load_dsge_constraints(toml_path)
+        end
+    end
+
+    @testset "_load_dsge_constraints — mixed bounds + nonlinear" begin
+        mktempdir() do dir
+            toml_path = joinpath(dir, "constraints.toml")
+            write(toml_path, """
+            [[constraints.bounds]]
+            variable = "i"
+            lower = 0.0
+
+            [[constraints.nonlinear]]
+            expr = "K[t] <= Y[t]"
+            label = "cap"
+            """)
+            spec = MacroEconometricModels.DSGESpec(; n_endog=3, n_exog=1)
+            cons = _load_dsge_constraints(toml_path; spec=spec)
+            @test length(cons) == 2
+            @test any(c -> c isa MacroEconometricModels.OccBinConstraint, cons)
+            @test any(c -> c isa MacroEconometricModels.NonlinearConstraint, cons)
+        end
+    end
+
+    @testset "_load_dsge_constraints — bounds only backward compat (no spec)" begin
+        mktempdir() do dir
+            toml_path = joinpath(dir, "constraints.toml")
+            write(toml_path, """
+            [[constraints.bounds]]
+            variable = "i"
+            lower = 0.0
+            """)
+            cons = _load_dsge_constraints(toml_path)
+            @test length(cons) == 1
+            @test cons[1] isa MacroEconometricModels.OccBinConstraint
+        end
+    end
 end
 
 @testset "DSGE commands" begin
