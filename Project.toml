@@ -24,7 +24,7 @@ PATHSolver = "f5f7c340-0bb3-5c69-969a-41884d311d1b"
 
 [compat]
 FFTW = "1.5"
-MacroEconometricModels = "0.4.0"
+MacroEconometricModels = "0.4.1"
 NonlinearSolve = "4"
 julia = "1.12"
 
