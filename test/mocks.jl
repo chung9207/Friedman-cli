@@ -270,6 +270,7 @@ struct ADFResult{T}
 end
 struct KPSSResult{T}
     statistic::T
+    pvalue::T
 end
 struct PPResult{T}
     statistic::T; pvalue::T
@@ -464,7 +465,22 @@ report(::HistoricalDecomposition) = nothing
 report(::BayesianHistoricalDecomposition) = nothing
 report(::UhligSVARResult) = nothing
 
-is_stationary(m::VARModel) = (is_stationary=true, eigenvalues=[0.5+0.1im, 0.5-0.1im, 0.3+0.0im])
+# Global flag to control mock behavior for testing edge cases
+const _MOCK_FLAGS = Dict{Symbol,Any}(
+    :var_stationary => true,
+    :pvar_stable => true,
+    :verify_decomposition => true,
+    :normality_all_pass => false,
+    :lp_iv_weak => false,
+)
+
+function is_stationary(m::VARModel)
+    if _MOCK_FLAGS[:var_stationary]
+        (is_stationary=true, eigenvalues=[0.5+0.1im, 0.5-0.1im, 0.3+0.0im])
+    else
+        (is_stationary=false, eigenvalues=[1.2+0.0im, 0.5-0.1im, 0.3+0.0im])
+    end
+end
 is_stationary(m::DynamicFactorModel) = (is_stationary=true,)
 
 function companion_matrix(B::AbstractMatrix, n::Int, p::Int)
@@ -595,7 +611,7 @@ function historical_decomposition(slp::StructuralLP, T_hd::Int)
     shocks_mat = ones(T_eff, n)
     HistoricalDecomposition(contribs, initial, actual, shocks_mat, T_eff)
 end
-verify_decomposition(hd::HistoricalDecomposition; tol=1e-6) = true
+verify_decomposition(hd::HistoricalDecomposition; tol=1e-6) = _MOCK_FLAGS[:verify_decomposition]
 contribution(hd::HistoricalDecomposition, var::Int, shock::Int) = hd.contributions[:, var, shock]
 
 # SVAR restrictions
@@ -664,7 +680,8 @@ function lp_irf(model::LPModel; conf_level=0.95)
 end
 function estimate_lp_iv(Y, shock_var, Z, horizon; lags=4, cov_type=:newey_west)
     T_obs = size(Y, 1)
-    LPIVModel(Y, Z, 15.0, horizon, T_obs-4)
+    f_val = _MOCK_FLAGS[:lp_iv_weak] ? 5.0 : 15.0
+    LPIVModel(Y, Z, f_val, horizon, T_obs-4)
 end
 function lp_iv_irf(model::LPIVModel; conf_level=0.95)
     n = size(model.Y, 2); h = model.horizon + 1
@@ -780,7 +797,7 @@ end
 
 # Unit root / cointegration tests
 adf_test(y; lags=:aic, regression=:constant) = ADFResult(-3.5, 0.01, 2)
-kpss_test(y; regression=:constant) = KPSSResult(0.3)
+kpss_test(y; regression=:constant) = KPSSResult(0.3, 0.01)
 pp_test(y; regression=:constant) = PPResult(-3.2, 0.02)
 za_test(y; regression=:both, trim=0.15) = ZAResult(-4.5, 50)
 ngperron_test(y; regression=:constant) = NgPerronResult(-20.0, -3.1, 0.15, 4.0)
@@ -883,11 +900,19 @@ identify_external_volatility(model::VARModel, regime_indicator; regimes=2) =
     ExternalVolatilitySVARResult(ones(size(model.Y,2), size(model.Y,2))*0.3)
 
 function normality_test_suite(model::VARModel)
-    NormalityTestSuite([
-        NormalityTestResult(:jarque_bera, 15.0, 0.001, 2),
-        NormalityTestResult(:skewness, 8.0, 0.02, 1),
-        NormalityTestResult(:kurtosis, 3.0, 0.08, 1),
-    ])
+    if _MOCK_FLAGS[:normality_all_pass]
+        NormalityTestSuite([
+            NormalityTestResult(:jarque_bera, 1.5, 0.47, 2),
+            NormalityTestResult(:skewness, 0.8, 0.37, 1),
+            NormalityTestResult(:kurtosis, 0.3, 0.58, 1),
+        ])
+    else
+        NormalityTestSuite([
+            NormalityTestResult(:jarque_bera, 15.0, 0.001, 2),
+            NormalityTestResult(:skewness, 8.0, 0.02, 1),
+            NormalityTestResult(:kurtosis, 3.0, 0.08, 1),
+        ])
+    end
 end
 test_identification_strength(model::VARModel) = (statistic=25.0, pvalue=0.001)
 test_shock_gaussianity(result::ICASVARResult) = (statistic=12.0, pvalue=0.005)
@@ -1050,10 +1075,15 @@ function pvar_fevd(model::PVARModel, horizon::Int)
 end
 
 function pvar_stability(model::PVARModel)
-    n = model.m * model.p
-    eigs = [0.5 + 0.1im, 0.5 - 0.1im, 0.3 + 0.0im]
-    moduli = abs.(eigs)
-    PVARStability(eigs, moduli, all(moduli .< 1.0))
+    if _MOCK_FLAGS[:pvar_stable]
+        eigs = [0.5 + 0.1im, 0.5 - 0.1im, 0.3 + 0.0im]
+        moduli = abs.(eigs)
+        PVARStability(eigs, moduli, true)
+    else
+        eigs = [1.2 + 0.0im, 0.5 - 0.1im, 0.3 + 0.0im]
+        moduli = abs.(eigs)
+        PVARStability(eigs, moduli, false)
+    end
 end
 
 function pvar_hansen_j(model::PVARModel)
@@ -1178,6 +1208,7 @@ end
 
 # ─── Exports ──────────────────────────────────────────────
 
+export _MOCK_FLAGS
 export VARModel, MockChains, BVARPosterior, MinnesotaHyperparameters
 export ImpulseResponse, BayesianImpulseResponse, FEVD, BayesianFEVD
 export HistoricalDecomposition, BayesianHistoricalDecomposition
@@ -2465,7 +2496,16 @@ end
 
 function vif(m::RegModel{T}) where T
     k = length(m.beta)
-    fill(T(2.5), k)
+    # Return escalating VIF values so tests can trigger different warning branches
+    # k=2: [2.5, 2.5], k=3: [2.5, 2.5, 7.0], k>=4: [2.5, 2.5, 7.0, 12.0, ...]
+    vals = fill(T(2.5), k)
+    if k >= 3
+        vals[3] = T(7.0)  # moderate multicollinearity
+    end
+    if k >= 4
+        vals[4] = T(12.0)  # severe multicollinearity
+    end
+    vals
 end
 
 function classification_table(m::Union{LogitModel,ProbitModel}; threshold=0.5)
@@ -2743,7 +2783,7 @@ end
 
 contribution(hd::BayesianDSGEHistoricalDecomposition, var::Int, shock::Int) = hd.point_estimate[:, var, shock]
 total_shock_contribution(hd::HistoricalDecomposition, var::Int) = dropdims(sum(hd.contributions[:, var, :]; dims=2); dims=2)
-verify_decomposition(hd::BayesianDSGEHistoricalDecomposition) = true
+verify_decomposition(hd::BayesianDSGEHistoricalDecomposition) = _MOCK_FLAGS[:verify_decomposition]
 
 function dsge_particle_smoother(args...; kwargs...)
     nothing
@@ -2851,18 +2891,24 @@ function pacf(y::AbstractVector{T}; lags::Int=20, maxlag::Union{Int,Nothing}=not
     acf(y; lags=lags, maxlag=maxlag, conf_level=conf_level, varname=varname)
 end
 
+struct CCFResult{T<:AbstractFloat}
+    ccf::Vector{T}
+    lags::Vector{Int}
+    conf_level::T
+    ci_band::T
+    varnames::Tuple{String,String}
+    nobs::Int
+end
+
 function ccf(y1::AbstractVector{T}, y2::AbstractVector{T}; lags::Int=20,
              maxlag::Union{Int,Nothing}=nothing, conf_level::Real=0.95,
              var1::String="y1", var2::String="y2") where T
     n = length(y1)
     nlags = isnothing(maxlag) ? lags : maxlag
-    acf_vals = [T(0.5) * T(0.8)^abs(k) for k in -nlags:nlags]
-    pacf_vals = copy(acf_vals)
+    ccf_vals = [T(0.5) * T(0.8)^abs(k) for k in -nlags:nlags]
     ci = T(1.96) / sqrt(n)
     lags_vec = collect(-nlags:nlags)
-    q_stats = [T(k+1) * T(0.1) for k in 0:nlags]
-    q_pvals = [T(0.05) for _ in 0:nlags]
-    ACFResult{T}(acf_vals, pacf_vals, lags_vec, T(conf_level), ci, "$var1-$var2", n, q_stats, q_pvals)
+    CCFResult{T}(ccf_vals, lags_vec, T(conf_level), ci, (var1, var2), n)
 end
 
 function periodogram(y::AbstractVector{T}; varname::String="y") where T
@@ -2967,6 +3013,7 @@ Base.getproperty(r::TransferFunctionResult, s::Symbol) =
 
 export ACFResult, SpectralDensityResult, CrossSpectrumResult, TransferFunctionResult
 export FisherTestResult, BartlettWhiteNoiseResult, BoxPierceResult, DurbinWatsonResult
+export ACFResult, CCFResult
 export acf, pacf, ccf, periodogram, spectral_density, cross_spectrum, transfer_function
 export fisher_test, bartlett_white_noise_test, box_pierce_test, durbin_watson_test
 

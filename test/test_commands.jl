@@ -7664,4 +7664,572 @@ end
 
 end
 
+# ═══════════════════════════════════════════════════════════════
+# Task 5: Diagnostic Warning Branch Coverage — test.jl
+# ═══════════════════════════════════════════════════════════════
+
+@testset "Diagnostic warning branches" begin
+
+    # KPSS rejection branch (pvalue < 0.05)
+    @testset "_test_kpss — rejection branch" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = _capture() do
+                _test_kpss(; data=csv, column=1, trend="constant", format="table")
+            end
+            @test occursin("KPSS Test", out)
+            # Mock now returns pvalue=0.01 < 0.05, triggering rejection
+            @test occursin("non-stationary", out)
+        end
+    end
+
+    # Fourier KPSS — pvalue is 0.10 in mock, so does NOT reject (covers else branch)
+    @testset "_test_fourier_kpss — no rejection" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = _capture() do
+                _test_fourier_kpss(; data=csv, column=1, regression="constant",
+                                    fmax=3, bandwidth=nothing, format="table", output="")
+            end
+            @test occursin("Fourier KPSS", out)
+            @test occursin("stationary", out)
+        end
+    end
+
+    # Normality — all-pass branch (line 764)
+    @testset "_test_normality — all pass" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            _MOCK_FLAGS[:normality_all_pass] = true
+            try
+                out = _capture() do
+                    _test_normality(; data=csv, lags=2, format="table")
+                end
+                @test occursin("Normality Test", out)
+                @test occursin("Gaussian assumption appears valid", out)
+            finally
+                _MOCK_FLAGS[:normality_all_pass] = false
+            end
+        end
+    end
+
+    # VAR instability branch (line 1038)
+    @testset "_test_var_stability — unstable" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            _MOCK_FLAGS[:var_stationary] = false
+            try
+                out = _capture() do
+                    _test_var_stability(; data=csv, lags=2, format="table")
+                end
+                @test occursin("NOT stable", out)
+            finally
+                _MOCK_FLAGS[:var_stationary] = true
+            end
+        end
+    end
+
+    # PVAR instability branch (line 1233)
+    @testset "_test_pvar_stability — unstable" begin
+        mktempdir() do dir
+            csv = _make_panel_csv(dir; G=5, T_per=20, n=3)
+            _MOCK_FLAGS[:pvar_stable] = false
+            try
+                out = cd(dir) do
+                    _capture() do
+                        _test_pvar_stability(; data=csv, id_col="group", time_col="time", lags=1)
+                    end
+                end
+                @test occursin("NOT stable", out)
+            finally
+                _MOCK_FLAGS[:pvar_stable] = true
+            end
+        end
+    end
+
+    # LR same-spec warning (lines 1245-1248)
+    @testset "_test_lr — same spec warning" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _test_lr(; data1=csv, data2=csv, lags1=2, lags2=2)
+                end
+            end
+            @test occursin("Warning", out)
+            @test occursin("same specification", out)
+        end
+    end
+
+    # LM same-spec warning (lines 1276-1278)
+    @testset "_test_lm — same spec warning" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = cd(dir) do
+                _capture() do
+                    _test_lm(; data1=csv, data2=csv, lags1=2, lags2=2)
+                end
+            end
+            @test occursin("Warning", out)
+            @test occursin("same specification", out)
+        end
+    end
+
+    # VIF severe multicollinearity (line 1742: max_vif > 10)
+    @testset "_test_vif — severe multicollinearity" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)  # k=4 regressors -> vals[4]=12.0
+            out = _capture() do
+                _test_vif(; data=csv, dep="var1", cov_type="hc1",
+                            format="table", output="")
+            end
+            @test occursin("VIF > 10", out)
+            @test occursin("severe multicollinearity", out)
+        end
+    end
+
+    # VIF moderate multicollinearity (line 1744: 5 < max_vif <= 10)
+    @testset "_test_vif — moderate multicollinearity" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=4)  # k=3 regressors -> vals[3]=7.0
+            out = _capture() do
+                _test_vif(; data=csv, dep="var1", cov_type="hc1",
+                            format="table", output="")
+            end
+            @test occursin("Moderate multicollinearity", out)
+        end
+    end
+
+    # VIF no multicollinearity (line 1746: all < 5)
+    @testset "_test_vif — no multicollinearity" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)  # k=2 regressors -> [2.5, 2.5]
+            out = _capture() do
+                _test_vif(; data=csv, dep="var1", cov_type="hc1",
+                            format="table", output="")
+            end
+            @test occursin("No significant multicollinearity", out)
+        end
+    end
+
+end  # Diagnostic warning branches
+
+# ═══════════════════════════════════════════════════════════════
+# Task 6: HD verify_decomposition failure + estimate diagnostics
+# ═══════════════════════════════════════════════════════════════
+
+@testset "HD and estimation diagnostics" begin
+
+    # HD verify_decomposition failure warning
+    @testset "_hd_var — decomposition verification failure" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            _MOCK_FLAGS[:verify_decomposition] = false
+            try
+                out = _capture() do
+                    _hd_var(; data=csv, lags=2, id="cholesky", config="",
+                              format="table", output="", plot=false, plot_save="")
+                end
+                @test occursin("verification failed", out)
+            finally
+                _MOCK_FLAGS[:verify_decomposition] = true
+            end
+        end
+    end
+
+    # HD LP decomposition verification failure
+    @testset "_hd_lp — decomposition verification failure" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            _MOCK_FLAGS[:verify_decomposition] = false
+            try
+                out = _capture() do
+                    _hd_lp(; data=csv, lags=4, var_lags=nothing,
+                              id="cholesky", vcov="newey_west", config="",
+                              format="table", output="", plot=false, plot_save="")
+                end
+                @test occursin("verification failed", out)
+            finally
+                _MOCK_FLAGS[:verify_decomposition] = true
+            end
+        end
+    end
+
+    # Bayesian FAVAR estimate
+    @testset "_estimate_favar — bayesian method" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _estimate_favar(; data=csv, factors=2, lags=1, key_vars="1,2",
+                                  method="bayesian", draws=100, format="table")
+            end
+            @test occursin("Bayesian FAVAR", out)
+            @test occursin("MCMC draws", out)
+        end
+    end
+
+    # LP-IV weak instruments
+    @testset "_estimate_lp — iv weak instruments" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            inst_csv = joinpath(dir, "instruments.csv")
+            write(inst_csv, "z1,z2\n" * join(["$(rand()),$(rand())" for _ in 1:100], "\n") * "\n")
+            _MOCK_FLAGS[:lp_iv_weak] = true
+            try
+                out = _capture() do
+                    _estimate_lp(; data=csv, horizons=10, shock=1,
+                                   method="iv", instruments=inst_csv,
+                                   control_lags=4, vcov="newey_west",
+                                   format="table")
+                end
+                @test occursin("Weak instruments", out)
+            finally
+                _MOCK_FLAGS[:lp_iv_weak] = false
+            end
+        end
+    end
+
+    # FAVAR with named key_vars (covers string name parsing in shared.jl)
+    @testset "_estimate_favar — named key vars" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _estimate_favar(; data=csv, factors=2, lags=1, key_vars="var1,var2",
+                                  method="two_step", draws=5000, format="table")
+            end
+            @test occursin("FAVAR", out)
+        end
+    end
+
+    # FAVAR auto factor selection (covers shared.jl lines 625-628)
+    @testset "_estimate_favar — auto factors" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _estimate_favar(; data=csv, factors=nothing, lags=1, key_vars="1,2",
+                                  method="two_step", draws=5000, format="table")
+            end
+            @test occursin("Auto-selected factors", out)
+        end
+    end
+
+end  # HD and estimation diagnostics
+
+# ═══════════════════════════════════════════════════════════════
+# Task 7: Auto-selection and feature branches
+# ═══════════════════════════════════════════════════════════════
+
+@testset "Auto-selection and feature branches" begin
+
+    # Spectral ACF with CCF (covers lines 122-132 in spectral.jl)
+    @testset "_spectral_acf — ccf_with" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = _capture() do
+                _spectral_acf(; data=csv, column=1, ccf_with=2,
+                                max_lag=nothing, format="table", output="")
+            end
+            @test occursin("ACF", out)
+            @test occursin("CCF", out)
+        end
+    end
+
+    # Data filter BN (covers data.jl lines 422-423)
+    @testset "_data_filter — bn" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = _capture() do
+                _data_filter(; data=csv, method="bn")
+            end
+            @test occursin("Data Filter (bn", out)
+        end
+    end
+
+    # Data filter BK (covers data.jl lines 424-425)
+    @testset "_data_filter — bk" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = _capture() do
+                _data_filter(; data=csv, method="bk")
+            end
+            @test occursin("Data Filter (bk", out)
+        end
+    end
+
+    # Built-in dataset shortcut (covers io.jl lines 54-57)
+    @testset "load_data — built-in dataset shortcut" begin
+        df = load_data(":fred_md")
+        @test df isa DataFrame
+        @test nrow(df) > 0
+        @test "INDPRO" in names(df)
+    end
+
+    # Spectral density with bandwidth (covers spectral.jl line 169)
+    @testset "_spectral_density — with bandwidth" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = _capture() do
+                _spectral_density(; data=csv, column=1, method="smoothed",
+                                    bandwidth=0.1, format="table", output="")
+            end
+            @test occursin("Spectral Density", out)
+        end
+    end
+
+    # Spectral ACF with max_lag=nothing (auto selection, covers line 107)
+    @testset "_spectral_acf — auto max_lag" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=3)
+            out = _capture() do
+                _spectral_acf(; data=csv, column=1, max_lag=nothing,
+                                format="table", output="")
+            end
+            @test occursin("ACF", out)
+        end
+    end
+
+end  # Auto-selection and feature branches
+
+# ═══════════════════════════════════════════════════════════════
+# Task 8: Sign/narrative restriction closure execution
+# ═══════════════════════════════════════════════════════════════
+
+@testset "Sign/narrative closure execution" begin
+
+    # Build and execute sign restriction closure
+    @testset "_build_check_func — sign restrictions" begin
+        mktempdir() do dir
+            cfg = joinpath(dir, "sign.toml")
+            write(cfg, """
+            [identification]
+            method = "sign"
+            [identification.sign_matrix]
+            matrix = [[1, -1], [0, 1]]
+            horizons = [0, 1]
+            """)
+            check_func, narrative_check = _build_check_func(cfg)
+            @test check_func !== nothing
+            @test narrative_check === nothing
+
+            # irf_values[h, j, i] where h=horizon+1, j=shock (col), i=variable (row)
+            # sign_mat[1,1]=1 -> irf[h,1,1]>0; sign_mat[1,2]=-1 -> irf[h,2,1]<0
+            # sign_mat[2,2]=1 -> irf[h,2,2]>0
+
+            # Test the closure: IRF satisfying restrictions
+            irf_vals = ones(3, 2, 2)
+            irf_vals[1, 2, 1] = -0.5  # h=0: shock=2, var=1 should be < 0
+            irf_vals[2, 2, 1] = -0.5  # h=1: shock=2, var=1 should be < 0
+            @test check_func(irf_vals) == true
+
+            # Test the closure: IRF violating restrictions
+            irf_vals_bad = ones(3, 2, 2)
+            irf_vals_bad[1, 2, 1] = 0.5  # h=0: shock=2, var=1 should be < 0 but positive
+            @test check_func(irf_vals_bad) == false
+        end
+    end
+
+    # Build and execute narrative restriction closure
+    @testset "_build_check_func — narrative restrictions" begin
+        mktempdir() do dir
+            cfg = joinpath(dir, "narrative.toml")
+            write(cfg, """
+            [identification]
+            method = "sign"
+            [identification.narrative]
+            shock_index = 1
+            periods = [5, 10]
+            signs = [1, -1]
+            """)
+            check_func, narrative_check = _build_check_func(cfg)
+            @test narrative_check !== nothing
+
+            # Test: structural shocks satisfying narrative
+            shocks = zeros(15, 2)
+            shocks[5, 1] = 1.0   # positive at t=5
+            shocks[10, 1] = -1.0  # negative at t=10
+            @test narrative_check(shocks) == true
+
+            # Test: structural shocks violating narrative
+            shocks_bad = zeros(15, 2)
+            shocks_bad[5, 1] = -1.0  # negative at t=5 (should be positive)
+            @test narrative_check(shocks_bad) == false
+        end
+    end
+
+    # Both sign and narrative restrictions
+    @testset "_build_check_func — both restrictions" begin
+        mktempdir() do dir
+            cfg = joinpath(dir, "both.toml")
+            write(cfg, """
+            [identification]
+            method = "sign"
+            [identification.sign_matrix]
+            matrix = [[1, 0], [0, 1]]
+            horizons = [0]
+            [identification.narrative]
+            shock_index = 1
+            periods = [3]
+            signs = [1]
+            """)
+            check_func, narrative_check = _build_check_func(cfg)
+            @test check_func !== nothing
+            @test narrative_check !== nothing
+        end
+    end
+
+    # Empty config
+    @testset "_build_check_func — empty config" begin
+        check_func, narrative_check = _build_check_func("")
+        @test check_func === nothing
+        @test narrative_check === nothing
+    end
+
+    # Sign check with h > irf size (continue branch, line 348)
+    @testset "_build_check_func — horizon exceeds IRF" begin
+        mktempdir() do dir
+            cfg = joinpath(dir, "big_horizon.toml")
+            write(cfg, """
+            [identification]
+            method = "sign"
+            [identification.sign_matrix]
+            matrix = [[1, -1], [0, 1]]
+            horizons = [0, 1, 99]
+            """)
+            check_func, _ = _build_check_func(cfg)
+            # h=99+1=100 > size(irf_values,1)=3 → continue, no error
+            # Must satisfy h=0 and h=1 restrictions
+            irf_vals = ones(3, 2, 2)
+            irf_vals[1, 2, 1] = -0.5  # h=0: shock=2, var=1 < 0
+            irf_vals[2, 2, 1] = -0.5  # h=1: shock=2, var=1 < 0
+            @test check_func(irf_vals) == true
+        end
+    end
+
+    # Narrative check with t > shocks size (continue branch, line 374)
+    @testset "_build_check_func — period exceeds shocks" begin
+        mktempdir() do dir
+            cfg = joinpath(dir, "big_period.toml")
+            write(cfg, """
+            [identification]
+            method = "sign"
+            [identification.narrative]
+            shock_index = 1
+            periods = [3, 999]
+            signs = [1, -1]
+            """)
+            _, narrative_check = _build_check_func(cfg)
+            shocks = ones(10, 2)  # t=999 > 10 → continue
+            @test narrative_check(shocks) == true
+        end
+    end
+
+end  # Sign/narrative closure execution
+
+# ═══════════════════════════════════════════════════════════════
+# Task 9: Remaining handler coverage gaps
+# ═══════════════════════════════════════════════════════════════
+
+@testset "Remaining handler coverage" begin
+
+    # _load_clusters helper (shared.jl lines 852-856)
+    @testset "_load_clusters — valid column" begin
+        mktempdir() do dir
+            csv = joinpath(dir, "data.csv")
+            write(csv, "y,x1,x2,cl\n" * join(["$(rand()),$(rand()),$(rand()),$(rand(1:3))" for _ in 1:50], "\n") * "\n")
+            clusters = _load_clusters(csv, "cl")
+            @test clusters isa Vector{Int}
+            @test length(clusters) == 50
+        end
+    end
+
+    @testset "_load_clusters — empty string" begin
+        result = _load_clusters("dummy.csv", "")
+        @test result === nothing
+    end
+
+    # _load_weights helper (shared.jl lines 860-863)
+    @testset "_load_weights — valid column" begin
+        mktempdir() do dir
+            csv = joinpath(dir, "data.csv")
+            write(csv, "y,x1,w\n" * join(["$(rand()),$(rand()),$(abs(rand()))" for _ in 1:50], "\n") * "\n")
+            weights = _load_weights(csv, "w")
+            @test weights isa Vector{Float64}
+            @test length(weights) == 50
+        end
+    end
+
+    @testset "_load_weights — empty string" begin
+        result = _load_weights("dummy.csv", "")
+        @test result === nothing
+    end
+
+    # Forecast dynamic — auto factors (covers forecast.jl auto selection)
+    @testset "_forecast_dynamic — auto factors" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = cd(dir) do
+                _capture() do
+                    _forecast_dynamic(; data=csv, nfactors=nothing, horizons=5, format="table")
+                end
+            end
+            @test occursin("Dynamic Factor Forecast", out) || occursin("Selecting", out)
+        end
+    end
+
+    # Forecast GDFM — auto factors (covers forecast.jl auto selection)
+    @testset "_forecast_gdfm — auto factors" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = cd(dir) do
+                _capture() do
+                    _forecast_gdfm(; data=csv, nfactors=nothing, dynamic_rank=nothing,
+                                     horizons=5, format="table")
+                end
+            end
+            @test occursin("GDFM Forecast", out) || occursin("Selecting", out)
+        end
+    end
+
+    # Predict static — auto factors (covers predict.jl auto selection)
+    @testset "_predict_static — auto factors" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = cd(dir) do
+                _capture() do
+                    _predict_static(; data=csv, nfactors=nothing, format="table")
+                end
+            end
+            @test occursin("factor model", out) || occursin("Static", out) || occursin("common component", out)
+        end
+    end
+
+    # Residuals static — auto factors (covers residuals.jl auto selection)
+    @testset "_residuals_static — auto factors" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = cd(dir) do
+                _capture() do
+                    _residuals_static(; data=csv, nfactors=nothing, format="table")
+                end
+            end
+            @test occursin("factor model", out) || occursin("Static", out) || occursin("idiosyncratic", out)
+        end
+    end
+
+    # Forecast FAVAR panel_forecast mode (covers forecast.jl panel branch)
+    @testset "_forecast_favar — panel_forecast" begin
+        mktempdir() do dir
+            csv = _make_csv(dir; T=100, n=5)
+            out = _capture() do
+                _forecast_favar(; data=csv, factors=2, lags=1, key_vars="1,2",
+                                  horizons=10, panel_forecast=true,
+                                  format="table", output="",
+                                  plot=false, plot_save="")
+            end
+            @test occursin("FAVAR", out) || occursin("Panel", out)
+        end
+    end
+
+end  # Remaining handler coverage
+
 end  # Command Handlers
