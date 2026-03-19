@@ -3148,6 +3148,11 @@ end
 include(joinpath(@__DIR__, "test_commands.jl"))
 
 # ──────────────────────────────────────────────────────────────
+# REPL session tests (uses mocks + source files from test_commands.jl)
+# ──────────────────────────────────────────────────────────────
+include(joinpath(@__DIR__, "test_repl.jl"))
+
+# ──────────────────────────────────────────────────────────────
 # CLI structure tests using real register_*_commands!() functions
 # (These run after test_commands.jl which includes mocks + all source files)
 # ──────────────────────────────────────────────────────────────
