@@ -25,6 +25,7 @@ function register_dsge_commands!()
             Option("degree"; type=Int, default=5, description="Polynomial degree (projection/pfi)"),
             Option("grid"; type=String, default="auto", description="Grid type: auto|chebyshev|smolyak"),
             Option("constraints"; type=String, default="", description="Path to OccBin constraints TOML"),
+            Option("constraint-solver"; type=String, default="", description="Constraint solver: nonlinearsolve|optim|nlopt|ipopt|path"),
             Option("periods"; type=Int, default=40, description="Number of periods for OccBin simulation"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
@@ -102,6 +103,8 @@ function register_dsge_commands!()
         args=[Argument("model"; description="Path to DSGE model file (.toml or .jl)")],
         options=[
             Option("shocks"; type=String, default="", description="Path to shock sequence CSV"),
+            Option("constraints"; type=String, default="", description="Path to constraints TOML"),
+            Option("constraint-solver"; type=String, default="", description="Constraint solver: nonlinearsolve|optim|nlopt|ipopt|path"),
             Option("periods"; type=Int, default=100, description="Simulation periods"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
@@ -114,6 +117,7 @@ function register_dsge_commands!()
         args=[Argument("model"; description="Path to DSGE model file (.toml or .jl)")],
         options=[
             Option("constraints"; type=String, default="", description="Path to OccBin constraints TOML"),
+            Option("constraint-solver"; type=String, default="", description="Constraint solver: nonlinearsolve|optim|nlopt|ipopt|path"),
             Option("output"; short="o", type=String, default="", description="Export results to file"),
             Option("format"; short="f", type=String, default="table", description="table|csv|json"),
         ],
@@ -148,6 +152,7 @@ function register_dsge_commands!()
         Option("observables"; type=String, default="", description="Observable variable names (comma-separated)"),
         Option("solver"; type=String, default="gensys", description="gensys|klein|perturbation"),
         Option("order"; type=Int, default=1, description="Perturbation order (1, 2, or 3)"),
+        Option("constraint-solver"; type=String, default="", description="Constraint solver: nonlinearsolve|optim|nlopt|ipopt|path"),
         Option("output"; short="o", type=String, default="", description="Export results to file"),
         Option("format"; short="f", type=String, default="table", description="table|csv|json"),
     ]
@@ -269,31 +274,47 @@ end
 
 function _dsge_solve(; model::String, method::String="gensys", order::Int=1,
                       degree::Int=5, grid::String="auto",
-                      constraints::String="", periods::Int=40,
+                      constraints::String="", constraint_solver::String="",
+                      periods::Int=40,
                       output::String="", format::String="table",
                       plot::Bool=false, plot_save::String="")
+    if !isempty(constraint_solver) && !(constraint_solver in ("nonlinearsolve", "optim", "nlopt", "ipopt", "path"))
+        error("invalid --constraint-solver value '$constraint_solver'; must be one of: nonlinearsolve, optim, nlopt, ipopt, path")
+    end
+
     spec = _load_dsge_model(model)
-    sol = _solve_dsge(spec; method=method, order=order, degree=degree, grid=grid)
 
     if !isempty(constraints)
-        println("\nSolving with OccBin constraints...")
-        cons = _load_dsge_constraints(constraints)
-        shocks = zeros(Float64, periods, spec.n_exog)
-        shocks[1, 1] = 1.0
-        ob_sol = occbin_solve(spec, shocks, cons; T_periods=periods)
+        cons = _load_dsge_constraints(constraints; spec=spec)
+        if isempty(constraint_solver)
+            # Default: OccBin path (backward compatible)
+            println("\nSolving with OccBin constraints...")
+            sol = _solve_dsge(spec; method=method, order=order, degree=degree, grid=grid)
+            shocks = zeros(Float64, periods, spec.n_exog)
+            shocks[1, 1] = 1.0
+            ob_sol = occbin_solve(spec, shocks, cons; T_periods=periods)
 
-        _maybe_plot(ob_sol; plot=plot, plot_save=plot_save)
+            _maybe_plot(ob_sol; plot=plot, plot_save=plot_save)
 
-        path_df = DataFrame()
-        path_df.period = 1:periods
-        for (vi, vname) in enumerate(spec.varnames)
-            if vi <= size(ob_sol.piecewise_path, 2)
-                path_df[!, vname] = ob_sol.piecewise_path[:, vi]
+            path_df = DataFrame()
+            path_df.period = 1:periods
+            for (vi, vname) in enumerate(spec.varnames)
+                if vi <= size(ob_sol.piecewise_path, 2)
+                    path_df[!, vname] = ob_sol.piecewise_path[:, vi]
+                end
             end
+            output_result(path_df; format=Symbol(format), output=output,
+                          title="DSGE OccBin Solution ($(length(cons)) constraint(s), T=$periods)")
+            return
+        else
+            # New solver hierarchy path
+            println("\nSolving with constraint-solver=$constraint_solver...")
+            sol = _solve_dsge(spec; method=method, order=order, degree=degree,
+                              grid=grid, constraint_solver=constraint_solver)
         end
-        output_result(path_df; format=Symbol(format), output=output,
-                      title="DSGE OccBin Solution ($(length(cons)) constraint(s), T=$periods)")
-        return
+    else
+        sol = _solve_dsge(spec; method=method, order=order, degree=degree, grid=grid,
+                          constraint_solver=constraint_solver)
     end
 
     # Standard solve output
@@ -334,14 +355,20 @@ function _dsge_solve(; model::String, method::String="gensys", order::Int=1,
 end
 
 function _dsge_steady_state(; model::String, constraints::String="",
+                             constraint_solver::String="",
                              output::String="", format::String="table")
+    if !isempty(constraint_solver) && !(constraint_solver in ("nonlinearsolve", "optim", "nlopt", "ipopt", "path"))
+        error("invalid --constraint-solver value '$constraint_solver'; must be one of: nonlinearsolve, optim, nlopt, ipopt, path")
+    end
+
     spec = _load_dsge_model(model)
 
+    solver_kw = isempty(constraint_solver) ? (;) : (; solver=Symbol(constraint_solver))
     if !isempty(constraints)
-        cons = _load_dsge_constraints(constraints)
-        spec = compute_steady_state(spec; constraints=cons)
+        cons = _load_dsge_constraints(constraints; spec=spec)
+        spec = compute_steady_state(spec; constraints=cons, solver_kw...)
     else
-        spec = compute_steady_state(spec)
+        spec = compute_steady_state(spec; solver_kw...)
     end
 
     ss_df = DataFrame(
@@ -513,10 +540,15 @@ function _dsge_estimate(; model::String, data::String="", method::String="irf_ma
 end
 
 function _dsge_perfect_foresight(; model::String, shocks::String="",
+                                  constraints::String="", constraint_solver::String="",
                                   periods::Int=100,
                                   output::String="", format::String="table",
                                   plot::Bool=false, plot_save::String="")
     isempty(shocks) && error("--shocks is required (path to shock CSV)")
+    if !isempty(constraint_solver) && !(constraint_solver in ("nonlinearsolve", "optim", "nlopt", "ipopt", "path"))
+        error("invalid --constraint-solver value '$constraint_solver'; must be one of: nonlinearsolve, optim, nlopt, ipopt, path")
+    end
+
     spec = _load_dsge_model(model)
 
     shock_df = load_data(shocks)
@@ -526,7 +558,14 @@ function _dsge_perfect_foresight(; model::String, shocks::String="",
     println("  Shock periods: $(size(shock_mat, 1)), transition periods: $periods")
     println()
 
-    pf = perfect_foresight(spec; shocks=shock_mat, T_periods=periods)
+    solver_kw = isempty(constraint_solver) ? (;) : (; solver=Symbol(constraint_solver))
+    cons_kw = if !isempty(constraints)
+        cons = _load_dsge_constraints(constraints; spec=spec)
+        (; constraints=cons)
+    else
+        (;)
+    end
+    pf = perfect_foresight(spec; shocks=shock_mat, T_periods=periods, solver_kw..., cons_kw...)
 
     _maybe_plot(pf; plot=plot, plot_save=plot_save)
 
@@ -549,10 +588,15 @@ end
 function _dsge_bayes_run_estimation(; model::String, data::String, params::String,
         priors::String, sampler::String, n_smc::Int, n_particles::Int,
         n_draws::Int, burnin::Int, ess_target::Float64, observables::String,
-        solver::String, order::Int, delayed_acceptance::Bool)
+        solver::String, order::Int, delayed_acceptance::Bool,
+        constraint_solver::String="")
     isempty(data) && error("--data is required")
     isempty(params) && error("--params is required (comma-separated parameter names)")
     isempty(priors) && error("--priors is required (path to priors TOML)")
+
+    if !isempty(constraint_solver) && !(constraint_solver in ("nonlinearsolve", "optim", "nlopt", "ipopt", "path"))
+        error("invalid --constraint-solver value '$constraint_solver'; must be one of: nonlinearsolve, optim, nlopt, ipopt, path")
+    end
 
     spec = _load_dsge_model(model)
 
@@ -576,13 +620,14 @@ function _dsge_bayes_run_estimation(; model::String, data::String, params::Strin
     println("  Solver: $solver" * (order > 1 ? ", order=$order" : ""))
     println()
 
+    solver_obj_kw = isempty(constraint_solver) ? (;) : (; solver_obj=Symbol(constraint_solver))
     result = estimate_dsge_bayes(spec, Y, theta0;
         priors=priors_dict, method=Symbol(sampler),
         observables=obs_syms,
         n_smc=n_smc, n_particles=n_particles,
         n_draws=n_draws, burnin=burnin, ess_target=ess_target,
         solver=Symbol(solver), solver_kwargs=solver_kwargs,
-        delayed_acceptance=delayed_acceptance)
+        delayed_acceptance=delayed_acceptance, solver_obj_kw...)
 
     return result
 end
@@ -593,11 +638,12 @@ function _dsge_bayes_estimate(; model::String, data::String="", params::String="
                                n_draws::Int=10000, burnin::Int=5000,
                                ess_target::Float64=0.5, observables::String="",
                                solver::String="gensys", order::Int=1,
+                               constraint_solver::String="",
                                delayed_acceptance::Bool=false,
                                output::String="", format::String="table")
     result = _dsge_bayes_run_estimation(; model, data, params, priors, sampler,
         n_smc, n_particles, n_draws, burnin, ess_target, observables,
-        solver, order, delayed_acceptance)
+        solver, order, delayed_acceptance, constraint_solver)
 
     # Posterior summary table
     draws = result.theta_draws
@@ -625,13 +671,14 @@ function _dsge_bayes_irf(; model::String, data::String="", params::String="",
                           n_draws::Int=10000, burnin::Int=5000,
                           ess_target::Float64=0.5, observables::String="",
                           solver::String="gensys", order::Int=1,
+                          constraint_solver::String="",
                           delayed_acceptance::Bool=false,
                           horizon::Int=40,
                           output::String="", format::String="table",
                           plot::Bool=false, plot_save::String="")
     result = _dsge_bayes_run_estimation(; model, data, params, priors, sampler,
         n_smc, n_particles, n_draws, burnin, ess_target, observables,
-        solver, order, delayed_acceptance)
+        solver, order, delayed_acceptance, constraint_solver)
 
     solver_kwargs = order > 1 ? (order=order,) : NamedTuple()
 
@@ -664,13 +711,14 @@ function _dsge_bayes_fevd(; model::String, data::String="", params::String="",
                            n_draws::Int=10000, burnin::Int=5000,
                            ess_target::Float64=0.5, observables::String="",
                            solver::String="gensys", order::Int=1,
+                           constraint_solver::String="",
                            delayed_acceptance::Bool=false,
                            horizon::Int=40,
                            output::String="", format::String="table",
                            plot::Bool=false, plot_save::String="")
     result = _dsge_bayes_run_estimation(; model, data, params, priors, sampler,
         n_smc, n_particles, n_draws, burnin, ess_target, observables,
-        solver, order, delayed_acceptance)
+        solver, order, delayed_acceptance, constraint_solver)
 
     solver_kwargs = order > 1 ? (order=order,) : NamedTuple()
 
@@ -704,13 +752,14 @@ function _dsge_bayes_simulate(; model::String, data::String="", params::String="
                                n_draws::Int=10000, burnin::Int=5000,
                                ess_target::Float64=0.5, observables::String="",
                                solver::String="gensys", order::Int=1,
+                               constraint_solver::String="",
                                delayed_acceptance::Bool=false,
                                periods::Int=200,
                                output::String="", format::String="table",
                                plot::Bool=false, plot_save::String="")
     result = _dsge_bayes_run_estimation(; model, data, params, priors, sampler,
         n_smc, n_particles, n_draws, burnin, ess_target, observables,
-        solver, order, delayed_acceptance)
+        solver, order, delayed_acceptance, constraint_solver)
 
     solver_kwargs = order > 1 ? (order=order,) : NamedTuple()
 
@@ -737,11 +786,12 @@ function _dsge_bayes_summary(; model::String, data::String="", params::String=""
                               n_draws::Int=10000, burnin::Int=5000,
                               ess_target::Float64=0.5, observables::String="",
                               solver::String="gensys", order::Int=1,
+                              constraint_solver::String="",
                               delayed_acceptance::Bool=false,
                               output::String="", format::String="table")
     result = _dsge_bayes_run_estimation(; model, data, params, priors, sampler,
         n_smc, n_particles, n_draws, burnin, ess_target, observables,
-        solver, order, delayed_acceptance)
+        solver, order, delayed_acceptance, constraint_solver)
 
     summary = posterior_summary(result)
     pp_table = prior_posterior_table(result)
@@ -784,6 +834,7 @@ function _dsge_bayes_compare(; model::String, data::String="", params::String=""
                               n_draws::Int=10000, burnin::Int=5000,
                               ess_target::Float64=0.5, observables::String="",
                               solver::String="gensys", order::Int=1,
+                              constraint_solver::String="",
                               delayed_acceptance::Bool=false,
                               model2::String="", params2::String="", priors2::String="",
                               output::String="", format::String="table")
@@ -794,12 +845,12 @@ function _dsge_bayes_compare(; model::String, data::String="", params::String=""
     println("Estimating Model 1...")
     r1 = _dsge_bayes_run_estimation(; model, data, params, priors, sampler,
         n_smc, n_particles, n_draws, burnin, ess_target, observables,
-        solver, order, delayed_acceptance)
+        solver, order, delayed_acceptance, constraint_solver)
 
     println("Estimating Model 2...")
     r2 = _dsge_bayes_run_estimation(; model=model2, data, params=params2,
         priors=priors2, sampler, n_smc, n_particles, n_draws, burnin,
-        ess_target, observables, solver, order, delayed_acceptance)
+        ess_target, observables, solver, order, delayed_acceptance, constraint_solver)
 
     bf = bayes_factor(r1, r2)
 
@@ -829,13 +880,14 @@ function _dsge_bayes_predictive(; model::String, data::String="", params::String
                                  n_draws::Int=10000, burnin::Int=5000,
                                  ess_target::Float64=0.5, observables::String="",
                                  solver::String="gensys", order::Int=1,
+                                 constraint_solver::String="",
                                  delayed_acceptance::Bool=false,
                                  n_sim::Int=500, periods::Int=100,
                                  output::String="", format::String="table",
                                  plot::Bool=false, plot_save::String="")
     result = _dsge_bayes_run_estimation(; model, data, params, priors, sampler,
         n_smc, n_particles, n_draws, burnin, ess_target, observables,
-        solver, order, delayed_acceptance)
+        solver, order, delayed_acceptance, constraint_solver)
 
     println("Generating posterior predictive simulations: n=$n_sim, T=$periods")
     pp = posterior_predictive(result, n_sim; T_periods=periods)
@@ -910,6 +962,7 @@ function _dsge_bayes_hd(; model::String, data::String="", params::String="",
                          n_draws::Int=10000, burnin::Int=5000,
                          ess_target::Float64=0.5,
                          solver::String="gensys", order::Int=1,
+                         constraint_solver::String="",
                          n_hd_draws::Int=200, quantiles::String="0.16,0.5,0.84",
                          mode_only::Bool=false,
                          delayed_acceptance::Bool=false,
@@ -920,7 +973,7 @@ function _dsge_bayes_hd(; model::String, data::String="", params::String="",
 
     bd = _dsge_bayes_run_estimation(; model, data, params, priors, sampler,
         n_smc, n_particles, n_draws, burnin, ess_target, observables,
-        solver, order, delayed_acceptance)
+        solver, order, delayed_acceptance, constraint_solver)
 
     df = load_data(data)
     Y = df_to_matrix(df)
