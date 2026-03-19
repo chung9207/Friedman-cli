@@ -3153,6 +3153,11 @@ include(joinpath(@__DIR__, "test_commands.jl"))
 include(joinpath(@__DIR__, "test_repl.jl"))
 
 # ──────────────────────────────────────────────────────────────
+# build_app() and main() tests (uses register_*_commands! from test_commands.jl)
+# ──────────────────────────────────────────────────────────────
+include(joinpath(@__DIR__, "test_main.jl"))
+
+# ──────────────────────────────────────────────────────────────
 # CLI structure tests using real register_*_commands!() functions
 # (These run after test_commands.jl which includes mocks + all source files)
 # ──────────────────────────────────────────────────────────────
