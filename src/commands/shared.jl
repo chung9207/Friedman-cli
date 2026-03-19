@@ -722,16 +722,18 @@ function _load_dsge_model(path::String)
 end
 
 """
-    _solve_dsge(spec; method="gensys", order=1, degree=5, grid="auto") → solution
+    _solve_dsge(spec; method="gensys", order=1, degree=5, grid="auto", constraint_solver="") → solution
 
 Solve a DSGE model: compute steady state → linearize → solve.
 Returns DSGESolution, PerturbationSolution, or ProjectionSolution.
 """
 function _solve_dsge(spec::MacroEconometricModels.DSGESpec;
                      method::String="gensys", order::Int=1,
-                     degree::Int=5, grid::String="auto")
+                     degree::Int=5, grid::String="auto",
+                     constraint_solver::String="")
     println("Computing steady state...")
-    spec = compute_steady_state(spec)
+    ss_kw = isempty(constraint_solver) ? (;) : (; solver=Symbol(constraint_solver))
+    spec = compute_steady_state(spec; ss_kw...)
 
     println("Linearizing model...")
     linearize(spec)
@@ -741,8 +743,9 @@ function _solve_dsge(spec::MacroEconometricModels.DSGESpec;
             (method in ("projection", "pfi") ? ", degree=$degree, grid=$grid" : "") *
             "...")
 
+    solve_kw = isempty(constraint_solver) ? (;) : (; solver=Symbol(constraint_solver))
     sol = solve(spec; method=Symbol(method), order=order,
-                degree=degree, grid=Symbol(grid))
+                degree=degree, grid=Symbol(grid), solve_kw...)
 
     # Report diagnostics
     if sol isa MacroEconometricModels.DSGESolution ||

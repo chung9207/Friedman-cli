@@ -5667,6 +5667,14 @@ end  # Plot Support
         end
     end
 
+    @testset "_solve_dsge — with constraint_solver" begin
+        spec = MacroEconometricModels.DSGESpec(; n_endog=2, n_exog=1)
+        out = _capture() do
+            sol = _solve_dsge(spec; method="gensys", constraint_solver="optim")
+            @test sol isa MacroEconometricModels.DSGESolution
+        end
+    end
+
     @testset "_load_dsge_constraints" begin
         mktempdir() do dir
             con_path = joinpath(dir, "constraints.toml")
