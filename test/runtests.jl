@@ -2619,6 +2619,17 @@ end
         end
     end
 
+    @testset "load_data path traversal rejection" begin
+        @test_throws ErrorException load_data("../etc/passwd")
+        @test_throws ErrorException load_data("data/../../../secret.csv")
+    end
+
+    @testset "output path traversal rejection" begin
+        df = DataFrame(a=[1,2,3])
+        @test_throws ErrorException output_result(df; format=:csv, output="../bad.csv")
+        @test_throws ErrorException output_result(df; format=:csv, output="foo/../../bad.csv")
+    end
+
     @testset "df_to_matrix" begin
         # Extracts only numeric columns
         df = DataFrame(a=[1,2,3], b=[4.0,5.0,6.0])
@@ -2760,6 +2771,14 @@ using TOML
 
             # Missing file → error
             @test_throws ErrorException load_config(joinpath(dir, "nonexistent.toml"))
+        end
+    end
+
+    @testset "load_config — malformed TOML" begin
+        mktempdir() do dir
+            bad_path = joinpath(dir, "bad.toml")
+            write(bad_path, "this is not [valid toml {{{")
+            @test_throws Exception load_config(bad_path)
         end
     end
 
