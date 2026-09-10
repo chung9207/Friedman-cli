@@ -135,7 +135,7 @@ function model_specs()::Vector{CommandSpec}
 end
 
 function register_model_commands!()
-    specs = model_specs()
+    specs = with_default_csv_kinds(model_specs())
     register!(specs)
     return build_node("model", specs; description="Model handles: inspect .jld2 (native) and .fmod (interim) files")
 end

@@ -406,22 +406,30 @@ friedman forecast vecm data.csv --confidence=0.90 --replications=1000
 ## forecast evaluate
 
 Post-hoc evaluation and combination of **already-computed** forecasts (C072). These
-leaves are model-agnostic: they take a CSV plus an actual-values column and one or
-more forecast columns, and wrap the MEMs `fceval` toolkit (Diebold–Mariano,
-Clark–West, Mincer–Zarnowitz, forecast encompassing, accuracy metrics, combination).
+leaves are model-agnostic: they take realized values plus competing forecasts, and
+wrap the MEMs `fceval` toolkit (Diebold–Mariano, Clark–West, Mincer–Zarnowitz,
+forecast encompassing, accuracy metrics, combination).
 
 **Uniform input convention** — every leaf takes:
 
-- `data` — a CSV of realized values and competing forecasts (positional).
+- `data` — realized values (CSV or data handle; positional). Required even with `--result`.
 - `--actual <col>` — the realized-values column name (required).
-- `--forecasts <col1,col2,...>` — one or more forecast column names (required).
+- `--forecasts <col1,col2,...>` — forecast column names in `data` (CSV path).
+- `--result <stem1,stem2,...>` — comma-separated forecast-result handle stems
+  (`VARForecast` / `BVARForecast` / `ARIMAForecast` / `VECMForecast` /
+  `FactorForecast` / … from `forecast * --save-result`).
+  Point forecasts become the columns `--forecasts` would name; model names default to
+  the stem basenames. An `H×n` forecast matrix is **not** flattened: the column
+  matching `--actual` (via `varnames`) is used, else column 1. Do not combine
+  with `--forecasts`. This is a **string** option (`handle=false`) so a comma
+  list is not loaded as one path.
 
-The handler forms whatever the underlying statistic needs from those columns:
+The handler forms whatever the underlying statistic needs from those series:
 forecast **errors** `e = actual − forecast` (Diebold–Mariano), the forecast
 **difference** `f_adj = f_small − f_big` (Clark–West squares it internally), or the
 `T×M` forecast matrix (accuracy metrics, combination). Forecast-count arity is
 validated per leaf (e.g. `dm` requires exactly 2) → usage error; unknown columns →
-`data/bad-column`.
+`data/bad-column`; result length mismatch → `data/shape`.
 
 These result types are not Tables.jl-registered upstream, so their tables are
 hand-built (a documented C051 exception, like the `io` and `estimate sur/3sls`
@@ -453,6 +461,9 @@ friedman forecast evaluate mincer-zarnowitz data.csv --actual y --forecasts f1 -
 
 # Combine three forecasts with inverse-MSE (Bates–Granger) weights
 friedman forecast evaluate combine data.csv --actual y --forecasts f1,f2,f3 --method bates-granger
+
+# Same metrics from saved forecast-result handles (names = stem basenames)
+friedman forecast evaluate metrics macro --actual y --result fcst_var,fcst_bvar
 ```
 
 ### forecast evaluate metrics
@@ -460,7 +471,8 @@ friedman forecast evaluate combine data.csv --actual y --forecasts f1,f2,f3 --me
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `--actual` | String | (required) | Realized-values column name |
-| `--forecasts` | String | (required) | Forecast column names, comma-separated (≥1) |
+| `--forecasts` | String | (required unless `--result`) | Forecast column names, comma-separated (≥1) |
+| `--result` | String | | Comma-separated forecast-result handle stems (alternative to `--forecasts`) |
 | `--seasonal-period` | Int | 1 | Seasonal lag for the MASE naive-forecast scaling |
 | `--format` | String | `table` | `table`, `csv`, `json` |
 | `--output` | String | | Export file path |
@@ -474,7 +486,8 @@ Diebold–Mariano test of equal predictive accuracy. Errors are formed internall
 | Option | Short | Type | Default | Description |
 |--------|-------|------|---------|-------------|
 | `--actual` | | String | (required) | Realized-values column name |
-| `--forecasts` | | String | (required) | Exactly two forecast columns |
+| `--forecasts` | | String | (required unless `--result`) | Exactly two forecast columns |
+| `--result` | | String | | Two forecast-result handle stems (alternative to `--forecasts`) |
 | `--loss` | | String | `se` | Loss function: `se` (squared) or `ad` (absolute) |
 | `--horizon` | `-h` | Int | 1 | Forecast horizon (sets the truncation lag `h−1`) |
 | `--alternative` | | String | `two-sided` | `two-sided`, `less`, `greater` |
@@ -489,7 +502,8 @@ Clark–West adjusted-MSPE test for nested models. Give the two forecasts as **s
 | Option | Short | Type | Default | Description |
 |--------|-------|------|---------|-------------|
 | `--actual` | | String | (required) | Realized-values column name |
-| `--forecasts` | | String | (required) | Exactly two columns: small, then big |
+| `--forecasts` | | String | (required unless `--result`) | Exactly two columns: small, then big |
+| `--result` | | String | | Two forecast-result handle stems: small, then big |
 | `--horizon` | `-h` | Int | 1 | Forecast horizon (sets the truncation lag `h−1`) |
 | `--alternative` | | String | `greater` | `two-sided`, `less`, `greater` |
 
@@ -502,7 +516,8 @@ Mincer–Zarnowitz forecast-efficiency regression `actual = a + b·fc + u`, join
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `--actual` | String | (required) | Realized-values column name |
-| `--forecasts` | String | (required) | Exactly one forecast column |
+| `--forecasts` | String | (required unless `--result`) | Exactly one forecast column |
+| `--result` | String | | One forecast-result handle stem (alternative to `--forecasts`) |
 | `--lags` | Int | 0 | Newey–West HAC truncation lag (0 = White) |
 | `--kernel` | String | `bartlett` | `bartlett`, `parzen`, `quadratic_spectral`, `tukey_hanning` |
 
@@ -515,7 +530,8 @@ Regression-based forecast-encompassing test `actual = a + b₁·fc1 + b₂·fc2 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `--actual` | String | (required) | Realized-values column name |
-| `--forecasts` | String | (required) | Exactly two forecast columns |
+| `--forecasts` | String | (required unless `--result`) | Exactly two forecast columns |
+| `--result` | String | | Two forecast-result handle stems (alternative to `--forecasts`) |
 | `--lags` | Int | 0 | Newey–West HAC truncation lag (0 = White) |
 | `--kernel` | String | `bartlett` | `bartlett`, `parzen`, `quadratic_spectral`, `tukey_hanning` |
 
@@ -528,7 +544,8 @@ Combine ≥2 forecasts into one series.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `--actual` | String | (required) | Realized-values column name |
-| `--forecasts` | String | (required) | Forecast column names, comma-separated (≥2) |
+| `--forecasts` | String | (required unless `--result`) | Forecast column names, comma-separated (≥2) |
+| `--result` | String | | Comma-separated forecast-result handle stems (≥2; alternative to `--forecasts`) |
 | `--method` | String | `equal` | `equal`, `bates-granger` (inverse-MSE), `granger-ramanathan` (constrained least squares) |
 | `--emit-series` | Flag | | Also emit the combined forecast series (`index | combined`) |
 

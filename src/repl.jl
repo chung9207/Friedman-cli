@@ -28,7 +28,8 @@ Session() = Session("", nothing, nothing, String[], Dict{Symbol,Any}(), :none)
 function session_load_data!(s::Session, path::String)
     # `~` has no shell to expand it inside the REPL; store the expanded path so
     # every downstream command that receives it via inject_session_data resolves.
-    path = startswith(path, ":") ? path : _expanduser(path)
+    # Stem `macro` injects `macro.jld2` when that file exists (resolve_stem).
+    path = startswith(path, ":") ? path : resolve_stem(_expanduser(path); slot=:data)
     df = load_data(path)
     Y = df_to_matrix(df)
     vnames = variable_names(df)

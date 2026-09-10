@@ -17,20 +17,94 @@ bin/friedman ARGS
 
 ## Data Flow
 
+CSV is the **import** format, not the working format. Commands take a **stem**;
+`.jld2` is native storage (MEMs `save_model` / `load_model`), not part of the
+argv contract. Wave 2 ships **result** handles (`--result` / `--save-result`)
+and `friedman show STEM` (render any loadable handle).
+
 ```
-CSV file → load_data(path)                 # → DataFrame, validates exists & non-empty
-         → df_to_matrix(df)                # → Matrix{Float64}, selects numeric columns
-         → variable_names(df)              # → Vector{String}, numeric column names
-                ↓
-    MacroEconometricModels.jl functions     # estimate_var, irf, forecast, etc.
-                ↓
-    Results → DataFrame                     # command renders the result to a DataFrame
-           → output_result(df; format, output, title)
-                ↓
-              :table → PrettyTables (center-aligned)
-              :csv   → CSV.write
-              :json  → JSON3.write (array of row dicts)
+CSV | :example
+        │
+        ▼
+data import --kind timeseries|panel|cross-section [-o STEM]
+        │
+        ▼
+STEM.jld2     TimeSeriesData | PanelData | CrossSectionData
+        │
+        ├─ data describe|diagnose|validate     (read, real type)
+        ├─ data fix|transform|dropna|keeprows|balance
+        │       -o STEM'     →  same type, STEM'.jld2
+        │       -o file.csv  →  CSV export; stderr: metadata dropped
+        ├─ data export STEM  →  CSV (inverse of import)
+        │
+        ▼
+estimate var STEM --save-model var         # stem → var.jld2
+        │
+        ▼
+irf var --model var --save-result irf      # --model stem → var.jld2
+friedman show irf                          # stem → irf.jld2 (no CSV fallback)
+friedman show var                          # fitted model table / fields
+forecast evaluate metrics STEM --actual gdp --result fcst_var,fcst_bvar
+# evaluate --result is a comma-separated string (not RESULT_OPTION)
+
+CSV shortcut (unchanged, additive 0.x):
+estimate var macro.csv --lags 2
 ```
+
+### Stem resolution
+
+**Save** (`data import -o`, data-edit `-o`, and a *present* `--save-model`):
+
+- **Data-edit `-o` only:** empty / omitted → leaf-specific default stem, then
+  the rule below. (`--save-model` omitted means do not save — it is not a
+  default stem.)
+- No suffix → append `.jld2` and use native `save_model`.
+- `.jld2` → native `save_model` (including `data import … -o out.jld2`, the
+  intended CSV→typed conversion).
+- `.fmod` → interim Serialization handle (unregistered types).
+- `.csv` on a **data-edit** output → CSV export (frequency/tcode/dates dropped).
+- **Data-edit** of a CSV with `-o out.jld2` → `usage/invalid` (run
+  `data import` first). This edit refusal does **not** apply to `data import`
+  itself.
+
+**Load** (data positional / `data export`; `--model` / `--result` / `show`):
+
+1. **Data slots:** resolve stem — `path.jld2` if that file exists (preferred),
+   else `path.csv`, else exact `path` (`.fmod`, `.toml` DSGE specs,
+   extensionless files). Else `data/file-not-found` (exit 3).
+2. **`--model` (Wave 2):** when the leaf's `model_types` is nonempty,
+   `resolve_stem(; slot=:result)` — `STEM.jld2` if that file exists (no CSV
+   fallback), then type-check. Empty `model_types` (DSGE builtins,
+   `data validate --model`) still requires an explicit suffix / URI.
+   `model info` is header-only and still wants `.jld2` / `.fmod` / `model://`.
+3. **`--result` / `friedman show STEM` (Wave 2):** `resolve_stem(; slot=:result)` —
+   `STEM.jld2` if that file exists, else the exact path. No CSV fallback
+   (show is for loadable handles, not import). Bundles emit a keys-only
+   table (`show_payload`); `:timeseries`/`:panel`/`:cross_section` emit
+   descriptive stats; `:io` and other kinds fall through to `long_table` /
+   `DataFrame` / field dump (never `to_matrix` an IOData). `--plot` /
+   `--plot-save` call `_maybe_plot` on every path; missing recipe →
+   `model/unsupported` (exit 5).
+
+If both `macro.jld2` and `macro.csv` exist, the handle wins on data slots.
+Explicit suffixes skip the search (`macro.csv` is CSV, `var.jld2` is a
+handle). `model://name` is the serve-session URI and is not stem-expanded.
+`:fred_md` example names are unchanged.
+
+`wrap_legacy` type-checks a loaded data handle against the leaf's
+registry-declared `data_kinds` **before** the handler runs. A mismatch is
+`data/wrong-kind` (exit 3) — e.g. a `PanelData` handle on `estimate var`. CSV
+remains legal on every leaf that lists `:csv`. `--result` of a type not in
+`result_types` is `data/wrong-result` (exit 3); `--model` of a type not in
+`model_types` is `model/wrong-kind` (exit 5). `--result` cannot be combined
+with `--model` or a data path (`usage/invalid`).
+
+Central resolver: `src/handles.jl`. Native persist: `src/model_handle.jl`.
+
+### Rendering
+
+After the library call, results still go through `output_result` (`:table` →
+PrettyTables, `:csv` → CSV.write, `:json` → the versioned envelope).
 
 **Rendering the result to a DataFrame (C051)** goes through one of three paths, in order of
 preference:
@@ -110,6 +184,11 @@ src/
     dispatch.jl           # dispatch() → dispatch_node() → dispatch_leaf()
     help.jl               # print_help() with colored, column-aligned output
   io.jl                   # load_data, df_to_matrix, variable_names, output_result
+  model_handle.jl         # save_model_dispatch / load_model_dispatch (.jld2 | .fmod | model://)
+  handles.jl              # stem resolver, data-kind check, typed persist (after model_handle.jl)
+  registry/
+    spec.jl               # CommandSpec (data_kinds / model_types / result_types)
+    adapter.jl            # wrap_legacy: stem-resolve + type-check + save
   config.jl               # TOML loader for priors, identification, GMM, non-Gaussian
   commands/
     shared.jl             # ID_METHOD_MAP, shared estimation/output helpers
@@ -122,12 +201,14 @@ src/
     predict.jl            # 16 predict subcommands
     residuals.jl          # 16 residuals subcommands
     filter.jl             # 5 filter subcommands
-    data.jl               # 9 data subcommands
+    data.jl               # 13 data subcommands (incl. import / export)
     nowcast.jl            # 5 nowcast subcommands
     dsge.jl               # DSGE subcommands + bayes node (13 sub-leaves) + HA/CT/OLG nodes
     did.jl                # 7 DID subcommands (3 estimation + 4 test)
     multipliers.jl        # multipliers nardl — new top-level (C062b, action-first)
     policy.jl             # policy counterfactuals — new top-level (W4/#126, MEMs 0.8.0 CF module)
+    serve.jl              # serve --mcp
+    show.jl               # show HANDLE (Wave 2)
 ```
 
 The ARDL/NARDL family (`estimate ardl`/`nardl` in `estimate.jl`, `test ardl-bounds`/`nardl-symmetry`
@@ -183,4 +264,4 @@ removal at v1.0.0.
 
 ## Totals
 
-20 top-level commands, 453 subcommands (registry-generated — see the inventory at the bottom of `CLAUDE.md`).
+21 top-level commands, 456 subcommands (registry-generated — see the inventory at the bottom of `CLAUDE.md`).

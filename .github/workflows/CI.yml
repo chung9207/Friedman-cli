@@ -72,6 +72,10 @@ jobs:
       - name: Table-key drift gate (goldens)
         if: matrix.os == 'ubuntu-latest' && matrix.version == '1.12'
         run: julia --project test/tools/check_table_keys.jl
+      # Typed-handles: every leaf with a data slot must declare nonempty data_kinds.
+      - name: Handle-kind drift gate
+        if: matrix.os == 'ubuntu-latest' && matrix.version == '1.12'
+        run: julia --project test/tools/check_handle_kinds.jl
       - name: Docs generation --check (P2-6 / C028)
         if: matrix.os == 'ubuntu-latest' && matrix.version == '1.12'
         run: |

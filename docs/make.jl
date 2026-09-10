@@ -37,6 +37,7 @@ makedocs(;
             "Generated: policy" => "commands/generated/policy.md",
             "Generated: spectral" => "commands/generated/spectral.md",
             "Generated: serve" => "commands/generated/serve.md",
+            "Generated: show" => "commands/generated/show.md",
             # Workflow guides (hand-written)
             "estimate (guide)" => "commands/estimate.md",
             "test (guide)" => "commands/test.md",

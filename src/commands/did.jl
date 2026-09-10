@@ -552,7 +552,7 @@ function did_specs()::Vector{CommandSpec}
 end
 
 function register_did_commands!()
-    specs = did_specs()
+    specs = with_default_csv_kinds(with_data_kinds(did_specs(), [:panel, :csv]))
     register!(specs)
     return build_node("did", specs; description="Difference-in-differences: estimation, event study LP, diagnostics")
 end

@@ -39,6 +39,7 @@ include(joinpath(ROOT, "src", "cli", "help.jl"))
 include(joinpath(ROOT, "src", "cli", "dispatch.jl"))
 include(joinpath(ROOT, "src", "commands", "shared.jl"))
 include(joinpath(ROOT, "src", "model_handle.jl"))
+include(joinpath(ROOT, "src", "handles.jl"))
 include(joinpath(ROOT, "src", "registry", "spec.jl"))
 include(joinpath(ROOT, "src", "registry", "adapter.jl"))
 include(joinpath(ROOT, "src", "commands", "estimate.jl"))
@@ -61,6 +62,7 @@ include(joinpath(ROOT, "src", "commands", "spectral.jl"))
 include(joinpath(ROOT, "src", "commands", "schema.jl"))
 include(joinpath(ROOT, "src", "commands", "model.jl"))
 include(joinpath(ROOT, "src", "commands", "completions.jl"))
+include(joinpath(ROOT, "src", "commands", "show.jl"))
 include(joinpath(ROOT, "test", "support.jl"))
 
 # Deterministic fixtures
@@ -161,6 +163,42 @@ function main()
             dest = _golden_path(gpath)
             _write_golden(js, dest)
             println("wrote $dest")
+        end
+
+        # Wave 2 typed-handle error goldens. Relative stems so the envelope
+        # message is cwd-stable (absolute mktemp paths would never match).
+        cd(dir) do
+            Random.seed!(42)
+            CSV.write("panel.csv", DataFrame(group=repeat(1:4, inner=10),
+                                             time=repeat(1:10, outer=4),
+                                             y=randn(40), x=randn(40)))
+            save_model_dispatch("panel.jld2",
+                xtset(CSV.read("panel.csv", DataFrame), :group, :time))
+            Y = reduce(hcat, (sin.(1:40) .+ 0.1 .* cos.((1:40) ./ i) for i in 1:3))
+            save_model_dispatch("var.jld2", estimate_var(Y, 1; varnames=["y1", "y2", "y3"]))
+            handle_err = [
+                (["estimate", "var", "panel", "--lags", "1", "--format", "json"],
+                 ["estimate", "var", "wrong-kind"]),
+                (["irf", "var", "--result", "var", "--format", "json"],
+                 ["irf", "var", "wrong-result"]),
+            ]
+            for (argv, gpath) in handle_err
+                Random.seed!(42)
+                out = _capture() do
+                    try
+                        _dispatch_via_app(String[string(a) for a in argv])
+                    catch e
+                        e isa CliError || rethrow()
+                    end
+                end
+                js = _extract_json_object(out)
+                js === nothing && error("no JSON in output for $argv\n$out")
+                errs = validate_envelope_json(js)
+                isempty(errs) || @warn "schema warnings for $gpath" errs
+                dest = _golden_path(gpath)
+                _write_golden(js, dest)
+                println("wrote $dest")
+            end
         end
     end
     # Renderer text goldens (table + csv) — centralized output path

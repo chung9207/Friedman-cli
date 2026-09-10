@@ -34,14 +34,57 @@ function _to_flag(f::FlagSpec)
     return Flag(f.name; short=f.short, description=f.description)
 end
 
+"""True when `v` is a nonempty string (handle path) or a loaded object."""
+_slot_set(v) = v isa AbstractString ? !isempty(v) : v !== nothing
+
+function _kw_str(kwargs::Dict{Symbol,Any}, key::Symbol)
+    v = get(kwargs, key, "")
+    return v isa AbstractString ? String(v) : ""
+end
+
+function _load_typed_handle(path::String, allowed::Vector{Symbol}, code::String; slot::String)
+    if !startswith(path, ":") && !startswith(path, "model://")
+        _validate_input_path(path)
+    end
+    obj = load_model_dispatch(path)
+    n = nameof(typeof(obj))
+    if n ∉ allowed
+        other = code == "model/wrong-kind" ? "--result" : "--model"
+        throw(CliError(code,
+            "$path is a $n handle; this command accepts $(join(allowed, ", "))";
+            hint="this is a $n; pass it as $other, not --$slot"))
+    end
+    return obj
+end
+
+function _nt_save_slot(nt, key::Symbol, path::String, flag::String)
+    haskey(nt, key) || throw(CliError("model/no-result",
+        "cannot $flag: handler NamedTuple has no $key field";
+        hint="return (; model, result) or omit $flag"))
+    obj = getfield(nt, key)
+    isnothing(obj) && throw(CliError("model/no-result",
+        "cannot $flag: handler returned nothing";
+        hint="only estimate/solve commands produce savable models"))
+    save_model_dispatch(path, obj)
+    return nothing
+end
+
+function _save_bare(path::String, obj, flag::String)
+    isnothing(obj) && throw(CliError("model/no-result",
+        "cannot $flag: handler returned nothing";
+        hint="only estimate/solve commands produce savable models"))
+    save_model_dispatch(path, obj)
+    return nothing
+end
+
 """
     wrap_legacy(handler) → (ctx::CmdContext) -> Any
 
 Adapt a legacy kwargs handler `_foo(; data, lags, ...)` to the CmdContext style.
 
-Also implements model-handle I/O (C029):
-- `--model PATH.fmod` → load handle, inject as `model=` object
-- `--save-model PATH.fmod` → serialize handler return value after success
+Handle I/O (C029 + typed-handles):
+- `--model` / `--result` stems → load, type-check, inject as objects
+- `--save-model` / `--save-result` → persist the handler return (or NamedTuple fields)
 """
 function wrap_legacy(handler::Function)
     return function (ctx::CmdContext)
@@ -59,26 +102,91 @@ function wrap_legacy(handler::Function)
         kwargs[:format] = string(ctx.fmt)
         kwargs[:output] = ctx.output
 
-        # --save-model is never a handler kwarg
-        save_path = string(get(kwargs, :save_model, ""))
+        # --result XOR --model XOR compute-from-data (producing leaves only).
+        result_str = _kw_str(kwargs, :result)
+        if !isempty(ctx.spec.result_types) && !isempty(result_str)
+            if _slot_set(get(kwargs, :model, "")) || _slot_set(get(kwargs, :data, ""))
+                throw(CliError("usage/invalid",
+                    "--result cannot be combined with --model or a data path";
+                    hint="omit --result to compute, or pass only --result to re-render"))
+            end
+        end
+
+        # Stem-resolve + type-check the data slot. data= stays a String.
+        if haskey(kwargs, :data) && kwargs[:data] isa AbstractString && !isempty(kwargs[:data])
+            resolved = resolve_stem(String(kwargs[:data]); slot=:data)
+            kwargs[:data] = resolved
+            kinds = ctx.spec.data_kinds
+            if !isempty(kinds) && _is_handle_path(resolved)
+                # Confine filesystem handles on the resolved path; skip :example and model://.
+                if !startswith(resolved, ":") && !startswith(resolved, "model://")
+                    _validate_input_path(resolved)
+                end
+                obj = load_model_dispatch(resolved)
+                k = _data_kind_of(obj)
+                if k ∉ kinds
+                    throw(CliError("data/wrong-kind",
+                        "$resolved is a $k handle ($(nameof(typeof(obj)))); this command accepts $(join(kinds, ", "))";
+                        hint="data import --kind timeseries, or pick a leaf that accepts $k"))
+                end
+            elseif !isempty(kinds) && !_is_handle_path(resolved) && !startswith(resolved, ":")
+                :csv ∉ kinds && throw(CliError("data/wrong-kind",
+                    "$resolved is CSV; this command does not accept :csv";
+                    hint="data import first"))
+            end
+        end
+
+        # --save-model / --save-result are never handler kwargs
+        save_path = resolve_save_path(string(get(kwargs, :save_model, "")))
+        save_result_path = resolve_save_path(string(get(kwargs, :save_result, "")))
         delete!(kwargs, :save_model)
+        delete!(kwargs, :save_result)
+
+        # --result STEM → loaded object when this leaf declares result_types.
+        if haskey(kwargs, :result)
+            rp = kwargs[:result]
+            if rp isa AbstractString
+                if isempty(rp)
+                    delete!(kwargs, :result)
+                elseif !isempty(ctx.spec.result_types)
+                    resolved = resolve_stem(String(rp); slot=:result)
+                    kwargs[:result] = _load_typed_handle(resolved, ctx.spec.result_types,
+                        "data/wrong-result"; slot="result")
+                    get!(kwargs, :data, "")
+                end
+            end
+        end
 
         # --model PATH → loaded object; empty → drop so handler default applies.
         # `.jld2` (native, C052) and `.fmod` (interim, C029) paths are model
         # handles; `model://` (W7/#142) is the in-memory serve-session handle.
         # Builtin names and .jl/.toml model files (e.g. `dsge ha huggett`,
         # `dsge solve rbc.toml`) must pass through as strings (C040).
+        # When model_types is nonempty, stem-resolve (no CSV fallback) first so
+        # `--model var` finds var.jld2; then type-check the loaded object.
         if haskey(kwargs, :model)
             mp = kwargs[:model]
             if mp isa AbstractString
                 if isempty(mp)
                     delete!(kwargs, :model)
-                elseif endswith(lowercase(String(mp)), ".fmod") ||
-                       endswith(lowercase(String(mp)), ".jld2") ||
-                       startswith(String(mp), "model://")
-                    kwargs[:model] = load_model_dispatch(String(mp))
-                    # allow missing data positional when handle supplies the model
-                    get!(kwargs, :data, "")
+                else
+                    mp = String(mp)
+                    if !isempty(ctx.spec.model_types)
+                        mp = resolve_stem(mp; slot=:result)
+                        kwargs[:model] = mp
+                    end
+                    if endswith(lowercase(mp), ".fmod") ||
+                       endswith(lowercase(mp), ".jld2") ||
+                       startswith(mp, "model://")
+                        if !isempty(ctx.spec.model_types)
+                            kwargs[:model] = _load_typed_handle(mp, ctx.spec.model_types,
+                                "model/wrong-kind"; slot="model")
+                        else
+                            kwargs[:model] = load_model_dispatch(mp)
+                        end
+                        # allow missing data positional when handle supplies the model
+                        get!(kwargs, :data, "")
+                    end
                 end
             end
         end
@@ -105,13 +213,18 @@ function wrap_legacy(handler::Function)
 
             result = handler(; kwargs...)
 
-            if !isempty(save_path)
-                isnothing(result) && throw(CliError(
-                    "model/no-result",
-                    "cannot --save-model: handler returned nothing",
-                    hint="only estimate/solve commands produce savable models",
-                ))
-                save_model_dispatch(save_path, result)
+            nt_split = result isa NamedTuple &&
+                (haskey(result, :model) || haskey(result, :result))
+            if nt_split
+                isempty(save_path) || _nt_save_slot(result, :model, save_path, "--save-model")
+                isempty(save_result_path) || _nt_save_slot(result, :result, save_result_path, "--save-result")
+            elseif !isempty(save_path) && !isempty(save_result_path)
+                throw(CliError("usage/invalid",
+                    "handler returned a single object; use a NamedTuple (; model, result)";
+                    hint="pass only --save-model or only --save-result, or return (; model, result)"))
+            else
+                isempty(save_path) || _save_bare(save_path, result, "--save-model")
+                isempty(save_result_path) || _save_bare(save_result_path, result, "--save-result")
             end
             return result
         finally
@@ -159,7 +272,7 @@ function to_leaf(spec::CommandSpec)
         output = string(get(o, :output, get(kwargs, :output, "")))
         env = envelope_active() ? _ENVELOPE[] : Envelope(command=join(spec.path, " "))
         status_fn = (parts...) -> _status(parts...)
-        ctx = CmdContext(a, o, fl, fmt, output, env, status_fn)
+        ctx = CmdContext(a, o, fl, fmt, output, env, status_fn, spec)
         return spec.handler(ctx)
     end
 

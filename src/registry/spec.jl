@@ -16,6 +16,7 @@ Base.@kwdef struct OptionSpec
     choices::Union{Nothing,Vector{String}} = nothing
     description::String = ""
     since::VersionNumber = v"0.5.0"
+    handle::Bool = false
 end
 
 Base.@kwdef struct FlagSpec
@@ -44,6 +45,9 @@ Base.@kwdef struct CommandSpec
     category::String = ""
     aliases::Vector{String} = String[]
     handler::Function = (ctx) -> ctx  # (ctx::CmdContext) -> Any
+    data_kinds::Vector{Symbol} = Symbol[]
+    model_types::Vector{Symbol} = Symbol[]
+    result_types::Vector{Symbol} = Symbol[]
 end
 
 """
@@ -57,6 +61,7 @@ struct CmdContext
     output::String
     env::Envelope
     status::Function
+    spec::CommandSpec
 end
 
 # ── Shared option groups (compose by name — never index-slice) ──────────
@@ -81,7 +86,26 @@ const SAVE_MODEL_OPTION = OptionSpec(
 const MODEL_OPTION = OptionSpec(
     name="model", type=String, default="",
     description="Load model from a handle file (.jld2 native, .fmod interim; skip re-estimation)",
+    handle=true,
 )
+
+const RESULT_OPTION = OptionSpec(
+    name="result", type=String, default="",
+    description="Load a result handle (skip computation)",
+    handle=true,
+)
+const SAVE_RESULT_OPTION = OptionSpec(
+    name="save-result", type=String, default="",
+    description="Save the result object to a handle (.jld2 native)",
+)
+function with_result_handles(specs::Vector{CommandSpec})
+    out = CommandSpec[]
+    for s in specs
+        isempty(s.result_types) ? push!(out, s) :
+            push!(out, _copy_spec(s; options=vcat(s.options, [RESULT_OPTION, SAVE_RESULT_OPTION])))
+    end
+    return out
+end
 
 # Config ergonomics (P2-8 / C030) — append to every leaf that has --config
 const CONFIG_ERGONOMICS_OPTIONS = [
@@ -93,6 +117,24 @@ const CONFIG_ERGONOMICS_OPTIONS = [
 const STRICT_FLAG = FlagSpec(name="strict",
                              description="Treat config schema warnings as errors (exit 4)")
 
+"""Copy a CommandSpec, overriding any provided fields."""
+function _copy_spec(s::CommandSpec; kwargs...)
+    CommandSpec(
+        path      = get(kwargs, :path, s.path),
+        summary   = get(kwargs, :summary, s.summary),
+        args      = get(kwargs, :args, s.args),
+        options   = get(kwargs, :options, s.options),
+        flags     = get(kwargs, :flags, s.flags),
+        tables    = get(kwargs, :tables, s.tables),
+        category  = get(kwargs, :category, s.category),
+        aliases   = get(kwargs, :aliases, s.aliases),
+        handler   = get(kwargs, :handler, s.handler),
+        data_kinds   = get(kwargs, :data_kinds, s.data_kinds),
+        model_types  = get(kwargs, :model_types, s.model_types),
+        result_types = get(kwargs, :result_types, s.result_types),
+    )
+end
+
 """Append --config-json/--set/--strict to specs that already declare --config."""
 function with_config_ergonomics(specs::Vector{CommandSpec})
     out = CommandSpec[]
@@ -102,27 +144,48 @@ function with_config_ergonomics(specs::Vector{CommandSpec})
             push!(out, s)
             continue
         end
-        push!(out, CommandSpec(
-            path=s.path, summary=s.summary, args=s.args,
-            options=vcat(s.options, CONFIG_ERGONOMICS_OPTIONS),
-            flags=vcat(s.flags, [STRICT_FLAG]),
-            tables=s.tables, category=s.category, aliases=s.aliases,
-            handler=s.handler,
-        ))
+        push!(out, _copy_spec(s; options=vcat(s.options, CONFIG_ERGONOMICS_OPTIONS),
+                              flags=vcat(s.flags, [STRICT_FLAG])))
     end
     return out
 end
 
 """Append option specs to every CommandSpec (by copy)."""
 function with_options(specs::Vector{CommandSpec}, extra::Vector{OptionSpec})
+    return [_copy_spec(s; options=vcat(s.options, extra)) for s in specs]
+end
+
+function with_data_kinds(specs::Vector{CommandSpec}, kinds::Vector{Symbol})
+    return [_copy_spec(s; data_kinds=kinds) for s in specs]
+end
+
+function _has_data_slot(s::CommandSpec)
+    any(a -> a.name == "data", s.args) || any(o -> o.name == "data", s.options)
+end
+
+function with_default_csv_kinds(specs::Vector{CommandSpec})
+    [_copy_spec(s; data_kinds = (!isempty(s.data_kinds) || !_has_data_slot(s)) ? s.data_kinds : [:csv])
+     for s in specs]
+end
+
+function with_model_types(specs::Vector{CommandSpec}, types::Vector{Symbol})
+    return [_copy_spec(s; model_types=types) for s in specs]
+end
+
+function with_result_types(specs::Vector{CommandSpec}, types::Vector{Symbol})
+    return [_copy_spec(s; result_types=types) for s in specs]
+end
+
+"""Set `model_types` / `result_types` per leaf from a path-keyed catalog."""
+function _tag_slot_types(specs::Vector{CommandSpec},
+                         catalog::Dict{Vector{String},Tuple{Vector{Symbol},Vector{Symbol}}})
     out = CommandSpec[]
     for s in specs
-        push!(out, CommandSpec(
-            path=s.path, summary=s.summary, args=s.args,
-            options=vcat(s.options, extra), flags=s.flags,
-            tables=s.tables, category=s.category, aliases=s.aliases,
-            handler=s.handler,
-        ))
+        if haskey(catalog, s.path)
+            mt, rt = catalog[s.path]
+            s = _copy_spec(s; model_types=mt, result_types=rt)
+        end
+        push!(out, s)
     end
     return out
 end
@@ -261,7 +324,8 @@ function with_default(group::Vector{OptionSpec}, name::String, default)
         if o.name == name
             push!(out, OptionSpec(name=o.name, short=o.short, type=o.type,
                                   default=default, choices=o.choices,
-                                  description=o.description, since=o.since))
+                                  description=o.description, since=o.since,
+                                  handle=o.handle))
             found = true
         else
             push!(out, o)

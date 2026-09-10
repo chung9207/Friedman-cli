@@ -83,6 +83,7 @@ function _dispatch_via_app(args::Vector{String})
         "policy"    => register_policy_commands!(),
         "spectral"  => register_spectral_commands!(),
         "model"     => register_model_commands!(),
+        "show"      => register_show_commands!(),
     )
     root = NodeCommand("friedman", root_cmds, "test tree")
     entry = Entry("friedman", root; version=v"0.4.3")

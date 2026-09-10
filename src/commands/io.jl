@@ -587,13 +587,22 @@ function register_io_commands!()
                       ["io", "aggregate"], ["io", "balance"])
             with_save_model([s])[1]
         elseif length(s.path) == 3 && s.path[1] == "io" && s.path[2] == "bf"
-            with_model_option([s])[1]
+            with_model_option([_copy_spec(s; model_types=[:ProductionNetwork])])[1]
         else
             s
         end
     end
-    register!(specs)
-    return build_node("io", specs;
+    out = CommandSpec[]
+    for s in specs
+        if _has_data_slot(s)
+            push!(out, _copy_spec(s; data_kinds=[:io, :csv]))
+        else
+            push!(out, s)
+        end
+    end
+    out = with_default_csv_kinds(out)
+    register!(out)
+    return build_node("io", out;
         description="Input-Output analysis: Leontief/Ghosh, multipliers, linkages, SDA, footprints, Baqaee-Farhi, MRIO")
 end
 

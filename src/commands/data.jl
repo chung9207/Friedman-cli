@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-# Data commands: list, load, describe, diagnose, fix, transform, filter, validate
+# Data commands: list, load, import, export, describe, diagnose, fix, transform, filter, validate
 
 function data_specs()::Vector{CommandSpec}
     return [
@@ -52,8 +52,8 @@ function data_specs()::Vector{CommandSpec}
         ),
         CommandSpec(
             path=["data", "describe"],
-            summary="Path to CSV data file",
-            args=[ArgSpec(name="data", type=String, required=true, default=nothing, description="Path to CSV data file")],
+            summary="Handle stem or CSV path",
+            args=[ArgSpec(name="data", type=String, required=true, default=nothing, description="Handle stem or CSV path")],
             options=[
                 OptionSpec(name="format", short="f", type=String, default="table", description="table|csv|json", choices=["table","csv","json"]),
                 OptionSpec(name="output", short="o", type=String, default="", description="Export results to file")
@@ -66,8 +66,8 @@ function data_specs()::Vector{CommandSpec}
         ),
         CommandSpec(
             path=["data", "diagnose"],
-            summary="Path to CSV data file",
-            args=[ArgSpec(name="data", type=String, required=true, default=nothing, description="Path to CSV data file")],
+            summary="Handle stem or CSV path",
+            args=[ArgSpec(name="data", type=String, required=true, default=nothing, description="Handle stem or CSV path")],
             options=[
                 OptionSpec(name="format", short="f", type=String, default="table", description="table|csv|json", choices=["table","csv","json"]),
                 OptionSpec(name="output", short="o", type=String, default="", description="Export results to file")
@@ -80,11 +80,11 @@ function data_specs()::Vector{CommandSpec}
         ),
         CommandSpec(
             path=["data", "fix"],
-            summary="Path to CSV data file",
-            args=[ArgSpec(name="data", type=String, required=true, default=nothing, description="Path to CSV data file")],
+            summary="Handle stem or CSV path",
+            args=[ArgSpec(name="data", type=String, required=true, default=nothing, description="Handle stem or CSV path")],
             options=[
                 OptionSpec(name="method", short="m", type=String, default="listwise", description="listwise|interpolate|mean"),
-                OptionSpec(name="output", short="o", type=String, default="", description="Output CSV file path"),
+                OptionSpec(name="output", short="o", type=String, default="", description="Output stem or CSV path"),
                 OptionSpec(name="format", short="f", type=String, default="table", description="table|csv|json", choices=["table","csv","json"])
             ],
             flags=FlagSpec[],
@@ -95,11 +95,11 @@ function data_specs()::Vector{CommandSpec}
         ),
         CommandSpec(
             path=["data", "transform"],
-            summary="Path to CSV data file",
-            args=[ArgSpec(name="data", type=String, required=true, default=nothing, description="Path to CSV data file")],
+            summary="Handle stem or CSV path",
+            args=[ArgSpec(name="data", type=String, required=true, default=nothing, description="Handle stem or CSV path")],
             options=[
                 OptionSpec(name="tcodes", type=String, default="", description="Comma-separated FRED transformation codes"),
-                OptionSpec(name="output", short="o", type=String, default="", description="Output CSV file path"),
+                OptionSpec(name="output", short="o", type=String, default="", description="Output stem or CSV path"),
                 OptionSpec(name="format", short="f", type=String, default="table", description="table|csv|json", choices=["table","csv","json"])
             ],
             flags=FlagSpec[],
@@ -130,8 +130,8 @@ function data_specs()::Vector{CommandSpec}
         ),
         CommandSpec(
             path=["data", "validate"],
-            summary="Path to CSV data file",
-            args=[ArgSpec(name="data", type=String, required=true, default=nothing, description="Path to CSV data file")],
+            summary="Handle stem or CSV path",
+            args=[ArgSpec(name="data", type=String, required=true, default=nothing, description="Handle stem or CSV path")],
             options=[
                 OptionSpec(name="model", type=String, default="", description="Model type (var|bvar|vecm|arima|garch|sv|lp|gmm|factor)"),
                 OptionSpec(name="format", short="f", type=String, default="table", description="table|csv|json", choices=["table","csv","json"]),
@@ -145,8 +145,8 @@ function data_specs()::Vector{CommandSpec}
         ),
         CommandSpec(
             path=["data", "balance"],
-            summary="Path to CSV data file",
-            args=[ArgSpec(name="data", type=String, required=true, default=nothing, description="Path to CSV data file")],
+            summary="Handle stem or CSV path",
+            args=[ArgSpec(name="data", type=String, required=true, default=nothing, description="Handle stem or CSV path")],
             options=[
                 OptionSpec(name="method", type=String, default="dfm", description="dfm"),
                 OptionSpec(name="factors", short="r", type=Int, default=3, description="Number of factors"),
@@ -162,8 +162,8 @@ function data_specs()::Vector{CommandSpec}
         ),
         CommandSpec(
             path=["data", "dropna"],
-            summary="Path to CSV data file",
-            args=[ArgSpec(name="data", type=String, required=true, default=nothing, description="Path to CSV data file")],
+            summary="Handle stem or CSV path",
+            args=[ArgSpec(name="data", type=String, required=true, default=nothing, description="Handle stem or CSV path")],
             options=[
                 OptionSpec(name="vars", type=String, default="", description="Column names to check (comma-separated; default: all)"),
                 OptionSpec(name="output", short="o", type=String, default="", description="Export results to file"),
@@ -177,8 +177,8 @@ function data_specs()::Vector{CommandSpec}
         ),
         CommandSpec(
             path=["data", "keeprows"],
-            summary="Path to CSV data file",
-            args=[ArgSpec(name="data", type=String, required=true, default=nothing, description="Path to CSV data file")],
+            summary="Handle stem or CSV path",
+            args=[ArgSpec(name="data", type=String, required=true, default=nothing, description="Handle stem or CSV path")],
             options=[
                 OptionSpec(name="rows", type=String, default="", description="Row indices (e.g. 1:100, 1,5,10)"),
                 OptionSpec(name="output", short="o", type=String, default="", description="Export results to file"),
@@ -189,14 +189,88 @@ function data_specs()::Vector{CommandSpec}
                               description="Rows selected by --rows, one column per variable")],
             category="data",
             handler=wrap_legacy(_data_keeprows),
+        ),
+        CommandSpec(
+            path=["data", "import"],
+            summary="Import CSV or :example to a typed .jld2 handle",
+            args=[ArgSpec(name="data", type=String, required=true, default=nothing,
+                          description="CSV path, stem, or :example dataset")],
+            options=[
+                OptionSpec(name="kind", type=String, default="",
+                           description="timeseries|panel|cross-section (required for CSV)",
+                           choices=["timeseries", "panel", "cross-section"]),
+                OptionSpec(name="frequency", type=String, default="other",
+                           description="daily|monthly|quarterly|annual|mixed|other",
+                           choices=["daily", "monthly", "quarterly", "annual", "mixed", "other"]),
+                OptionSpec(name="dates", type=String, default="",
+                           description="CSV column of date labels (timeseries)"),
+                OptionSpec(name="id-col", type=String, default="",
+                           description="Panel group column (required for --kind panel)"),
+                OptionSpec(name="time-col", type=String, default="",
+                           description="Panel time column (required for --kind panel)"),
+                OptionSpec(name="vars", type=String, default="",
+                           description="Comma-separated variable subset"),
+                OptionSpec(name="tcodes", type=String, default="",
+                           description="Comma-separated FRED tcode per variable"),
+                OptionSpec(name="note", type=String, default="",
+                           description="Free-form note stored in the handle header"),
+                OptionSpec(name="output", short="o", type=String, default="",
+                           description="Output stem or path (default: input basename)"),
+                OptionSpec(name="format", short="f", type=String, default="table",
+                           description="table|csv|json", choices=["table", "csv", "json"]),
+            ],
+            flags=FlagSpec[],
+            tables=[TableSpec(name=:imported_data,
+                              description="Imported handle kind, dimensions, frequency and path")],
+            category="data",
+            data_kinds=[:csv, :timeseries, :panel, :cross_section],
+            handler=wrap_legacy(_data_import),
+        ),
+        CommandSpec(
+            path=["data", "export"],
+            summary="Export a typed handle to CSV (frequency/tcode/dates dropped)",
+            args=[ArgSpec(name="data", type=String, required=true, default=nothing,
+                          description="Handle stem or path (TimeSeriesData/PanelData/CrossSectionData)")],
+            options=[
+                OptionSpec(name="output", short="o", type=String, default="",
+                           description="Output CSV path (default: <stem>.csv)"),
+                OptionSpec(name="format", short="f", type=String, default="table",
+                           description="table|csv|json", choices=["table", "csv", "json"]),
+            ],
+            flags=FlagSpec[],
+            # Emits no envelope table — writes CSV directly; gate-exempt, see check_table_keys.jl
+            tables=TableSpec[],
+            category="data",
+            data_kinds=[:timeseries, :panel, :cross_section],
+            handler=wrap_legacy(_data_export),
         )
     ]
 end
 
+const _DATA_CONTAINER_LEAVES = Set(["describe", "diagnose", "validate", "fix", "transform",
+    "filter", "balance", "dropna", "keeprows"])
+
 function register_data_commands!()
-    specs = data_specs()
+    specs = CommandSpec[]
+    for s in data_specs()
+        leaf = s.path[end]
+        if leaf == "filter"
+            # HP/Hamilton on a PanelData handle would treat group/time as series.
+            push!(specs, _copy_spec(s; data_kinds=[:timeseries, :csv]))
+        elseif leaf in _DATA_CONTAINER_LEAVES
+            # data filter returns a DataFrame — do not tag MEMs filter result types.
+            push!(specs, _copy_spec(s; data_kinds=[:timeseries, :panel, :cross_section, :csv]))
+        elseif leaf == "load"
+            push!(specs, _copy_spec(s; data_kinds=[:csv]))
+        else
+            # import already has kinds; export already has three-container kinds without :csv;
+            # list has no data slot.
+            push!(specs, s)
+        end
+    end
+    specs = with_result_handles(with_default_csv_kinds(specs))
     register!(specs)
-    return build_node("data", specs; description="Data management: load example datasets, inspect, clean, transform")
+    return build_node("data", specs; description="Data management: import/export handles, load example datasets, inspect, clean, transform")
 end
 
 
@@ -358,13 +432,13 @@ function _data_load(; name::String="", output::String="", format::String="table"
 end
 
 function _data_describe(; data::String, format::String="table", output::String="")
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    vn = variable_names(df)
+    tsd = _as_macro_data(data)
+    summary = _status_stdout() do
+        describe_data(tsd)
+    end
+    Y = to_matrix(tsd)
+    vn = varnames(tsd)
     n_obs, n_vars = size(Y)
-
-    tsd = TimeSeriesData(Y; varnames=vn, tcode=fill(1, n_vars), time_index=collect(1:n_obs))
-    summary = describe_data(tsd)
 
     # NaN-padded series (:mp_shocks ships 6 of 8 columns NaN outside their
     # published samples) are valid only inside a window that `n` alone cannot
@@ -391,16 +465,15 @@ function _data_describe(; data::String, format::String="table", output::String="
     _status("Data Summary: $n_obs observations × $n_vars variables")
     _status()
     output_result(result_df; format=Symbol(format), output=output, title="Descriptive Statistics")
+    return tsd
 end
 
 function _data_diagnose(; data::String, format::String="table", output::String="")
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    vn = variable_names(df)
-    n_obs, n_vars = size(Y)
-
-    tsd = TimeSeriesData(Y; varnames=vn, tcode=fill(1, n_vars), time_index=collect(1:n_obs))
+    tsd = _as_macro_data(data)
     diag = diagnose(tsd)
+    Y = to_matrix(tsd)
+    vn = varnames(tsd)
+    n_obs, n_vars = size(Y)
 
     result_df = DataFrame(
         variable=vn,
@@ -423,38 +496,40 @@ function _data_diagnose(; data::String, format::String="table", output::String="
             _status_styled("Warning: series is short ($n_obs observations)\n"; color=:yellow)
         end
     end
+    return tsd
+end
+
+function _as_macro_data(obj)
+    obj isa DataFrame || return obj
+    Y = df_to_matrix(obj)
+    vn = variable_names(obj)
+    return TimeSeriesData(Y; varnames=vn, tcode=fill(1, length(vn)),
+                          time_index=collect(1:size(Y, 1)))
+end
+_as_macro_data(data::String) = _as_macro_data(resolve_data(data))
+
+function _persist_edit(obj, data::String, output::String, suffix::String)
+    out_default = _default_edit_output(data, suffix)
+    return _write_macro_data(obj, isempty(output) ? out_default : output;
+                             input_path=data, default_stem=dataset_stem(data) * suffix)
 end
 
 function _data_fix(; data::String, method::String="listwise", output::String="", format::String="table")
     validate_method(method, ["listwise", "interpolate", "mean"], "fix method")
-
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    vn = variable_names(df)
-    n_obs, n_vars = size(Y)
-
-    tsd = TimeSeriesData(Y; varnames=vn, tcode=fill(1, n_vars), time_index=collect(1:n_obs))
+    tsd = _as_macro_data(resolve_data(data))
     fixed = fix(tsd; method=Symbol(method))
-    fixed_mat = to_matrix(fixed)
-
-    out_path = if !isempty(output)
-        output
-    else
-        "$(dataset_stem(data))_clean.csv"
-    end
-    _validate_output_path(out_path)
-
-    fixed_df = DataFrame(fixed_mat, vn)
-    CSV.write(out_path, fixed_df)
+    n_obs, n_vars = size(to_matrix(fixed))
     _status("Fixed data ($method): $n_obs observations × $n_vars variables")
-    _status("Written to $out_path")
+    _persist_edit(fixed, data, output, "_clean")
+    return fixed
 end
 
 function _data_transform(; data::String, tcodes::String="", output::String="", format::String="table")
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    vn = variable_names(df)
-    n_obs, n_vars = size(Y)
+    tsd = _as_macro_data(resolve_data(data))
+    _data_kind_of(tsd) === :cross_section && throw(CliError("data/wrong-kind",
+        "transform does not apply to CrossSectionData"))
+    vn = varnames(tsd)
+    n_vars = length(vn)
 
     isempty(tcodes) && throw(CliError("usage/missing",
         "--tcodes is required";
@@ -464,21 +539,8 @@ function _data_transform(; data::String, tcodes::String="", output::String="", f
     length(codes) == n_vars || throw(CliError("usage/invalid",
         "number of tcodes ($(length(codes))) must match number of variables ($n_vars)"))
 
-    tsd = TimeSeriesData(Y; varnames=vn, tcode=codes, time_index=collect(1:n_obs))
     transformed = apply_tcode(tsd, codes)
-    trans_mat = to_matrix(transformed)
-
     tcode_names = Dict(1=>"level", 2=>"Δ", 3=>"Δ²", 4=>"log", 5=>"Δlog", 6=>"Δ²log", 7=>"Δ%")
-
-    out_path = if !isempty(output)
-        output
-    else
-        "$(dataset_stem(data))_transformed.csv"
-    end
-    _validate_output_path(out_path)
-
-    trans_df = DataFrame(trans_mat, vn)
-    CSV.write(out_path, trans_df)
 
     _status("Transformed $n_vars variable(s):")
     for (i, vname) in enumerate(vn)
@@ -486,7 +548,8 @@ function _data_transform(; data::String, tcodes::String="", output::String="", f
         label = get(tcode_names, code, "code=$code")
         _status("  $vname: tcode=$code ($label)")
     end
-    _status("Written to $out_path")
+    _persist_edit(transformed, data, output, "_transformed")
+    return transformed
 end
 
 function _data_filter(; data::String, method::String="hp", component::String="cycle",
@@ -551,6 +614,7 @@ function _data_filter(; data::String, method::String="hp", component::String="cy
 
     title = "Data Filter: $method ($component component)"
     output_result(result_df; format=Symbol(format), output=output, title=title, key="data_filter")
+    return result_df
 end
 
 function _data_validate(; data::String, model::String="", format::String="table", output::String="")
@@ -560,12 +624,8 @@ function _data_validate(; data::String, model::String="", format::String="table"
                        "arch", "egarch", "gjr_garch", "static", "dynamic", "gdfm"]
     validate_method(model, allowed_models, "model type")
 
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    vn = variable_names(df)
-    n_obs, n_vars = size(Y)
-
-    tsd = TimeSeriesData(Y; varnames=vn, tcode=fill(1, n_vars), time_index=collect(1:n_obs))
+    tsd = _as_macro_data(data)
+    n_obs, n_vars = size(to_matrix(tsd))
 
     try
         validate_for_model(tsd, Symbol(model))
@@ -574,34 +634,31 @@ function _data_validate(; data::String, model::String="", format::String="table"
         _status_styled("Data validation failed for $model:\n"; color=:red)
         _status("  ", e.msg)
     end
+    return tsd
 end
 
 function _data_balance(; data::String, method::String="dfm", factors::Int=3,
                         lags::Int=2, output::String="", format::String="table")
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    vn = variable_names(df)
+    ts = _as_macro_data(resolve_data(data))
+    vn = varnames(ts)
+    Y = to_matrix(ts)
 
     _status("Balancing panel via $(method): $(length(vn)) variables, T=$(size(Y, 1))")
     _status()
 
-    ts = TimeSeriesData(Y; varnames=vn)
     balanced = balance_panel(ts; method=Symbol(method), r=factors, p=lags)
-
-    bal_Y = hasproperty(balanced, :data) ? balanced.data : Y
+    _persist_edit(balanced, data, output, "_balanced")
+    bal_Y = hasproperty(balanced, :data) ? balanced.data : to_matrix(balanced)
     result_df = DataFrame(bal_Y, vn)
-    output_result(result_df; format=Symbol(format), output=output,
+    output_result(result_df; format=Symbol(format), output="",
                   title="Balanced Panel (method=$method, r=$factors, p=$lags)", key="balanced_panel")
 end
 
 function _data_dropna(; data::String, vars::String="",
                        output::String="", format::String="table")
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    vnames = variable_names(df)
-    ts = TimeSeriesData(Y; varnames=vnames)
-
-    n_before = size(Y, 1)
+    ts = _as_macro_data(resolve_data(data))
+    vnames = varnames(ts)
+    n_before = size(to_matrix(ts), 1)
     # Real dropna's kwarg is asserted ::Union{Vector{String},Nothing} — a bare
     # strip() comprehension is Vector{SubString} and TypeErrors on every --vars
     # invocation, so materialize Strings and pre-check the names ourselves.
@@ -620,14 +677,15 @@ function _data_dropna(; data::String, vars::String="",
         # "All rows contain NaN or Inf" is an untyped ArgumentError upstream.
         e isa ArgumentError ? throw(CliError("data/invalid", e.msg)) : rethrow()
     end
-    n_after = size(cleaned.data, 1)
+    n_after = size(to_matrix(cleaned), 1)
 
     _status("Drop NA: $data")
     _status("  Rows before: $n_before, after: $n_after, dropped: $(n_before - n_after)")
     _status()
 
-    result_df = DataFrame(cleaned.data, cleaned.varnames)
-    output_result(result_df; format=Symbol(format), output=output, title="Cleaned Data")
+    _persist_edit(cleaned, data, output, "_dropna")
+    result_df = DataFrame(to_matrix(cleaned), varnames(cleaned))
+    output_result(result_df; format=Symbol(format), output="", title="Cleaned Data")
     return cleaned
 end
 
@@ -636,11 +694,8 @@ function _data_keeprows(; data::String, rows::String="",
     isempty(rows) && throw(CliError("usage/missing",
         "--rows is required (e.g. 1:100, 1,5,10)"))
 
-    df = load_data(data)
-    Y = df_to_matrix(df)
-    vnames = variable_names(df)
-    ts = TimeSeriesData(Y; varnames=vnames)
-    n_total = size(Y, 1)
+    ts = _as_macro_data(resolve_data(data))
+    n_total = size(to_matrix(ts), 1)
 
     _rows_err() = throw(CliError("usage/invalid",
         "--rows must be a range like 1:100 (or 1:end) or a comma list like 1,5,10 (got '$rows')"))
@@ -671,7 +726,220 @@ function _data_keeprows(; data::String, rows::String="",
     _status("  Selected $(length(indices)) of $n_total rows")
     _status()
 
-    result_df = DataFrame(filtered.data, filtered.varnames)
-    output_result(result_df; format=Symbol(format), output=output, title="Filtered Data")
+    _persist_edit(filtered, data, output, "_rows")
+    result_df = DataFrame(to_matrix(filtered), varnames(filtered))
+    output_result(result_df; format=Symbol(format), output="", title="Filtered Data")
     return filtered
+end
+
+function _parse_kind(kind::String)
+    k = lowercase(strip(kind))
+    k == "timeseries" && return :timeseries
+    k == "cross-section" && return :cross_section
+    k == "panel" && return :panel
+    throw(CliError("usage/invalid",
+        "--kind must be timeseries|panel|cross-section (got '$kind')"))
+end
+
+function _frequency_value(s::String)
+    key = lowercase(strip(s))
+    key == "annual" && (key = "yearly")
+    # Bare Daily/Monthly/... would be UndefVarError under the mock (no Frequency
+    # enum). Resolve via getfield so this works on mock Symbols and real enums.
+    if isdefined(MacroEconometricModels, :Monthly)
+        M = MacroEconometricModels
+        key == "daily" && return getfield(M, :Daily)
+        key == "monthly" && return getfield(M, :Monthly)
+        key == "quarterly" && return getfield(M, :Quarterly)
+        key == "yearly" && return getfield(M, :Yearly)
+        key == "mixed" && return getfield(M, :Mixed)
+        return getfield(M, :Other)
+    else
+        return Symbol(key)
+    end
+end
+
+function _parse_tcodes(tcodes::String, n_vars::Int)
+    codes = if isempty(tcodes)
+        fill(1, n_vars)
+    else
+        out = Int[]
+        for raw in split(tcodes, ",")
+            t = strip(raw)
+            isempty(t) && continue
+            v = tryparse(Int, t)
+            v === nothing && throw(CliError("usage/invalid",
+                "--tcodes must be comma-separated integers (got '$t')"))
+            (1 <= v <= 7) || throw(CliError("usage/invalid",
+                "tcode must be 1:7 (got $v)"))
+            push!(out, v)
+        end
+        out
+    end
+    length(codes) == n_vars || throw(CliError("usage/invalid",
+        "number of tcodes ($(length(codes))) must match number of variables ($n_vars)"))
+    return codes
+end
+
+function _require_columns(df, names_::Vector{String}; label::String="variable")
+    colnames = names(df)
+    for v in names_
+        v in colnames || throw(CliError("data/column-range",
+            "$label '$v' not found";
+            hint="available: $(join(colnames[1:min(5, length(colnames))], ", "))..."))
+    end
+    return nothing
+end
+
+function _reject_missing_numeric(df, vn::Vector{String})
+    for c in vn
+        any(ismissing, df[!, c]) && throw(CliError("data/missing-values",
+            "column '$c' contains missing values; drop or impute them (e.g. via `data dropna`/`data fix`) first"))
+    end
+    return nothing
+end
+
+function _import_mems_error(e)
+    e isa CliError && return e
+    mapped = _domain_error_class(e)
+    mapped !== nothing && return mapped
+    if e isa ArgumentError
+        msg = _err_message(e)
+        lmsg = lowercase(msg)
+        occursin("not found", lmsg) && return CliError("data/column-range", msg)
+        occursin("tcode", lmsg) && return CliError("usage/invalid", msg)
+        return CliError("data/invalid", msg)
+    end
+    return e
+end
+
+function _data_import(; data::String, kind::String="", frequency::String="other",
+                       dates::String="", id_col::String="", time_col::String="",
+                       vars::String="", tcodes::String="", note::String="",
+                       output::String="", format::String="table")
+    src = data
+    if !startswith(src, ":")
+        src = resolve_stem(src; slot=:data)
+        # Import is CSV|:example → handle, not handle → handle.
+        _is_handle_path(src) && throw(CliError("usage/invalid",
+            "data import reads CSV or :example, not an existing handle";
+            hint="use `data export` or pass a CSV path"))
+    end
+    out_stem = isempty(output) ? joinpath(dirname(src), dataset_stem(src)) : output
+    out_path = resolve_save_path(out_stem)
+    _validate_output_path(out_path)
+
+    obj = if startswith(src, ":")
+        ds = load_example(parse_dataset_name(src))
+        inferred = _data_kind_of(ds)
+        if !isempty(kind)
+            want = _parse_kind(kind)
+            want === inferred || throw(CliError("data/wrong-kind",
+                ":example is $inferred; --kind $kind does not match"))
+        end
+        ds
+    else
+        isempty(kind) && throw(CliError("usage/invalid",
+            "--kind is required when importing a CSV";
+            hint="--kind timeseries|panel|cross-section"))
+        want = _parse_kind(kind)
+        # Panel identifiers are required even when --vars would otherwise subset
+        # them away (DataFrames ArgumentError on the empty name).
+        if want === :panel
+            (isempty(id_col) || isempty(time_col)) && throw(CliError("usage/missing",
+                "panel import requires --id-col and --time-col"))
+        elseif want === :cross_section
+            frequency == "other" || throw(CliError("usage/invalid",
+                "--frequency does not apply to --kind cross-section"))
+        end
+        df = load_data(src)
+        if want === :panel
+            _require_columns(df, String[id_col]; label="id column")
+            _require_columns(df, String[time_col]; label="time column")
+        end
+        if !isempty(dates)
+            _require_columns(df, String[dates]; label="dates column")
+        end
+        extra = String[]
+        want === :panel && append!(extra, (id_col, time_col))
+        !isempty(dates) && push!(extra, dates)
+        if !isempty(vars)
+            keep = String[String(strip(s)) for s in split(vars, ",") if !isempty(strip(s))]
+            _require_columns(df, keep)
+            df = df[!, unique(vcat(extra, keep))]
+        end
+        # Numeric --dates / panel id-col/time-col are metadata, not variables
+        # (same class as lat/lon in `_load_reg_data`). Keep dates on `df` for set_dates!.
+        exclude = Set{String}(extra)
+        vn = [n for n in variable_names(df) if n ∉ exclude]
+        isempty(vn) && throw(CliError("data/no-numeric-columns", "no numeric columns found in data"))
+        _reject_missing_numeric(df, vn)
+        try
+            if want === :timeseries
+                Y = Matrix{Float64}(df[!, vn])
+                codes = _parse_tcodes(tcodes, length(vn))
+                ts = TimeSeriesData(Y; varnames=vn, frequency=_frequency_value(frequency),
+                                    tcode=codes, time_index=collect(1:size(Y, 1)))
+                if !isempty(dates)
+                    set_dates!(ts, string.(df[!, dates]))
+                end
+                ts
+            elseif want === :panel
+                xtset(df[!, unique(vcat(String[id_col, time_col], vn))],
+                      Symbol(id_col), Symbol(time_col); frequency=_frequency_value(frequency))
+            else
+                Y = Matrix{Float64}(df[!, vn])
+                CrossSectionData(Y; varnames=vn)
+            end
+        catch e
+            throw(_import_mems_error(e))
+        end
+    end
+
+    # Always persist first; `note=` is a best-effort native-header rewrite.
+    save_model_dispatch(out_path, obj)
+    if !isempty(note)
+        try
+            MacroEconometricModels.save_model(obj, out_path; note=note)
+        catch e
+            e isa MethodError || rethrow()
+            _status("note= ignored: save_model does not accept note in this build")
+        end
+    end
+    k = _data_kind_of(obj)
+    nobs = hasproperty(obj, :data) ? size(obj.data, 1) : 0
+    nvars = hasproperty(obj, :varnames) ? length(obj.varnames) : 0
+    output_kv(Pair{String,Any}[
+        "kind" => string(k),
+        "n_obs" => nobs,
+        "n_vars" => nvars,
+        "path" => out_path,
+        "frequency" => string(frequency),
+    ]; format=format, output="", title="Imported Data", key="imported_data")
+    _status("Imported $k → $out_path")
+    return obj
+end
+
+function _data_export(; data::String, output::String="", format::String="table")
+    obj = resolve_data(data)
+    k = _data_kind_of(obj)
+    k in (:timeseries, :panel, :cross_section) || throw(CliError("data/wrong-kind",
+        "$data is not a data container (got $(typeof(obj)))";
+        hint="pass a TimeSeriesData/PanelData/CrossSectionData handle"))
+    out = if isempty(output)
+        resolved = try
+            resolve_stem(data; slot=:data)
+        catch
+            data
+        end
+        dir = startswith(resolved, ":") ? "" : dirname(resolved)
+        base = dataset_stem(data) * ".csv"
+        (isempty(dir) || dir == ".") ? base : joinpath(dir, base)
+    else
+        output
+    end
+    endswith(lowercase(out), ".csv") || (out = out * ".csv")
+    _write_macro_data(obj, out; input_path=data, default_stem=dataset_stem(data),
+                      warn_metadata=true)
+    return obj
 end

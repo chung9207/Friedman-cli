@@ -2519,6 +2519,26 @@ struct CrossSectionData{T<:Real}
     data::Matrix{T}; varnames::Vector{String}; obs_id::Vector{Int}
     N_obs::Int; n_vars::Int; desc::Vector{String}; vardesc::Vector{String}
 end
+# Keyword constructor matching real MEMs `CrossSectionData(data; varnames, obs_id, …)`.
+# Mock `vardesc` is Vector{String} (real is Dict); convert a Dict when given.
+function CrossSectionData(data::AbstractMatrix{T};
+                          varnames=nothing,
+                          obs_id=nothing,
+                          desc::AbstractString="",
+                          vardesc=nothing,
+                          source_refs=Symbol[]) where {T<:Real}
+    N_obs, n_vars = size(data)
+    vn = varnames === nothing ? String["x$i" for i in 1:n_vars] : Vector{String}(varnames)
+    oid = obs_id === nothing ? collect(1:N_obs) : Vector{Int}(obs_id)
+    vd = if vardesc === nothing
+        fill("", n_vars)
+    elseif vardesc isa AbstractDict
+        String[String(get(vardesc, v, "")) for v in vn]
+    else
+        Vector{String}(vardesc)
+    end
+    CrossSectionData{T}(Matrix{T}(data), vn, oid, N_obs, n_vars, [String(desc)], vd)
+end
 
 struct DataDiagnostic
     n_nan::Vector{Int}; n_inf::Vector{Int}; is_constant::Vector{Bool}
@@ -2668,6 +2688,26 @@ function describe_data(d::TimeSeriesData)
     ku = fill(3.0, nv)
     DataSummary(n, m, s, mn, p25, med, p75, mx, sk, ku)
 end
+# Real MEMs has describe_data(::PanelData) / (::CrossSectionData) returning the
+# same DataSummary. PanelData also prints panel_summary to stdout (real
+# summary_stats.jl); the CLI captures that dump onto stderr.
+function panel_summary(io::IO, d::PanelData)
+    println(io, "Panel Structure: $(d.n_groups) groups, $(d.T_obs) total observations")
+    println(io, "  Balance: ", d.balanced ? "balanced" : "unbalanced")
+    println(io, "  Variables: ", join(d.varnames, ", "))
+end
+panel_summary(d::PanelData) = panel_summary(stdout, d)
+
+function describe_data(d::PanelData)
+    s = describe_data(TimeSeriesData(d.data; varnames=d.varnames))
+    try
+        panel_summary(stdout, d)
+    catch e
+        e isa Base.IOError || rethrow()
+    end
+    s
+end
+describe_data(d::CrossSectionData) = describe_data(TimeSeriesData(d.data; varnames=d.varnames))
 
 # Simple std without Distributions dependency
 function std_mock(X::AbstractMatrix)
@@ -2685,6 +2725,9 @@ function diagnose(d::TimeSeriesData)
     is_clean = all(n_nan .== 0) && all(n_inf .== 0) && !any(is_const) && !is_short
     DataDiagnostic(n_nan, n_inf, is_const, is_short, is_clean)
 end
+# Real diagnose(::AbstractMacroData) covers PanelData / CrossSectionData.
+diagnose(d::PanelData) = diagnose(TimeSeriesData(d.data; varnames=d.varnames))
+diagnose(d::CrossSectionData) = diagnose(TimeSeriesData(d.data; varnames=d.varnames))
 
 function fix(d::TimeSeriesData; method=:listwise)
     # Mock: return same data (pretend it was cleaned)
@@ -2707,6 +2750,11 @@ function validate_for_model(d::TimeSeriesData, model_type::Symbol)
     end
     nothing
 end
+# Real validate_for_model(::AbstractMacroData, ::Symbol) covers the other containers.
+validate_for_model(d::PanelData, model_type::Symbol) =
+    validate_for_model(TimeSeriesData(d.data; varnames=d.varnames), model_type)
+validate_for_model(d::CrossSectionData, model_type::Symbol) =
+    validate_for_model(TimeSeriesData(d.data; varnames=d.varnames), model_type)
 
 function apply_filter(y::AbstractVector, method::Symbol; kwargs...)
     if method == :hp
@@ -2842,9 +2890,9 @@ end
 export AbstractNowcastModel, NowcastDFM, NowcastBVAR, NowcastBridge, NowcastResult, NowcastNews
 export nowcast_dfm, nowcast_bvar, nowcast_bridge, nowcast, nowcast_news
 
-export TimeSeriesData, DataDiagnostic, DataSummary
+export TimeSeriesData, CrossSectionData, DataDiagnostic, DataSummary
 export load_example, to_matrix, varnames, frequency, desc, vardesc, nobs, nvars
-export describe_data, diagnose, fix, apply_tcode, validate_for_model, apply_filter
+export describe_data, panel_summary, diagnose, fix, apply_tcode, validate_for_model, apply_filter
 
 # ─── DSGE Types (MEMs 0.9.0 ModelSpec; ModelSpec/HAModelSpec are gone) ──
 

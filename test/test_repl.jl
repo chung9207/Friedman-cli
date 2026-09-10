@@ -38,6 +38,23 @@ module Friedman
         end
     end
 
+    function resolve_stem(path::String; slot::Symbol=:data)::String
+        startswith(path, ":") && return path
+        startswith(path, "model://") && return path
+        path = _expanduser(path)
+        if occursin(r"\.[A-Za-z0-9]+$", basename(path))
+            return path
+        end
+        jld = path * ".jld2"
+        isfile(jld) && return jld
+        if slot === :data
+            csv = path * ".csv"
+            isfile(csv) && return csv
+        end
+        isfile(path) && return path
+        throw(CliError("data/file-not-found", "file not found: $path"))
+    end
+
     function load_data(path::String)
         if startswith(path, ":")
             ds = load_example(parse_dataset_name(path))
@@ -189,6 +206,23 @@ end
         @test isempty(s.results)
         @test s.last_model == :none
         rm(tmpfile; force=true)
+    end
+
+    @testset "session_load_data! resolves stem to .jld2" begin
+        s = Friedman.Session()
+        mktempdir() do dir
+            csv = joinpath(dir, "macro.csv")
+            jld = joinpath(dir, "macro.jld2")
+            CSV.write(csv, DataFrame(x=[1.0, 2.0], y=[3.0, 4.0]))
+            # stub load_data CSV.reads; table content at the .jld2 path is enough
+            # to pin that `data use macro` injects `macro.jld2` when it exists.
+            CSV.write(jld, DataFrame(x=[10.0, 20.0], y=[30.0, 40.0]))
+            Friedman.session_load_data!(s, joinpath(dir, "macro"))
+            @test s.data_path == jld
+            @test s.varnames == ["x", "y"]
+            @test size(s.Y) == (2, 2)
+            @test s.Y[1, 1] == 10.0
+        end
     end
 
     @testset "session_clear!" begin

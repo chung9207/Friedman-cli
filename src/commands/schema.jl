@@ -39,6 +39,52 @@ function _json_type(T::Type)
     return "string"  # unreached today (String/Int/Float64 are the full set); safe fallback
 end
 
+"""Last-wins CommandSpec for `path` (`register!` appends)."""
+function _spec_for_path(path::Vector{String})
+    i = findlast(s -> s.path == path, REGISTRY)
+    return i === nothing ? nothing : REGISTRY[i]
+end
+
+function _option_spec(spec::CommandSpec, name::String)
+    i = findfirst(o -> o.name == name, spec.options)
+    return i === nothing ? nothing : spec.options[i]
+end
+
+"""`x-handle` annotation for a data slot or `OptionSpec.handle` option, or `nothing`."""
+function _x_handle_dict(spec::CommandSpec, name::String; is_arg::Bool=false)
+    if spec.path == ["show"] && is_arg
+        return Dict{String,Any}(
+            "role" => "any",
+            "kinds" => String[],
+            "types" => String[],
+        )
+    end
+    if name == "data"
+        return Dict{String,Any}(
+            "role" => "data",
+            "kinds" => String.(spec.data_kinds),
+            "types" => String[],
+        )
+    end
+    is_arg && return nothing
+    ospec = _option_spec(spec, name)
+    (ospec === nothing || !ospec.handle) && return nothing
+    if name == "model"
+        return Dict{String,Any}(
+            "role" => "model",
+            "kinds" => String[],
+            "types" => String.(spec.model_types),
+        )
+    elseif name == "result"
+        return Dict{String,Any}(
+            "role" => "result",
+            "kinds" => String[],
+            "types" => String.(spec.result_types),
+        )
+    end
+    return nothing
+end
+
 """
     _input_schema(leaf, path) → Dict
 
@@ -46,9 +92,11 @@ Draft-07 object schema over `leaf`'s invocation surface. Property names are the
 CLI's kebab-case spellings; each property carries an `x-cli` annotation
 (`kind` = argument|option|flag, `position` for positionals, `long`/`short`
 spellings) so an agent can reconstruct the exact argv from a validated object.
-Shared with the MCP `inputSchema` (W7).
+Shared with the MCP `inputSchema` (W7). Data slots and `OptionSpec.handle`
+options also carry `x-handle` (`role`/`kinds`/`types`).
 """
 function _input_schema(leaf::LeafCommand, path::Vector{String})
+    spec = _spec_for_path(path)
     props = Dict{String,Any}()
     required = String[]
     for (i, a) in enumerate(leaf.args)
@@ -58,6 +106,10 @@ function _input_schema(leaf::LeafCommand, path::Vector{String})
         )
         isempty(a.description) || (p["description"] = a.description)
         a.default === nothing || (p["default"] = _default_json(a.default))
+        if spec !== nothing
+            xh = _x_handle_dict(spec, a.name; is_arg=true)
+            xh !== nothing && (p["x-handle"] = xh)
+        end
         props[a.name] = p
         a.required && push!(required, a.name)
     end
@@ -68,6 +120,10 @@ function _input_schema(leaf::LeafCommand, path::Vector{String})
         isempty(o.description) || (p["description"] = o.description)
         o.default === nothing || (p["default"] = _default_json(o.default))
         o.choices === nothing || (p["enum"] = o.choices)
+        if spec !== nothing
+            xh = _x_handle_dict(spec, o.name)
+            xh !== nothing && (p["x-handle"] = xh)
+        end
         props[o.name] = p
     end
     for f in leaf.flags

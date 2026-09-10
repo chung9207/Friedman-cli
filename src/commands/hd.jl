@@ -134,8 +134,18 @@ function hd_specs()::Vector{CommandSpec}
     ]
 end
 
+const _HD_SLOT_TYPES = Dict{Vector{String},Tuple{Vector{Symbol},Vector{Symbol}}}(
+    ["hd", "var"]   => ([:VARModel], [:HistoricalDecomposition]),
+    ["hd", "bvar"]  => ([:BVARPosterior], [:BayesianHistoricalDecomposition]),
+    ["hd", "lp"]    => ([:StructuralLP], [:HistoricalDecomposition]),
+    ["hd", "vecm"]  => ([:VECMModel], [:HistoricalDecomposition]),
+    ["hd", "favar"] => ([:FAVARModel], [:HistoricalDecomposition]),
+)
+
 function register_hd_commands!()
-    specs = with_config_ergonomics(with_model_option(hd_specs()))
+    specs = _tag_slot_types(hd_specs(), _HD_SLOT_TYPES)
+    specs = with_result_handles(with_config_ergonomics(with_model_option(specs)))
+    specs = with_default_csv_kinds(with_data_kinds(specs, [:timeseries, :csv]))
     register!(specs)
     return build_node("hd", specs; description="Historical Decomposition")
 end
@@ -143,11 +153,21 @@ end
 
 # ── VAR HD ───────────────────────────────────────────────
 
-function _hd_var(; data::String="", lags=nothing, id::String="cholesky",
+function _hd_var(; data::String="", result=nothing, model=nothing, lags=nothing, id::String="cholesky",
                   config::String="", instrument::String="", target_var::String="",
                   output::String="", format::String="table",
-                  plot::Bool=false, plot_save::String="",
-                  model=nothing)
+                  plot::Bool=false, plot_save::String="")
+    loaded = _loaded_result(result; data, model, lags, check_lags=true, leaf="hd var",
+                            id)
+    if loaded !== nothing
+        _output_hd_tables((vi, si) -> contribution(loaded, vi, si), loaded.variables, loaded.T_eff;
+                          id="", title_prefix="Historical Decomposition",
+                          format=format, output=output,
+                          actual=loaded.actual, initial=loaded.initial_conditions,
+                          key_prefix="historical_decomposition")
+        _maybe_plot(loaded; plot=plot, plot_save=plot_save)
+        return loaded
+    end
     if isnothing(model)
         model, Y, varnames, p = _load_and_estimate_var(data, lags)
     else
@@ -187,7 +207,7 @@ function _hd_var(; data::String="", lags=nothing, id::String="cholesky",
                           format=format, output=output,
                           actual=hd_result.actual, initial=hd_result.initial_conditions,
                           key_prefix="historical_decomposition")
-        return
+        return (; model, result=hd_result)
     end
 
     # Uhlig identification: use Q from identify_uhlig to compute structural shocks
@@ -214,7 +234,7 @@ function _hd_var(; data::String="", lags=nothing, id::String="cholesky",
                           format=format, output=output,
                           actual=hd_result.actual, initial=hd_result.initial_conditions,
                           key_prefix="historical_decomposition")
-        return
+        return (; model, result=hd_result)
     end
 
     # W2/#166: VAR-family allow-set (proxy/max-share/gmm-moments) + extras.
@@ -244,16 +264,29 @@ function _hd_var(; data::String="", lags=nothing, id::String="cholesky",
                       format=format, output=output,
                       actual=hd_result.actual, initial=hd_result.initial_conditions,
                       key_prefix="historical_decomposition")
+    return (; model, result=hd_result)
 end
 
 # ── BVAR HD ──────────────────────────────────────────────
 
-function _hd_bvar(; data::String="", lags::Int=4, id::String="cholesky",
+function _hd_bvar(; data::String="", result=nothing, lags::Int=4, id::String="cholesky",
                    draws::Int=2000, sampler::String="direct",
                    config::String="",
                    output::String="", format::String="table",
                    plot::Bool=false, plot_save::String="",
                    model=nothing)
+    loaded = _loaded_result(result; data, model, leaf="hd bvar", id)
+    if loaded !== nothing
+        mean_contrib = loaded.point_estimate
+        T_eff = size(mean_contrib, 1)
+        _output_hd_tables((vi, si) -> mean_contrib[:, vi, si], loaded.variables, T_eff;
+                          id="", title_prefix="Bayesian HD",
+                          format=format, output=output,
+                          initial=loaded.initial_point_estimate,
+                          key_prefix="bayesian_hd")
+        _maybe_plot(loaded; plot=plot, plot_save=plot_save)
+        return loaded
+    end
     if isnothing(model)
         post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
     else
@@ -286,15 +319,26 @@ function _hd_bvar(; data::String="", lags::Int=4, id::String="cholesky",
                       format=format, output=output,
                       initial=bhd.initial_point_estimate,
                       key_prefix="bayesian_hd")
+    return (; model=post, result=bhd)
 end
 
 # ── LP HD ────────────────────────────────────────────────
 
-function _hd_lp(; data::String="", lags::Int=4, var_lags=nothing,
+function _hd_lp(; data::String="", result=nothing, lags::Int=4, var_lags=nothing,
                  id::String="cholesky", vcov::String="newey_west", config::String="",
                  output::String="", format::String="table",
                  plot::Bool=false, plot_save::String="",
                  model=nothing)
+    loaded = _loaded_result(result; data, model, leaf="hd lp", id)
+    if loaded !== nothing
+        _output_hd_tables((vi, si) -> contribution(loaded, vi, si), loaded.variables, loaded.T_eff;
+                          id="", title_prefix="LP Historical Decomposition",
+                          format=format, output=output,
+                          actual=loaded.actual, initial=loaded.initial_conditions,
+                          key_prefix="lp_historical_decomposition")
+        _maybe_plot(loaded; plot=plot, plot_save=plot_save)
+        return loaded
+    end
     if isnothing(model)
         Y, varnames = load_multivariate_data(data)
         T_obs, n = size(Y)
@@ -341,16 +385,27 @@ function _hd_lp(; data::String="", lags::Int=4, var_lags=nothing,
                       format=format, output=output,
                       actual=hd_result.actual, initial=hd_result.initial_conditions,
                       key_prefix="lp_historical_decomposition")
+    return (; model=slp, result=hd_result)
 end
 
 # ── VECM HD ─────────────────────────────────────────────
 
-function _hd_vecm(; data::String="", lags::Int=2, rank::String="auto",
+function _hd_vecm(; data::String="", result=nothing, lags::Int=2, rank::String="auto",
                    deterministic::String="constant",
                    id::String="cholesky", config::String="",
                    output::String="", format::String="table",
                    plot::Bool=false, plot_save::String="",
                    model=nothing)
+    loaded = _loaded_result(result; data, model, leaf="hd vecm", id)
+    if loaded !== nothing
+        _output_hd_tables((vi, si) -> contribution(loaded, vi, si), loaded.variables, loaded.T_eff;
+                          id="", title_prefix="VECM Historical Decomposition",
+                          format=format, output=output,
+                          actual=loaded.actual, initial=loaded.initial_conditions,
+                          key_prefix="vecm_historical_decomposition")
+        _maybe_plot(loaded; plot=plot, plot_save=plot_save)
+        return loaded
+    end
     if isnothing(model)
         vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
         var_model = to_var(vecm)
@@ -401,16 +456,28 @@ function _hd_vecm(; data::String="", lags::Int=2, rank::String="auto",
                       format=format, output=output,
                       actual=hd_result.actual, initial=hd_result.initial_conditions,
                       key_prefix="vecm_historical_decomposition")
+    return (; model=vecm, result=hd_result)
 end
 
 # ── FAVAR HD ──────────────────────────────────────────────
 
-function _hd_favar(; data::String="", factors=nothing, lags::Int=2,
+function _hd_favar(; data::String="", result=nothing, factors=nothing, lags::Int=2,
                     key_vars::String="", horizons::Int=20,
                     id::String="cholesky", config::String="",
                     output::String="", format::String="table",
                     plot::Bool=false, plot_save::String="",
                     model=nothing)
+    loaded = _loaded_result(result; data, model, leaf="hd favar",
+                            id, horizons, horizons_default=20)
+    if loaded !== nothing
+        _output_hd_tables((vi, si) -> contribution(loaded, vi, si), loaded.variables, loaded.T_eff;
+                          id="", title_prefix="FAVAR Historical Decomposition",
+                          format=format, output=output,
+                          actual=loaded.actual, initial=loaded.initial_conditions,
+                          key_prefix="favar_historical_decomposition")
+        _maybe_plot(loaded; plot=plot, plot_save=plot_save)
+        return loaded
+    end
     if isnothing(model)
         favar, Y, varnames = _load_and_estimate_favar(data, factors, lags, key_vars, "two_step", 5000)
     else
@@ -441,4 +508,5 @@ function _hd_favar(; data::String="", factors=nothing, lags::Int=2,
                       format=format, output=output,
                       actual=hd_result.actual, initial=hd_result.initial_conditions,
                       key_prefix="favar_historical_decomposition")
+    return (; model=favar, result=hd_result)
 end

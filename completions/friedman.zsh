@@ -21,6 +21,7 @@ _friedman() {
     'predict'
     'residuals'
     'serve'
+    'show'
     'spectral'
     'test'
     'repl'

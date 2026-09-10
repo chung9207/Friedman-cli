@@ -57,7 +57,7 @@ function multipliers_specs()::Vector{CommandSpec}
 end
 
 function register_multipliers_commands!()
-    specs = multipliers_specs()
+    specs = with_default_csv_kinds(multipliers_specs())
     register!(specs)
     return build_node("multipliers", specs;
         description="Dynamic multipliers: NARDL cumulative asymmetric response curves (m⁺/m⁻)")

@@ -202,7 +202,7 @@ function serve_specs()::Vector{CommandSpec}
 end
 
 function register_serve_commands!()
-    specs = serve_specs()
+    specs = with_default_csv_kinds(serve_specs())
     register!(specs)
     return to_leaf(specs[1])
 end

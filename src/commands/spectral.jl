@@ -121,7 +121,7 @@ function spectral_specs()::Vector{CommandSpec}
 end
 
 function register_spectral_commands!()
-    specs = spectral_specs()
+    specs = with_default_csv_kinds(with_data_kinds(spectral_specs(), [:timeseries, :csv]))
     register!(specs)
     return build_node("spectral", specs;
         description="Spectral analysis: ACF/PACF, periodogram, spectral density, cross-spectrum, transfer function")

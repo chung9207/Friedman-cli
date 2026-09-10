@@ -71,6 +71,7 @@ include(joinpath(project_root, "src", "cli", "dispatch.jl"))
 # Include command files in dependency order
 include(joinpath(project_root, "src", "commands", "shared.jl"))
 include(joinpath(project_root, "src", "model_handle.jl"))
+include(joinpath(project_root, "src", "handles.jl"))
 include(joinpath(project_root, "src", "registry", "spec.jl"))
 include(joinpath(project_root, "src", "registry", "adapter.jl"))
 include(joinpath(project_root, "src", "commands", "estimate.jl"))
@@ -91,6 +92,7 @@ include(joinpath(project_root, "src", "commands", "policy.jl"))
 include(joinpath(project_root, "src", "commands", "spectral.jl"))
 include(joinpath(project_root, "src", "commands", "model.jl"))
 include(joinpath(project_root, "src", "commands", "completions.jl"))
+include(joinpath(project_root, "src", "commands", "show.jl"))
 
 include(joinpath(project_root, "test", "support.jl"))
 @testset "Command Handlers" begin
@@ -8056,8 +8058,8 @@ end  # Enhanced Granger handlers
         node = register_data_commands!()
         @test node isa NodeCommand
         @test node.name == "data"
-        @test length(node.subcmds) == 11
-        for cmd in ["list", "load", "describe", "diagnose", "fix", "transform", "filter", "validate", "balance", "dropna", "keeprows"]
+        @test length(node.subcmds) == 13
+        for cmd in ["list", "load", "import", "export", "describe", "diagnose", "fix", "transform", "filter", "validate", "balance", "dropna", "keeprows"]
             @test haskey(node.subcmds, cmd)
             @test node.subcmds[cmd] isa LeafCommand
         end
@@ -8067,6 +8069,8 @@ end  # Enhanced Granger handlers
         node = register_data_commands!()
         @test length(node.subcmds["list"].options) == 2
         @test length(node.subcmds["load"].options) == 6
+        @test length(node.subcmds["import"].options) == 10
+        @test length(node.subcmds["export"].options) == 2
         @test length(node.subcmds["describe"].options) == 2
         @test length(node.subcmds["diagnose"].options) == 2
         @test length(node.subcmds["fix"].options) == 3
@@ -13325,6 +13329,45 @@ end  # Command Handlers
             errs = validate_envelope_json(js)
             @test isempty(errs) || (@info "schema errs" errs; false)
         end
+
+        # Wave 2 typed-handle error goldens (relative stems; cwd = dir)
+        cd(dir) do
+            Random.seed!(42)
+            CSV.write("panel.csv", DataFrame(group=repeat(1:4, inner=10),
+                                             time=repeat(1:10, outer=4),
+                                             y=randn(40), x=randn(40)))
+            save_model_dispatch("panel.jld2",
+                xtset(CSV.read("panel.csv", DataFrame), :group, :time))
+            Y = reduce(hcat, (sin.(1:40) .+ 0.1 .* cos.((1:40) ./ i) for i in 1:3))
+            save_model_dispatch("var.jld2", estimate_var(Y, 1; varnames=["y1", "y2", "y3"]))
+            handle_err = [
+                (["estimate", "var", "panel", "--lags", "1", "--format", "json"],
+                 ["estimate", "var", "wrong-kind"], "data/wrong-kind", 3),
+                (["irf", "var", "--result", "var", "--format", "json"],
+                 ["irf", "var", "wrong-result"], "data/wrong-result", 3),
+            ]
+            for (argv, gkeys, code, ec) in handle_err
+                Random.seed!(42)
+                out = _capture() do
+                    try
+                        _dispatch_via_app(String[string(a) for a in argv])
+                    catch e
+                        e isa CliError || rethrow()
+                    end
+                end
+                js = _extract_json_object(out)
+                @test js !== nothing
+                doc = JSON3.read(js)
+                @test string(doc.status) == "error"
+                @test string(doc.error.code) == code
+                @test doc.error.exit_code == ec
+                gpath = _golden_path(gkeys)
+                @test isfile(gpath)
+                @test _golden_compare(js, gpath)
+                errs = validate_envelope_json(js)
+                @test isempty(errs) || (@info "schema errs" errs; false)
+            end
+        end
     end
 
     # Renderer goldens (normalize CRLF — Windows checkout may convert golden text files)
@@ -14127,6 +14170,7 @@ if !@isdefined(APP)
             "model"     => register_model_commands!(),
             "completions" => register_completions_commands!(),
             "schema"    => register_schema_command!(),
+            "show"      => register_show_commands!(),
         ), "test tree"); version=v"0.0.0-test")
 end
 
@@ -14420,3 +14464,5 @@ end
         end
     end
 end
+
+include(joinpath(project_root, "test", "test_handles.jl"))

@@ -1,3 +1,6 @@
 # False positives, one fingerprint per line (commit:file:rule:line).
 # W3/#138: output_result key= slug literal tripped the generic-api-key entropy rule.
 5970216d58d54657b3c9bf6d81f932425a5144ca:src/commands/dsge.jl:generic-api-key:2384
+# filter x13 TableSpec names (x_13_seasonal_factors / x_13_diagnostics) in --result re-render
+96baa6cbc735e202c5f016be2dfd6fa5a35d4de2:src/commands/shared.jl:generic-api-key:1909
+96baa6cbc735e202c5f016be2dfd6fa5a35d4de2:src/commands/shared.jl:generic-api-key:1925

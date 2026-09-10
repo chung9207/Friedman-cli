@@ -20,6 +20,8 @@ Path to CSV data file
 | `--trend` | — | `String` | `constant` | — | none\|constant\|trend\|both |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `adf_test` (Augmented Dickey-Fuller statistic, selected lag order and p-value)
 
@@ -42,6 +44,8 @@ Path to CSV data file
 | `--trim` | — | `Float64` | `0.1` | — | Trimming proportion |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `adf_2_break_test` (Two-break ADF statistic, p-value and both break indices and fractions)
 
@@ -68,6 +72,8 @@ Path to CSV data file
 | `--span` | — | `Float64` | `20.0` | — | Search half-width around the 2SLS estimate, in standard errors |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -93,6 +99,8 @@ Path to CSV data file
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
 | `--plot-save` | — | `String` | `""` | — | Save plot to HTML file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -143,6 +151,8 @@ Path to CSV data file
 | `--cv-source` | — | `String` | `pss` | `pss` | Critical-value source (only pss) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `ardl_bounds_test_i_0_i_1_bounds_no_p_value` (F and t statistics against the I(0)/I(1) bounds with a decision each (the test has no p-value)); `ardl_bounds_test_summary` (Statistics, case, level, both decisions and sample size)
 
@@ -165,6 +175,8 @@ Path to CSV data file
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
 | `--plot-save` | — | `String` | `""` | — | Save plot to HTML file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -187,6 +199,8 @@ Path to CSV data file
 | `--column` | `-c` | `Int64` | `1` | — | Column index |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `bartlett_white_noise_test` (Bartlett white-noise statistic, p-value and sample size)
 
@@ -207,6 +221,8 @@ Path to CSV data file
 | `--eps-frac` | — | `Float64` | `0.7` | — | Distance threshold as a fraction of the sample sd |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `bds_test` (BDS statistic and p-value by embedding dimension)
 
@@ -226,6 +242,8 @@ Path to CSV data file
 | `--lags` | `-p` | `Int64` | `20` | — | Number of lags |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `box_pierce_test` (Box-Pierce Q statistic, p-value, df and sample size)
 
@@ -245,6 +263,8 @@ Path to CSV data file
 | `--cov-type` | — | `String` | `hc1` | — | Covariance type |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `brant_test` (Chi-square statistic, p-value, df and the parallel-regression decision)
 
@@ -264,6 +284,8 @@ Path to CSV data file
 | `--lags` | — | `Int64` | `0` | — | Augmentation lags (≥ 0) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -289,6 +311,8 @@ Path to CSV panel data file
 | `--time-col` | — | `String` | `""` | — | Panel time column (default: second column) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | Output format |
 | `--output` | `-o` | `String` | `""` | — | Write to file instead of stdout |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `breusch_pagan_lm_test` (LM statistic, p-value, df and the RE-vs-pooled-OLS decision)
 
@@ -311,6 +335,8 @@ Path to CSV data file
 | `--level` | — | `Float64` | `0.05` | — | Significance level in (0,1) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `chow_test` (Chow structural-break statistic, p-value and df at the requested break(s))
 
@@ -332,6 +358,8 @@ Path to CSV data file (rows=T, cols=N)
 | `--time-col` | — | `String` | `""` | — | Time column (optional) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `pesaran_cips_test` (CIPS statistic, p-value, lag order and panel dimensions)
 
@@ -352,6 +380,8 @@ Path to CSV data file
 | `--level` | — | `Float64` | `0.05` | — | Band significance level in (0,1) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `cusum_path` (Recursive CUSUM statistic with its lower and upper band by observation); `cusum_summary` (Whether the path leaves the band, the first crossing and the band level)
 
@@ -372,6 +402,8 @@ Path to CSV data file
 | `--level` | — | `Float64` | `0.05` | — | Band significance level in (0,1) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `cusumsq_path` (CUSUM-of-squares statistic with its lower and upper band by observation); `cusumsq_summary` (Whether the path leaves the band, the first crossing and the band level)
 
@@ -393,6 +425,8 @@ Path to CSV data file
 | `--max-lags` | — | `Int64` | — | — | Max lags (default: auto) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `df_gls_test` (DF-GLS tau and PT statistics with p-value, lag order and the M-GLS statistics)
 
@@ -417,6 +451,8 @@ Path to CSV data file
 | `--seed` | — | `Int64` | `1234` | — | RNG seed for the bootstrap |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `dumitrescu_hurlin_panel_causality` (W-bar, Z-bar and Z-tilde statistics with p-values for the tested direction)
 
@@ -442,6 +478,8 @@ Path to CSV data file
 | `--alpha` | — | `Float64` | `0.05` | — | Significance level for the decision column (0 < alpha < 1) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `overdispersion_test_cameron_trivedi_1990` (NB1 and NB2 auxiliary-regression alpha with SE, t-statistic, p-value and a directional decision); `dispersion_summary` (Sample size, test level and the recommended count model)
 
@@ -460,6 +498,8 @@ Path to CSV data file
 | `--column` | `-c` | `Int64` | `1` | — | Column index |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `durbin_watson_test` (Durbin-Watson statistic, p-value and sample size)
 
@@ -482,6 +522,8 @@ Path to CSV data file
 | `--theta` | — | `String` | `""` | — | Comma-separated parameters (required with --params specified) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `edf_test` (EDF goodness-of-fit statistic, p-value, fitted parameters and critical values)
 
@@ -503,6 +545,8 @@ Path to CSV data file
 | `--max-lags` | — | `String` | `""` | — | Upper bound for automatic lag selection |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `engle_granger_test` (Residual ADF statistic, p-value and lag order (H0 = no cointegration))
 
@@ -521,6 +565,8 @@ Path to CSV data file
 | `--column` | `-c` | `Int64` | `1` | — | Column index to test (1-based) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -546,6 +592,8 @@ Path to CSV panel data file
 | `--time-col` | — | `String` | `""` | — | Panel time column (default: second column) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | Output format |
 | `--output` | `-o` | `String` | `""` | — | Write to file instead of stdout |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `f_test_for_fixed_effects` (F statistic, p-value, df and the FE-vs-pooled-OLS decision)
 
@@ -567,6 +615,8 @@ Path to CSV data file (rows=T, cols=N)
 | `--time-col` | — | `String` | `""` | — | Time column (optional) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `factor_break_test` (Break statistic, p-value and the estimated break index of the factor structure); `per_series_break_diagnostics` (Per-series sup statistic and maximizing date, ranked (pooled methods only))
 
@@ -585,6 +635,8 @@ Path to CSV data file
 | `--column` | `-c` | `Int64` | `1` | — | Column index |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `fisher_s_test` (Fisher periodicity statistic, p-value and sample size)
 
@@ -608,6 +660,8 @@ Path to CSV data file
 | `--combine` | — | `String` | `mw` | `mw`, `choi` | Fisher combination |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `fisher_johansen_panel_cointegration_test` (Combined trace and max-eigenvalue statistics with p-values by rank); `fisher_johansen_summary` (Selected rank, combination rule, deterministic terms and lag order)
 
@@ -631,6 +685,8 @@ Path to CSV data file
 | `--trim` | — | `Float64` | `0.15` | — | Trimming proportion |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `fourier_adf_test` (Fourier ADF statistic, p-value, optimal frequency and the Fourier F-test)
 
@@ -652,6 +708,8 @@ Path to CSV data file
 | `--bandwidth` | — | `Int64` | — | — | Bandwidth (default: auto) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `fourier_kpss_test` (Fourier KPSS statistic, p-value, optimal frequency and the Fourier F-test)
 
@@ -671,6 +729,8 @@ Path to CSV data file
 | `--cov-type` | — | `String` | `hc1` | — | Covariance estimator for the OLS fit |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `glejser_test` (Glejser heteroskedasticity statistic, p-value, df and auxiliary R2)
 
@@ -691,6 +751,8 @@ Path to CSV data file
 | `--trim` | — | `Int64` | `0` | — | Trim the first N frequencies |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `gph_test` (GPH estimate of d with standard error, z-statistic, p-value and bandwidth)
 
@@ -714,6 +776,8 @@ Path to CSV data file
 | `--model` | — | `String` | `vecm` | — | var\|vecm (model type for Granger test) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -739,6 +803,8 @@ Path to CSV data file
 | `--trim` | — | `Float64` | `0.15` | — | Trimming proportion |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `gregory_hansen_test` (ADF*, Zt* and Za* statistics with p-values and their break indices)
 
@@ -762,6 +828,8 @@ Path to CSV data file
 | `--seed` | — | `Int64` | `20240716` | — | RNG seed for the critical-value simulation |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `explosive_episodes_gsadf` (Start and end index of each date-stamped explosive episode); `gsadf_summary` (GSADF statistic, p-value, critical values and the window/critical-value settings)
 
@@ -780,6 +848,8 @@ Path to CSV data file (rows=T, cols=N units)
 | `--deterministic` | — | `String` | `constant` | `constant`, `trend` | constant\|trend |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `hadri_panel_stationarity_test` (Hadri statistic and p-value (H0 = every unit stationary))
 
@@ -804,6 +874,8 @@ Path to CSV data file
 | `--lags` | — | `String` | `auto` | — | DOLS lags: auto or a non-negative integer |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `hansen_instability_test` (Hansen L_c statistic and p-value (H0 = stable cointegration))
 
@@ -826,6 +898,8 @@ Path to CSV data file
 | `--reps` | — | `Int64` | `1000` | — | Fixed-regressor bootstrap replications (≥ 1) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `hansen_1996_linearity_test` (sup-LM and sup-Wald statistics with fixed-regressor bootstrap p-values)
 
@@ -845,6 +919,8 @@ Path to CSV data file
 | `--cov-type` | — | `String` | `hc1` | — | Covariance estimator for the OLS fit |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `harvey_test` (Harvey multiplicative-heteroskedasticity statistic, p-value, df and auxiliary R2)
 
@@ -866,6 +942,8 @@ Path to CSV panel data file
 | `--time-col` | — | `String` | `""` | — | Panel time column (default: second column) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | Output format |
 | `--output` | `-o` | `String` | `""` | — | Write to file instead of stdout |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `hausman_specification_test` (Chi-square statistic, p-value, df and the FE-vs-RE decision)
 
@@ -885,6 +963,8 @@ Path to CSV data file
 | `--omit-category` | — | `Int64` | — | — | Category to omit for IIA test |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `hausman_mcfadden_iia_test` (Chi-square statistic, p-value, df and the IIA decision)
 
@@ -906,6 +986,8 @@ Path to CSV data file
 | `--lags` | — | `String` | `auto` | — | Augmentation lags: auto or a non-negative integer |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `hegy_seasonal_unit_root_test` (Statistic, 5% critical value and decision at each seasonal frequency); `hegy_summary` (Joint seasonal F statistics, deterministic terms and lag order)
 
@@ -929,6 +1011,8 @@ Path to CSV data file
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--config-json` | — | `String` | `""` | — | JSON object merged over --config (file < json < --set) |
 | `--set` | — | `String` | `""` | — | Override config key=value; repeatable; dotted keys OK |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -974,6 +1058,8 @@ Path to CSV data file
 | `--cov-type` | — | `String` | `hc1` | — | Covariance estimator for the OLS fit |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `influence_diagnostics` (Per-observation leverage, studentized residuals, DFFITS and Cook's D); `influence_summary` (Residual scale plus the flagged high-leverage and influential observations)
 
@@ -995,6 +1081,8 @@ Path to CSV data file
 | `--criterion` | — | `String` | `aic` | `aic`, `bic`, `tstat` | Lag-selection criterion |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -1018,6 +1106,8 @@ Path to CSV data file
 | `--trend` | — | `String` | `constant` | — | none\|constant\|trend |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `johansen_trace_test` (Trace statistic, p-value and 5% decision by cointegrating rank); `johansen_max_eigenvalue_test` (Maximum-eigenvalue statistic, p-value and 5% decision by cointegrating rank)
 
@@ -1039,6 +1129,8 @@ Path to CSV panel data file
 | `--indep` | — | `String` | `""` | — | Comma-separated regressors (default: all other panel variables) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `kao_cointegration` (One row per Kao statistic with its value and p-value); `kao_cointegration_summary` (Panel dimensions: units, regressors and observations)
 
@@ -1058,6 +1150,8 @@ Path to CSV data file
 | `--trend` | — | `String` | `constant` | — | constant\|trend |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `kpss_test` (KPSS stationarity statistic (H0 = stationary))
 
@@ -1077,6 +1171,8 @@ Path to CSV data file
 | `--lags` | `-p` | `Int64` | `10` | — | Number of lags for Ljung-Box test |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `ljung_box_squared_test` (Ljung-Box Q statistic on squared residuals, with p-value and lag order)
 
@@ -1098,6 +1194,8 @@ Path to CSV data file
 | `--criterion` | — | `String` | `aic` | `aic`, `bic`, `tstat` | Lag-selection criterion |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -1122,6 +1220,8 @@ Path to CSV data file for restricted model
 | `--lags2` | — | `Int64` | — | — | Lag order for unrestricted model (default: auto) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `lagrange_multiplier_test` (LM statistic, p-value, df and sample size)
 
@@ -1145,6 +1245,8 @@ Path to CSV data file
 | `--trim` | — | `Float64` | `0.15` | — | Trimming proportion |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `lm_unit_root_test` (LM unit-root statistic, p-value and any estimated break dates)
 
@@ -1164,6 +1266,8 @@ Path to CSV data file
 | `--bandwidth` | `-m` | `Int64` | — | — | Number of Fourier frequencies (default: floor(sqrt(T))) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `local_whittle_test` (Local Whittle estimate of d with standard error, z-statistic and objective value)
 
@@ -1184,6 +1288,8 @@ Path to CSV data file for restricted model
 | `--lags2` | — | `Int64` | — | — | Lag order for unrestricted model (default: auto) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `likelihood_ratio_test` (LR statistic, p-value, df and both log-likelihoods)
 
@@ -1205,6 +1311,8 @@ Path to CSV panel data file
 | `--time-col` | — | `String` | `""` | — | Panel time column (default: second column) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | Output format |
 | `--output` | `-o` | `String` | `""` | — | Write to file instead of stdout |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `modified_wald_test` (Chi-square statistic, p-value, df and the groupwise-heteroskedasticity decision)
 
@@ -1225,6 +1333,8 @@ Path to CSV data file (rows=T, cols=N)
 | `--time-col` | — | `String` | `""` | — | Time column (optional) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `moon_perron_test` (t_a* and t_b* statistics with their p-values and the number of factors)
 
@@ -1250,6 +1360,8 @@ Path to CSV data file
 | `--case` | — | `Int64` | `3` | — | Pesaran-Shin-Smith deterministic case (1..5) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `nardl_symmetry_tests_h0_long_run_short_run` (Long-run and short-run symmetry Wald tests, one row per asymmetric regressor); `nardl_symmetry_test_summary` (Degrees of freedom, residual df and the number of asymmetric regressors)
 
@@ -1268,6 +1380,8 @@ Path to CSV data file
 | `--lags` | `-p` | `Int64` | — | — | Lag order (default: auto via AIC) |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `normality_tests_for_var_residuals` (One row per normality test of the VAR residuals: statistic, p-value and df)
 
@@ -1287,6 +1401,8 @@ Path to CSV data file
 | `--trend` | — | `String` | `constant` | — | constant\|trend |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `ng_perron_test` (Ng-Perron MZa, MZt, MSB and MPT statistics)
 
@@ -1329,6 +1445,8 @@ Path to CSV data file (rows=T, cols=N)
 | `--time-col` | — | `String` | `""` | — | Time column (optional) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `panic_test_bai_ng` (Pooled PANIC statistic, p-value and the number of common factors)
 
@@ -1356,6 +1474,8 @@ Path to CSV data file
 | `--hac-bandwidth` | — | `String` | `nw` | — | HAC bandwidth for the test: nw\|andrews\|nw94 or a non-negative number |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `park_added_variables_test` (Park H(p,q) statistic, p-value and the number of superfluous trends)
 
@@ -1378,6 +1498,8 @@ Path to CSV panel data file
 | `--trend` | — | `String` | `constant` | `constant`, `trend` | constant\|trend |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `pedroni_cointegration` (One row per Pedroni statistic with its value and p-value); `pedroni_cointegration_summary` (Panel dimensions: units, regressors and observations)
 
@@ -1399,6 +1521,8 @@ Path to CSV panel data file
 | `--time-col` | — | `String` | `""` | — | Panel time column (default: second column) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | Output format |
 | `--output` | `-o` | `String` | `""` | — | Write to file instead of stdout |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `pesaran_cd_test` (CD statistic, p-value and the cross-sectional dependence decision)
 
@@ -1420,6 +1544,8 @@ Path to CSV data file
 | `--bandwidth` | — | `String` | `nw` | — | HAC bandwidth: nw\|andrews\|nw94 or a non-negative number |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `phillips_ouliaris_test` (Z_t and Z_alpha statistics with their p-values); `phillips_ouliaris_summary` (Deterministic terms, HAC kernel and bandwidth, and sample size)
 
@@ -1447,6 +1573,8 @@ Path to CSV data file
 | `--tol` | — | `Float64` | `1.0e-8` | — | PMG outer-loop convergence tolerance |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `pmg_hausman_specification_test` (Hausman statistic, p-value and df for PMG/DFE against Mean Group)
 
@@ -1466,6 +1594,8 @@ Path to CSV data file
 | `--trend` | — | `String` | `constant` | — | none\|constant\|trend |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `phillips_perron_test` (Phillips-Perron statistic and p-value)
 
@@ -1486,6 +1616,8 @@ Path to CSV panel data file
 | `--lags` | `-p` | `Int64` | `1` | — | Lag order |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `hansen_j_test` (Hansen J statistic, p-value, df and the instrument and parameter counts)
 
@@ -1507,6 +1639,8 @@ Path to CSV panel data file
 | `--criterion` | — | `String` | `bic` | — | bic\|aic\|hqic |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `lag_selection_results` (BIC, AIC and HQIC by candidate lag order)
 
@@ -1528,6 +1662,8 @@ Path to CSV panel data file
 | `--criterion` | — | `String` | `bic` | — | bic\|aic\|hqic |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `mmsc_results` (BIC, AIC and HQIC by candidate lag order)
 
@@ -1548,6 +1684,8 @@ Path to CSV panel data file
 | `--lags` | `-p` | `Int64` | `1` | — | Lag order |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `panel_var_companion_matrix_eigenvalues` (Companion-matrix eigenvalue and its modulus, one row per root)
 
@@ -1590,6 +1728,8 @@ Path to CSV data file
 | `--seed` | — | `Int64` | `20240716` | — | RNG seed for the critical-value simulation |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `explosive_episodes_sadf` (Start and end index of each date-stamped explosive episode); `sadf_summary` (SADF statistic, p-value, critical values and the window/critical-value settings)
 
@@ -1632,6 +1772,8 @@ Path to CSV data file
 | `--transition-col` | — | `Int64` | `0` | — | Column index of an external transition var s (0 = self-exciting y[t-d]) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `star_linearity_test_lm3` (LM3 chi-square and F statistics with their p-values and df)
 
@@ -1651,6 +1793,8 @@ Path to CSV data file
 | `--criterion` | — | `String` | `aic` | — | aic\|bic\|hqc |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `lag_order_selection` (AIC, BIC and HQC for every candidate lag order); `optimal_lag` (Selected lag order and the criterion that chose it (JSON output only))
 
@@ -1669,6 +1813,8 @@ Path to CSV data file
 | `--lags` | `-p` | `Int64` | — | — | Lag order (default: auto via AIC) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `companion_matrix_eigenvalues` (Companion-matrix eigenvalue and its modulus, one row per root)
 
@@ -1689,6 +1835,8 @@ Path to CSV data file
 | `--method` | — | `String` | `lomackinlay` | `lomackinlay` | Variance-ratio method |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `variance_ratio_test` (Variance ratio, robust z* statistic and p-value by holding period q); `joint_random_walk_test` (Chow-Denning joint statistic and p-value across all horizons)
 
@@ -1714,6 +1862,8 @@ Path to CSV data file
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
 | `--config-json` | — | `String` | `""` | — | JSON object merged over --config (file < json < --set) |
 | `--set` | — | `String` | `""` | — | Override config key=value; repeatable; dotted keys OK |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -1743,6 +1893,8 @@ Path to CSV data file
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
 | `--config-json` | — | `String` | `""` | — | JSON object merged over --config (file < json < --set) |
 | `--set` | — | `String` | `""` | — | Override config key=value; repeatable; dotted keys OK |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -1772,6 +1924,8 @@ Path to CSV data file
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
 | `--config-json` | — | `String` | `""` | — | JSON object merged over --config (file < json < --set) |
 | `--set` | — | `String` | `""` | — | Override config key=value; repeatable; dotted keys OK |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -1801,6 +1955,8 @@ Path to CSV data file
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
 | `--config-json` | — | `String` | `""` | — | JSON object merged over --config (file < json < --set) |
 | `--set` | — | `String` | `""` | — | Override config key=value; repeatable; dotted keys OK |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -1828,6 +1984,8 @@ Path to CSV data file
 | `--significance` | — | `Float64` | `0.05` | — | Significance level for rank selection |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `vecm_weak_exogeneity` (LR statistic, df and p-value for weak exogeneity of the selected variables)
 
@@ -1869,6 +2027,8 @@ Path to CSV data file
 | `--threshold` | — | `Float64` | `10.0` | — | First-stage F rule-of-thumb (used if no Stock-Yogo CV) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `weak_instrument_diagnostics` (First-stage, Cragg-Donald and Kleibergen-Paap F against the Stock-Yogo critical value, with the weak verdict)
 
@@ -1891,6 +2051,8 @@ Path to CSV panel data file
 | `--trend` | — | `String` | `constant` | `constant`, `trend` | constant\|trend |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `westerlund_cointegration` (One row per Westerlund statistic with its value and p-value); `westerlund_cointegration_summary` (Panel dimensions: units, regressors and observations)
 
@@ -1910,6 +2072,8 @@ Path to CSV data file
 | `--cov-type` | — | `String` | `hc1` | — | Covariance estimator for the OLS fit |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -1940,6 +2104,8 @@ Path to CSV data file
 | `--enumerate-signs` | — | `String` | `auto` | `auto`, `yes`, `no` | Exact enumeration of the 2^G Rademacher sign vectors: auto enumerates whenever possible |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -1966,6 +2132,8 @@ Path to CSV panel data file
 | `--time-col` | — | `String` | `""` | — | Panel time column (default: second column) |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | Output format |
 | `--output` | `-o` | `String` | `""` | — | Write to file instead of stdout |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `wooldridge_ar_test` (F statistic, p-value, df and the serial-correlation decision)
 
@@ -1986,6 +2154,8 @@ Path to CSV data file
 | `--trim` | — | `Float64` | `0.15` | — | Trimming proportion |
 | `--format` | `-f` | `String` | `table` | `table`, `csv`, `json` | table\|csv\|json |
 | `--output` | `-o` | `String` | `""` | — | Export results to file |
+| `--result` | — | `String` | `""` | — | Load a result handle (skip computation) |
+| `--save-result` | — | `String` | `""` | — | Save the result object to a handle (.jld2 native) |
 
 **Output tables:** `zivot_andrews_test` (Zivot-Andrews statistic and the estimated break observation)
 

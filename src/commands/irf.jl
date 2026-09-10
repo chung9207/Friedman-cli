@@ -247,8 +247,23 @@ function irf_specs()::Vector{CommandSpec}
     ]
 end
 
+const _IRF_SLOT_TYPES = Dict{Vector{String},Tuple{Vector{Symbol},Vector{Symbol}}}(
+    ["irf", "var"]    => ([:VARModel],
+                          [:ImpulseResponse, :AriasSVARResult, :UhligSVARResult, :SignIdentifiedSet]),
+    ["irf", "bvar"]   => ([:BVARPosterior], [:BayesianImpulseResponse, :RobustBayesResult]),
+    ["irf", "tvpvar"] => ([:TVPVARPosterior], [:BayesianImpulseResponse]),
+    ["irf", "lp"]     => ([:StructuralLP], [:ImpulseResponse]),
+    ["irf", "vecm"]   => ([:VECMModel], [:ImpulseResponse]),
+    ["irf", "pvar"]   => ([:PVARModel], Symbol[]),
+    ["irf", "favar"]  => ([:FAVARModel], [:ImpulseResponse]),
+    ["irf", "sdfm"]   => ([:StructuralDFM], [:ImpulseResponse]),
+)
+
 function register_irf_commands!()
-    specs = with_config_ergonomics(with_model_option(irf_specs()))
+    specs = _tag_slot_types(irf_specs(), _IRF_SLOT_TYPES)
+    specs = with_result_handles(with_config_ergonomics(with_model_option(specs)))
+    specs = with_default_csv_kinds(with_data_kinds(specs, [:timeseries, :csv]))
+    specs = [s.path == ["irf", "pvar"] ? _copy_spec(s; data_kinds=[:panel, :csv]) : s for s in specs]
     register!(specs)
     return build_node("irf", specs; description="Impulse Response Functions")
 end
@@ -256,7 +271,7 @@ end
 
 # ── VAR IRF ──────────────────────────────────────────────
 
-function _irf_var(; data::String="", lags=nothing, shock::Int=1, horizons::Int=20,
+function _irf_var(; data::String="", result=nothing, model=nothing, lags=nothing, shock::Int=1, horizons::Int=20,
                    id::String="cholesky", ci::String="bootstrap", replications::Int=1000,
                    config::String="", instrument::String="", target_var::String="",
                    bootstrap::String="iid", block_length::Int=0,
@@ -265,8 +280,11 @@ function _irf_var(; data::String="", lags=nothing, shock::Int=1, horizons::Int=2
                    output::String="", format::String="table",
                    plot::Bool=false, plot_save::String="",
                    cumulative::Bool=false, identified_set::Bool=false,
-                   stationary_only::Bool=false, summary::String="none",
-                   model=nothing)
+                   stationary_only::Bool=false, summary::String="none")
+    loaded = _loaded_result(result; data, model, lags, check_lags=true, leaf="irf var",
+                            id, horizons, horizons_default=20)
+    loaded === nothing || return _rerender_irf_result(loaded; format, output,
+        title="Impulse Responses", key="irf", plot, plot_save, shock)
     if isnothing(model)
         model, Y, varnames, p = _load_and_estimate_var(data, lags)
     else
@@ -286,14 +304,14 @@ function _irf_var(; data::String="", lags=nothing, shock::Int=1, horizons::Int=2
     # Arias identification handled separately (narrative-adrr shares the Arias
     # pipeline via identify_narrative — same AriasSVARResult shape)
     if id in ("arias", "narrative-adrr")
-        _var_irf_arias(model, config, horizons, varnames, shock; format=format, output=output, estimator=id)
-        return
+        arias = _var_irf_arias(model, config, horizons, varnames, shock; format=format, output=output, estimator=id)
+        return (; model, result=arias)
     end
 
     # Uhlig identification handled separately
     if id == "uhlig"
-        _var_irf_uhlig(model, config, horizons, varnames, shock; format=format, output=output)
-        return
+        uhlig = _var_irf_uhlig(model, config, horizons, varnames, shock; format=format, output=output)
+        return (; model, result=uhlig)
     end
 
     # W2/#166: the VAR family admits proxy/max-share/gmm-moments beyond the base
@@ -337,7 +355,7 @@ function _irf_var(; data::String="", lags=nothing, shock::Int=1, horizons::Int=2
         output_result(irf_df; format=Symbol(format), output=output,
                       title="IRF Identified Set (sign, $shock_name shock)$sum_label",
                       key="irf_identified_set")
-        return
+        return (; model, result=set)
     end
 
     # W8/#110 (MEMs#370): bootstrap scheme + Kilian (1998) bias correction. These only
@@ -408,6 +426,7 @@ function _irf_var(; data::String="", lags=nothing, shock::Int=1, horizons::Int=2
     irf_df = irf_df[irf_df.shock .== shock_name, :]
     output_result(irf_df; format=Symbol(format), output=output,
                   title="IRF to $shock_name shock ($id identification)", key="irf")
+    return (; model, result=irf_result)
 end
 
 function _var_irf_arias(model, config::String, horizons::Int,
@@ -447,6 +466,7 @@ function _var_irf_arias(model, config::String, horizons::Int,
         "ess"             => round(ess; digits=4),
         "ess_fraction"    => round(ess_frac; digits=6),
     ]; format=format, title="Arias Importance-Sampling Diagnostics")
+    return result
 end
 
 function _var_irf_uhlig(model, config::String, horizons::Int,
@@ -467,17 +487,22 @@ function _var_irf_uhlig(model, config::String, horizons::Int,
     shock_name = _shock_name(varnames, shock)
     output_result(irf_df; format=Symbol(format), output=output,
                   title="IRF to $shock_name shock (Uhlig identification)", key="irf")
+    return result
 end
 
 # ── BVAR IRF ─────────────────────────────────────────────
 
-function _irf_bvar(; data::String="", lags::Int=4, shock::Int=1, horizons::Int=20,
+function _irf_bvar(; data::String="", result=nothing, lags::Int=4, shock::Int=1, horizons::Int=20,
                     id::String="cholesky", draws::Int=2000, sampler::String="direct",
                     config::String="",
                     output::String="", format::String="table",
                     plot::Bool=false, plot_save::String="",
                     cumulative::Bool=false,
                     model=nothing)
+    loaded = _loaded_result(result; data, model, leaf="irf bvar",
+                            id, horizons, horizons_default=20)
+    loaded === nothing || return _rerender_irf_result(loaded; format, output,
+        title="Impulse Responses", key="bayesian_irf", plot, plot_save, shock)
     if isnothing(model)
         post, Y, varnames, p, n = _load_and_estimate_bvar(data, lags, config, draws, sampler)
     else
@@ -489,9 +514,9 @@ function _irf_bvar(; data::String="", lags::Int=4, shock::Int=1, horizons::Int=2
     # Robust Bayes runs its own estimator (identify_robust_bayes on the posterior),
     # not the generic compute_Q path — which has no robust-bayes branch.
     if id == "robust-bayes"
-        _irf_bvar_robust_bayes(post, config, n, horizons, varnames, shock;
-                               format=format, output=output, plot=plot, plot_save=plot_save)
-        return
+        rb = _irf_bvar_robust_bayes(post, config, n, horizons, varnames, shock;
+                                   format=format, output=output, plot=plot, plot_save=plot_save)
+        return (; model=post, result=rb)
     end
     method = _identification_method(id, ID_METHOD_MAP, "irf bvar")
 
@@ -533,6 +558,7 @@ function _irf_bvar(; data::String="", lags::Int=4, shock::Int=1, horizons::Int=2
     output_result(irf_df; format=Symbol(format), output=output,
                   title="Bayesian IRF to $shock_name shock ($id, 68% credible interval)",
                   key="bayesian_irf")
+    return (; model=post, result=birf)
 end
 
 function _irf_bvar_robust_bayes(post, config::String, n::Int, horizons::Int,
@@ -577,7 +603,7 @@ end
 
 # ── LP IRF ───────────────────────────────────────────────
 
-function _irf_lp(; data::String="", shock::Int=1, shocks::String="",
+function _irf_lp(; data::String="", result=nothing, shock::Int=1, shocks::String="",
                   horizons::Int=20, lags::Int=4, var_lags=nothing,
                   id::String="cholesky", ci::String="none",
                   replications::Int=200, conf_level::Float64=0.95,
@@ -586,6 +612,10 @@ function _irf_lp(; data::String="", shock::Int=1, shocks::String="",
                   plot::Bool=false, plot_save::String="",
                   cumulative::Bool=false,
                   model=nothing)
+    loaded = _loaded_result(result; data, model, leaf="irf lp",
+                            id, horizons, horizons_default=20)
+    loaded === nothing || return _rerender_irf_result(loaded; format, output,
+        title="Impulse Responses", key="lp_irf", plot, plot_save, shock)
     # Multi-shock mode
     if !isempty(shocks)
         shock_indices = parse.(Int, split(shocks, ","))
@@ -631,11 +661,12 @@ function _irf_lp(; data::String="", shock::Int=1, shocks::String="",
         "LP IRF to $(shock_names[1]) shock ($id identification)" :
         "LP IRF to shocks $(join(shock_names, ", ")) ($id identification)"
     output_result(irf_df; format=Symbol(format), output=output, title=title, key="lp_irf")
+    return (; model=slp, result=irf_result)
 end
 
 # ── VECM IRF ────────────────────────────────────────────
 
-function _irf_vecm(; data::String="", lags::Int=2, rank::String="auto",
+function _irf_vecm(; data::String="", result=nothing, lags::Int=2, rank::String="auto",
                     deterministic::String="constant",
                     shock::Int=1, horizons::Int=20,
                     id::String="cholesky", ci::String="bootstrap", replications::Int=1000,
@@ -643,6 +674,10 @@ function _irf_vecm(; data::String="", lags::Int=2, rank::String="auto",
                     output::String="", format::String="table",
                     plot::Bool=false, plot_save::String="",
                     model=nothing)
+    loaded = _loaded_result(result; data, model, leaf="irf vecm",
+                            id, horizons, horizons_default=20)
+    loaded === nothing || return _rerender_irf_result(loaded; format, output,
+        title="Impulse Responses", key="vecm_irf", plot, plot_save, shock)
     if isnothing(model)
         vecm, Y, varnames, p = _load_and_estimate_vecm(data, lags, rank, deterministic, "johansen", 0.05)
         var_model = to_var(vecm)
@@ -693,22 +728,24 @@ function _irf_vecm(; data::String="", lags::Int=2, rank::String="auto",
     irf_df = irf_df[irf_df.shock .== shock_name, :]
     output_result(irf_df; format=Symbol(format), output=output,
                   title="VECM IRF to $shock_name shock ($id identification)", key="vecm_irf")
+    return (; model=vecm, result=irf_result)
 end
 
 # ── Panel VAR IRF ──────────────────────────────────────────
 
-function _irf_pvar(; data::String="", id_col::String="", time_col::String="",
+function _irf_pvar(; data::String="", result=nothing, id_col::String="", time_col::String="",
                     lags::Int=1, horizons::Int=10,
                     irf_type::String="oirf", boot_draws::Int=500,
                     confidence::Float64=0.95,
                     output::String="", format::String="table",
                     plot::Bool=false, plot_save::String="",
                     model=nothing)
+    loaded = _loaded_result(result; data, model, leaf="irf pvar",
+                            horizons, horizons_default=10)
+    loaded === nothing || return loaded
     validate_method(irf_type, ["oirf", "girf"], "IRF type")
 
     if isnothing(model)
-        isempty(id_col) && error("Panel VAR IRF requires --id-col")
-        isempty(time_col) && error("Panel VAR IRF requires --time-col")
         model, panel, varnames = _load_and_estimate_pvar(data, id_col, time_col, lags)
     else
         varnames = model.varnames
@@ -739,17 +776,22 @@ function _irf_pvar(; data::String="", id_col::String="", time_col::String="",
                       key=_table_key(key_prefix, shock_name))
         _status()
     end
+    return (; model, result=irf_result)
 end
 
 # ── FAVAR IRF ──────────────────────────────────────────
 
-function _irf_favar(; data::String="", factors=nothing, lags::Int=2,
+function _irf_favar(; data::String="", result=nothing, factors=nothing, lags::Int=2,
                      key_vars::String="", horizons::Int=20,
                      id::String="cholesky", config::String="",
                      panel_irf::Bool=false,
                      output::String="", format::String="table",
                      plot::Bool=false, plot_save::String="",
                      model=nothing)
+    loaded = _loaded_result(result; data, model, leaf="irf favar",
+                            id, horizons, horizons_default=20)
+    loaded === nothing || return _rerender_irf_result(loaded; format, output,
+        title="Impulse Responses", key="favar_irf", plot, plot_save)
     if isnothing(model)
         favar, Y, varnames = _load_and_estimate_favar(data, factors, lags, key_vars, "two_step", 5000)
     else
@@ -778,11 +820,12 @@ function _irf_favar(; data::String="", factors=nothing, lags::Int=2,
     output_result(irf_df; format=Symbol(format), output=output,
                   title="FAVAR IRF ($id identification)" * (panel_irf ? ", panel-wide" : ""),
                   key="favar_irf")
+    return (; model=favar, result=irf_result)
 end
 
 # ── Structural DFM IRF ────────────────────────────────
 
-function _irf_sdfm(; data::String="", factors=nothing, id::String="cholesky",
+function _irf_sdfm(; data::String="", result=nothing, factors=nothing, id::String="cholesky",
                     var_lags::Int=1, horizons::Int=40,
                     config::String="", method::String="fglr",
                     spectral::String="lag-window", instrument::String="",
@@ -791,6 +834,10 @@ function _irf_sdfm(; data::String="", factors=nothing, id::String="cholesky",
                     output::String="", format::String="table",
                     plot::Bool=false, plot_save::String="",
                     model=nothing)
+    loaded = _loaded_result(result; data, model, leaf="irf sdfm",
+                            id, horizons, horizons_default=40)
+    loaded === nothing || return _rerender_irf_result(loaded; format, output,
+        title="Impulse Responses", key="sdfm_irf", plot, plot_save)
     ci in ("none", "bootstrap") || throw(CliError("usage/invalid",
         "irf sdfm: --ci must be none|bootstrap (got '$ci')"))
     reps >= 1 || throw(CliError("usage/invalid",
@@ -822,4 +869,5 @@ function _irf_sdfm(; data::String="", factors=nothing, id::String="cholesky",
     irf_df = long_table(irf_result)
     output_result(irf_df; format=Symbol(format), output=output,
                   title="SDFM IRF ($id identification)", key="sdfm_irf")
+    return (; model=sdfm, result=irf_result)
 end

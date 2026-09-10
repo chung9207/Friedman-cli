@@ -80,7 +80,7 @@ function completions_specs()::Vector{CommandSpec}
 end
 
 function register_completions_commands!()
-    specs = completions_specs()
+    specs = with_default_csv_kinds(completions_specs())
     register!(specs)
     return build_node("completions", specs; description="Shell completion scripts (bash|zsh|fish)")
 end

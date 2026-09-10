@@ -17,6 +17,7 @@ complete -c friedman -n "__fish_use_subcommand" -a policy
 complete -c friedman -n "__fish_use_subcommand" -a predict
 complete -c friedman -n "__fish_use_subcommand" -a residuals
 complete -c friedman -n "__fish_use_subcommand" -a serve
+complete -c friedman -n "__fish_use_subcommand" -a show
 complete -c friedman -n "__fish_use_subcommand" -a spectral
 complete -c friedman -n "__fish_use_subcommand" -a test
 complete -c friedman -n "__fish_use_subcommand" -a repl

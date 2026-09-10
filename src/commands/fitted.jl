@@ -1646,7 +1646,7 @@ function _specs_for_verb(verb::Symbol, title_prefix::String)
             tables=_fitted_tables(verb, m.name),
             category=path0,
             aliases=aliases,
-            handler=wrap_legacy(handler),
+            handler=handler,
         ))
     end
     return specs
@@ -1667,7 +1667,7 @@ function predict_specs()::Vector{CommandSpec}
             flags=copy(SARIMA_FLAGS),
             tables=_fitted_tables(:predict, "sarima"),
             category="predict",
-            handler=wrap_legacy(_predict_sarima),
+            handler=_predict_sarima,
         ),
         # W2/#107: count-data conditional means exp(x'b + offset). Upstream's 1-arg
         # `predict(m)` returns m.fitted; the (m, Xnew) out-of-sample form is out of scope
@@ -1688,7 +1688,7 @@ function predict_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:predict, "poisson"),
             category="predict",
-            handler=wrap_legacy(_predict_poisson),
+            handler=_predict_poisson,
         ),
         CommandSpec(
             path=["predict", "nbreg"],
@@ -1701,7 +1701,7 @@ function predict_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:predict, "nbreg"),
             category="predict",
-            handler=wrap_legacy(_predict_nbreg),
+            handler=_predict_nbreg,
         ),
         # W3/#101: MS fitted values, un-gated by MEMs#510. `--probs` picks the regime
         # weighting; upstream warns `y - predict(m; probs=:filtered)` is NOT residuals(m)
@@ -1724,7 +1724,7 @@ function predict_specs()::Vector{CommandSpec}
             flags=[FlagSpec(name="switching-variance", description="Let σ² switch across regimes (default: off, Hamilton form)")],
             tables=_fitted_tables(:predict, "ms-ar"),
             category="predict",
-            handler=wrap_legacy(_predict_ms_ar),
+            handler=_predict_ms_ar,
         ),
         CommandSpec(
             path=["predict", "ms"],
@@ -1742,7 +1742,7 @@ function predict_specs()::Vector{CommandSpec}
             flags=[FlagSpec(name="no-switching-variance", description="Force common σ² across regimes (default: σ² switches)")],
             tables=_fitted_tables(:predict, "ms"),
             category="predict",
-            handler=wrap_legacy(_predict_ms),
+            handler=_predict_ms,
         ),
         # #71: state-space state paths / innovations, read from the model's fields.
         CommandSpec(
@@ -1764,7 +1764,7 @@ function predict_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:predict, "statespace"),
             category="predict",
-            handler=wrap_legacy(_predict_statespace),
+            handler=_predict_statespace,
         ),
         # #68: SUR/3SLS carry PER-EQUATION fitted/residuals fields. Both mirror their
         # `estimate` sibling's options because the equation system lives in --config —
@@ -1782,7 +1782,7 @@ function predict_specs()::Vector{CommandSpec}
                    FlagSpec(name="no-intercept", description="Do not add an intercept to each equation")],
             tables=_fitted_tables(:predict, "sur"),
             category="predict",
-            handler=wrap_legacy(_predict_sur),
+            handler=_predict_sur,
         ),
         CommandSpec(
             path=["predict", "3sls"],
@@ -1797,7 +1797,7 @@ function predict_specs()::Vector{CommandSpec}
             flags=[FlagSpec(name="no-intercept", description="Do not add an intercept to each equation")],
             tables=_fitted_tables(:predict, "3sls"),
             category="predict",
-            handler=wrap_legacy(_predict_3sls),
+            handler=_predict_3sls,
         ),
         # #73: ARFIMA mirrors `estimate arfima`'s full option set — the :arima kind in
         # FITTED_MODEL_KINDS supplies only --column, which would silently pin p=q=0.
@@ -1818,7 +1818,7 @@ function predict_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:predict, "arfima"),
             category="predict",
-            handler=wrap_legacy(_predict_arfima),
+            handler=_predict_arfima,
         ),
         CommandSpec(
             path=["predict", "igarch"],
@@ -1834,7 +1834,7 @@ function predict_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:predict, "igarch"),
             category="predict",
-            handler=wrap_legacy(_predict_igarch),
+            handler=_predict_igarch,
         ),
         CommandSpec(
             path=["predict", "cgarch"],
@@ -1848,7 +1848,7 @@ function predict_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:predict, "cgarch"),
             category="predict",
-            handler=wrap_legacy(_predict_cgarch),
+            handler=_predict_cgarch,
         ),
         CommandSpec(
             path=["predict", "aparch"],
@@ -1866,7 +1866,7 @@ function predict_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:predict, "aparch"),
             category="predict",
-            handler=wrap_legacy(_predict_aparch),
+            handler=_predict_aparch,
         ),
         CommandSpec(
             path=["predict", "figarch"],
@@ -1885,7 +1885,7 @@ function predict_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:predict, "figarch"),
             category="predict",
-            handler=wrap_legacy(_predict_figarch),
+            handler=_predict_figarch,
         ),
         CommandSpec(
             path=["predict", "fiegarch"],
@@ -1904,7 +1904,7 @@ function predict_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:predict, "fiegarch"),
             category="predict",
-            handler=wrap_legacy(_predict_fiegarch),
+            handler=_predict_fiegarch,
         ),
         CommandSpec(
             path=["predict", "garch-midas"],
@@ -1923,7 +1923,7 @@ function predict_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:predict, "garch-midas"),
             category="predict",
-            handler=wrap_legacy(_predict_garch_midas),
+            handler=_predict_garch_midas,
         ),
     ])
 end
@@ -1954,7 +1954,7 @@ function residuals_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:residuals, "setar"),
             category="residuals",
-            handler=wrap_legacy(_residuals_setar),
+            handler=_residuals_setar,
         ),
         CommandSpec(
             path=["residuals", "star"],
@@ -1974,7 +1974,7 @@ function residuals_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:residuals, "star"),
             category="residuals",
-            handler=wrap_legacy(_residuals_star),
+            handler=_residuals_star,
         ),
         CommandSpec(
             path=["residuals", "ms-ar"],
@@ -1993,7 +1993,7 @@ function residuals_specs()::Vector{CommandSpec}
             flags=[FlagSpec(name="switching-variance", description="Let σ² switch across regimes (default: off, Hamilton form)")],
             tables=_fitted_tables(:residuals, "ms-ar"),
             category="residuals",
-            handler=wrap_legacy(_residuals_ms_ar),
+            handler=_residuals_ms_ar,
         ),
         CommandSpec(
             path=["residuals", "ms"],
@@ -2010,7 +2010,7 @@ function residuals_specs()::Vector{CommandSpec}
             flags=[FlagSpec(name="no-switching-variance", description="Force common σ² across regimes (default: σ² switches)")],
             tables=_fitted_tables(:residuals, "ms"),
             category="residuals",
-            handler=wrap_legacy(_residuals_ms),
+            handler=_residuals_ms,
         ),
         # W6/#108: SARIMA residuals (abstract AbstractARIMAModel dispatch).
         CommandSpec(
@@ -2022,7 +2022,7 @@ function residuals_specs()::Vector{CommandSpec}
             flags=copy(SARIMA_FLAGS),
             tables=_fitted_tables(:residuals, "sarima"),
             category="residuals",
-            handler=wrap_legacy(_residuals_sarima),
+            handler=_residuals_sarima,
         ),
         # W2/#107: count-data residuals. `residuals(m)` is a bare field accessor upstream
         # with NO `kind` kwarg, so no --kind is advertised here (a declared option the
@@ -2042,7 +2042,7 @@ function residuals_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:residuals, "poisson"),
             category="residuals",
-            handler=wrap_legacy(_residuals_poisson),
+            handler=_residuals_poisson,
         ),
         CommandSpec(
             path=["residuals", "nbreg"],
@@ -2055,7 +2055,7 @@ function residuals_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:residuals, "nbreg"),
             category="residuals",
-            handler=wrap_legacy(_residuals_nbreg),
+            handler=_residuals_nbreg,
         ),
         # #71: state-space state paths / innovations, read from the model's fields.
         CommandSpec(
@@ -2076,7 +2076,7 @@ function residuals_specs()::Vector{CommandSpec}
             flags=[FlagSpec(name="standardized", description="Emit standardized innovations v_t/sqrt(F_t) instead of raw v_t")],
             tables=_fitted_tables(:residuals, "statespace"),
             category="residuals",
-            handler=wrap_legacy(_residuals_statespace),
+            handler=_residuals_statespace,
         ),
         # #68: SUR/3SLS carry PER-EQUATION fitted/residuals fields. Both mirror their
         # `estimate` sibling's options because the equation system lives in --config —
@@ -2094,7 +2094,7 @@ function residuals_specs()::Vector{CommandSpec}
                    FlagSpec(name="no-intercept", description="Do not add an intercept to each equation")],
             tables=_fitted_tables(:residuals, "sur"),
             category="residuals",
-            handler=wrap_legacy(_residuals_sur),
+            handler=_residuals_sur,
         ),
         CommandSpec(
             path=["residuals", "3sls"],
@@ -2109,7 +2109,7 @@ function residuals_specs()::Vector{CommandSpec}
             flags=[FlagSpec(name="no-intercept", description="Do not add an intercept to each equation")],
             tables=_fitted_tables(:residuals, "3sls"),
             category="residuals",
-            handler=wrap_legacy(_residuals_3sls),
+            handler=_residuals_3sls,
         ),
         # #73: ARFIMA mirrors `estimate arfima`'s full option set — the :arima kind in
         # FITTED_MODEL_KINDS supplies only --column, which would silently pin p=q=0.
@@ -2130,7 +2130,7 @@ function residuals_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:residuals, "arfima"),
             category="residuals",
-            handler=wrap_legacy(_residuals_arfima),
+            handler=_residuals_arfima,
         ),
         CommandSpec(
             path=["residuals", "igarch"],
@@ -2146,7 +2146,7 @@ function residuals_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:residuals, "igarch"),
             category="residuals",
-            handler=wrap_legacy(_residuals_igarch),
+            handler=_residuals_igarch,
         ),
         CommandSpec(
             path=["residuals", "cgarch"],
@@ -2160,7 +2160,7 @@ function residuals_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:residuals, "cgarch"),
             category="residuals",
-            handler=wrap_legacy(_residuals_cgarch),
+            handler=_residuals_cgarch,
         ),
         CommandSpec(
             path=["residuals", "aparch"],
@@ -2178,7 +2178,7 @@ function residuals_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:residuals, "aparch"),
             category="residuals",
-            handler=wrap_legacy(_residuals_aparch),
+            handler=_residuals_aparch,
         ),
         CommandSpec(
             path=["residuals", "figarch"],
@@ -2197,7 +2197,7 @@ function residuals_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:residuals, "figarch"),
             category="residuals",
-            handler=wrap_legacy(_residuals_figarch),
+            handler=_residuals_figarch,
         ),
         CommandSpec(
             path=["residuals", "fiegarch"],
@@ -2216,7 +2216,7 @@ function residuals_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:residuals, "fiegarch"),
             category="residuals",
-            handler=wrap_legacy(_residuals_fiegarch),
+            handler=_residuals_fiegarch,
         ),
         CommandSpec(
             path=["residuals", "garch-midas"],
@@ -2235,19 +2235,65 @@ function residuals_specs()::Vector{CommandSpec}
             flags=FlagSpec[],
             tables=_fitted_tables(:residuals, "garch-midas"),
             category="residuals",
-            handler=wrap_legacy(_residuals_garch_midas),
+            handler=_residuals_garch_midas,
         ),
     ])
 end
 
+function _overlay_estimator_data_kinds(specs::Vector{CommandSpec})
+    out = CommandSpec[]
+    for s in specs
+        push!(out, _copy_spec(s; data_kinds=_data_kinds_for_estimator(s.path[end])))
+    end
+    return with_default_csv_kinds(out)
+end
+
+const _FITTED_MODEL_TYPES = Dict{String,Vector{Symbol}}(
+    "var" => [:VARModel], "bvar" => [:BVARPosterior],
+    "arima" => [:ARIMAModel, :ARMAModel, :ARModel, :MAModel],
+    "vecm" => [:VECMModel], "static" => [:FactorModel],
+    "dynamic" => [:DynamicFactorModel], "gdfm" => [:GeneralizedDynamicFactorModel],
+    "arch" => [:ARCHModel], "garch" => [:GARCHModel], "egarch" => [:EGARCHModel],
+    "gjr-garch" => [:GJRGARCHModel], "sv" => [:SVModel], "favar" => [:FAVARModel],
+    "reg" => [:RegModel], "logit" => [:LogitModel], "probit" => [:ProbitModel],
+    "preg" => [:PanelRegModel], "piv" => [:PanelIVModel],
+    "plogit" => [:PanelLogitModel], "pprobit" => [:PanelProbitModel],
+    "ologit" => [:OrderedLogitModel], "oprobit" => [:OrderedProbitModel],
+    "mlogit" => [:MultinomialLogitModel], "sarima" => [:SARIMAModel],
+    "poisson" => [:PoissonModel], "nbreg" => [:NegBinModel],
+    "ms-ar" => [:MSRegModel], "ms" => [:MSRegModel],
+    "statespace" => [:StateSpaceModel], "sur" => [:SURModel],
+    "3sls" => [:ThreeSLSModel], "arfima" => [:ARFIMAModel],
+    "igarch" => [:IGARCHModel], "cgarch" => [:CGARCHModel],
+    "aparch" => [:APARCHModel], "figarch" => [:FIGARCHModel],
+    "fiegarch" => [:FIEGARCHModel], "garch-midas" => [:GarchMidasModel],
+    "setar" => [:ThresholdModel], "star" => [:STARModel],
+)
+
+function _wrap_fitted_specs(specs::Vector{CommandSpec})
+    out = CommandSpec[]
+    for s in specs
+        leaf = join(s.path, " ")
+        key = isempty(s.tables) ? "" : string(s.tables[1].name)
+        mt = get(_FITTED_MODEL_TYPES, s.path[end], Symbol[])
+        h = wrap_legacy(_with_result(s.handler, leaf; key=key))
+        push!(out, _copy_spec(s; handler=h, model_types=mt))
+    end
+    return out
+end
+
 function register_predict_commands!()
-    specs = with_config_ergonomics(with_model_option(predict_specs()))
+    specs = _overlay_estimator_data_kinds(
+        with_result_handles(with_config_ergonomics(with_model_option(
+            _wrap_fitted_specs(predict_specs())))))
     register!(specs)
     return build_node("predict", specs; description="In-sample fitted values / predictions")
 end
 
 function register_residuals_commands!()
-    specs = with_config_ergonomics(with_model_option(residuals_specs()))
+    specs = _overlay_estimator_data_kinds(
+        with_result_handles(with_config_ergonomics(with_model_option(
+            _wrap_fitted_specs(residuals_specs())))))
     register!(specs)
     return build_node("residuals", specs; description="Model residuals")
 end

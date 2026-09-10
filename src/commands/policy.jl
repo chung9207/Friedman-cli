@@ -1907,6 +1907,7 @@ function register_policy_commands!()
         category="policy",
         handler=wrap_legacy((; kw...) -> _policy_sufficiency(; kw...)),
     ))
+    specs = with_default_csv_kinds(specs)
     register!(specs)
     return build_node("policy", specs;
         description="Policy counterfactuals: menus (empirical + structural), rule counterfactuals, optimal policy, moments, OPP, histories and diagnostics")

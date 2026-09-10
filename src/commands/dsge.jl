@@ -1641,8 +1641,17 @@ function register_dsge_commands!()
                    ["dsge", "ha", "steady-state"],
                    ["dsge", "bayes", "estimate"]) ? with_save_model([s])[1] : s
     end
-    register!(specs)
-    return build_node("dsge", specs; description="DSGE models: RA, Bayesian, HA, CT, OLG, DCEGM, lifecycle, firm, bank")
+    out = CommandSpec[]
+    for s in specs
+        if _has_data_slot(s)
+            push!(out, _copy_spec(s; data_kinds=[:timeseries, :csv]))
+        else
+            push!(out, s)
+        end
+    end
+    out = with_default_csv_kinds(out)
+    register!(out)
+    return build_node("dsge", out; description="DSGE models: RA, Bayesian, HA, CT, OLG, DCEGM, lifecycle, firm, bank")
 end
 
 

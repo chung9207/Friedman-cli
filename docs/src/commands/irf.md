@@ -19,6 +19,11 @@ the older wide, per-shock-file layout.
 Frequentist IRFs with multiple identification schemes and confidence intervals.
 
 ```bash
+# From a saved model stem (Wave 2); persist the IRF and re-render later
+friedman irf var --model var --horizons=20 --save-result irf
+friedman irf var --result irf
+friedman show irf
+
 # Cholesky identification (default)
 friedman irf var data.csv --shock=1 --horizons=20
 

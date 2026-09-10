@@ -37,7 +37,7 @@ function filter_specs()::Vector{CommandSpec}
             tables=[TableSpec(name=:hp_filter,
                               description="Per-variable HP trend and cycle by time index")],
             category="filter",
-            handler=wrap_legacy(_filter_hp),
+            handler=_filter_hp,
         ),
         CommandSpec(
             path=["filter", "hamilton"],
@@ -52,7 +52,7 @@ function filter_specs()::Vector{CommandSpec}
             tables=[TableSpec(name=:hamilton_filter,
                               description="Per-variable Hamilton trend and cycle over the valid range")],
             category="filter",
-            handler=wrap_legacy(_filter_hamilton),
+            handler=_filter_hamilton,
         ),
         CommandSpec(
             path=["filter", "bn"],
@@ -69,7 +69,7 @@ function filter_specs()::Vector{CommandSpec}
             tables=[TableSpec(name=:beveridge_nelson_decomposition,
                               description="Per-variable permanent (trend) and transitory (cycle) components")],
             category="filter",
-            handler=wrap_legacy(_filter_bn),
+            handler=_filter_bn,
         ),
         CommandSpec(
             path=["filter", "bk"],
@@ -85,7 +85,7 @@ function filter_specs()::Vector{CommandSpec}
             tables=[TableSpec(name=:baxter_king_filter,
                               description="Per-variable band-pass trend and cycle over the untrimmed range")],
             category="filter",
-            handler=wrap_legacy(_filter_bk),
+            handler=_filter_bk,
         ),
         CommandSpec(
             path=["filter", "bhp"],
@@ -103,7 +103,7 @@ function filter_specs()::Vector{CommandSpec}
             tables=[TableSpec(name=:boosted_hp_filter,
                               description="Per-variable boosted-HP trend and cycle by time index")],
             category="filter",
-            handler=wrap_legacy(_filter_bhp),
+            handler=_filter_bhp,
         ),
         # C042 — X-13ARIMA-SEATS (pure-Julia MEMs port; no external binary required)
         CommandSpec(
@@ -144,13 +144,29 @@ function filter_specs()::Vector{CommandSpec}
                           description="Per-variable ARIMA order, AIC, sigma2, outlier count and T"),
             ],
             category="filter",
-            handler=wrap_legacy(_filter_x13),
+            handler=_filter_x13,
         ),
     ]
 end
 
+const _FILTER_SLOT_TYPES = Dict{Vector{String},Tuple{Vector{Symbol},Vector{Symbol}}}(
+    ["filter", "hp"]       => (Symbol[], [:HPFilterResult]),
+    ["filter", "hamilton"] => (Symbol[], [:HamiltonFilterResult]),
+    ["filter", "bn"]       => (Symbol[], [:BeveridgeNelsonResult]),
+    ["filter", "bk"]       => (Symbol[], [:BaxterKingResult]),
+    ["filter", "bhp"]      => (Symbol[], [:BoostedHPResult]),
+    ["filter", "x13"]      => (Symbol[], [:X13FilterResult]),
+)
+
 function register_filter_commands!()
-    specs = filter_specs()
+    specs = CommandSpec[]
+    for s in _tag_slot_types(filter_specs(), _FILTER_SLOT_TYPES)
+        leaf = join(s.path, " ")
+        key = isempty(s.tables) ? "" : string(s.tables[1].name)
+        h = wrap_legacy(_with_result(s.handler, leaf; key=key))
+        push!(specs, _copy_spec(s; handler=h))
+    end
+    specs = with_result_handles(with_default_csv_kinds(with_data_kinds(specs, [:timeseries, :csv])))
     register!(specs)
     return build_node("filter", specs;
         description="Time series filtering and trend-cycle decomposition")
@@ -226,6 +242,7 @@ function _filter_hp(; data::String, lambda::Float64=1600.0, columns::String="",
     output_result(result_df; format=Symbol(format), output=output,
                   title="HP Filter (λ=$(lambda))", key="hp_filter")
     _print_variance_ratios(sel_names, cycles, originals)
+    return last_result
 end
 
 # ── Hamilton Filter ──────────────────────────────────────
@@ -282,6 +299,7 @@ function _filter_hamilton(; data::String, horizon::Int=8, lags::Int=4, columns::
     output_result(result_df; format=Symbol(format), output=output,
                   title="Hamilton Filter (h=$horizon, p=$lags)", key="hamilton_filter")
     _print_variance_ratios(sel_names, cycles, originals)
+    return last_result
 end
 
 # ── Beveridge-Nelson Decomposition ───────────────────────
@@ -332,6 +350,7 @@ function _filter_bn(; data::String, method::String="arima", p=nothing, q=nothing
     output_result(result_df; format=Symbol(format), output=output,
                   title="Beveridge-Nelson Decomposition")
     _print_variance_ratios(sel_names, cycles, originals)
+    return last_result
 end
 
 # ── Baxter-King Band-Pass Filter ─────────────────────────
@@ -389,6 +408,7 @@ function _filter_bk(; data::String, pl::Int=6, pu::Int=32, K::Int=12, columns::S
     output_result(result_df; format=Symbol(format), output=output,
                   title="Baxter-King Filter (pl=$pl, pu=$pu, K=$K)", key="baxter_king_filter")
     _print_variance_ratios(sel_names, cycles, originals)
+    return last_result
 end
 
 # ── Boosted HP Filter ────────────────────────────────────
@@ -433,6 +453,7 @@ function _filter_bhp(; data::String, lambda::Float64=1600.0, stopping::String="B
     output_result(result_df; format=Symbol(format), output=output,
                   title="Boosted HP Filter (λ=$(lambda), stopping=$stopping)", key="boosted_hp_filter")
     _print_variance_ratios(sel_names, cycles, originals)
+    return last_result
 end
 
 # ── X-13ARIMA-SEATS (C042 / MEMs 0.6.7 pure-Julia port) ───
@@ -480,6 +501,7 @@ function _filter_x13(; data::String,
     seas_df = DataFrame(t = 1:T_obs)
     irr_df = DataFrame(t = 1:T_obs)
     diag_rows = NamedTuple[]
+    last_result = nothing
 
     for ci in col_idx
         vname = varnames[ci]
@@ -529,6 +551,7 @@ function _filter_x13(; data::String,
             T_obs = Int(res.T_obs),
         ))
         _status("  $vname: method=$(res.method), ARIMA=($order_str), outliers=$(res.n_outliers)")
+        last_result = res
     end
 
     diag_df = DataFrame(diag_rows)
@@ -542,4 +565,5 @@ function _filter_x13(; data::String,
                   title="X-13 Irregular")
     output_result(diag_df; format=Symbol(format), output=output,
                   title="X-13 Diagnostics")
+    return last_result
 end
